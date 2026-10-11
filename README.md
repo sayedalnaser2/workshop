@@ -38,3 +38,7 @@ This loads the price list, all `Q…` quotation sheets, orders, receipts, paymen
 | **Profiles, Glass & Accessories** *(new)* | Library with prices used by models and cost estimates. |
 
 The starter models/profiles use generic deductions and zero prices — edit them under **Models** and **Profiles, Glass & Accessories** to match your profile system.
+
+## Online demo
+
+`docs/index.html` is a self-contained demo (sample data, runs fully in the browser) for GitHub Pages: Settings → Pages → deploy from branch, folder `/docs`.
