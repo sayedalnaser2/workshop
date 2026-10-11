@@ -21,17 +21,17 @@ db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_
 export const SCHEMA = {
   price_items: { cols: { name: 'TEXT', rate: 'REAL', type: 'TEXT', unit: 'TEXT', note: 'TEXT', model_id: 'INTEGER', sort: 'INTEGER' }, order: 'sort, id' },
   quotes: {
-    cols: { number: 'TEXT', date: 'TEXT', client: 'TEXT', mobile: 'TEXT', site: 'TEXT', title: 'TEXT', items: 'JSON', discount: 'REAL', vat_rate: 'REAL', vat_waived: 'REAL', status: 'TEXT', prepared_by: 'TEXT', notes: 'TEXT', order_inv: 'TEXT', colour: 'TEXT' },
+    cols: { number: 'TEXT', date: 'TEXT', client: 'TEXT', mobile: 'TEXT', site: 'TEXT', title: 'TEXT', items: 'JSON', discount: 'REAL', vat_rate: 'REAL', vat_waived: 'REAL', status: 'TEXT', prepared_by: 'TEXT', notes: 'TEXT', order_inv: 'TEXT', colour: 'TEXT', client_vat: 'TEXT', approval: 'TEXT', approved_disc: 'REAL', approval_note: 'TEXT' },
     order: 'date DESC, id DESC',
   },
-  orders: { cols: { inv: 'TEXT', date: 'TEXT', client: 'TEXT', site: 'TEXT', mobile: 'TEXT', amount: 'REAL', done: 'INTEGER', quote_no: 'TEXT', note: 'TEXT' }, order: 'date DESC, id DESC' },
+  orders: { cols: { inv: 'TEXT', date: 'TEXT', client: 'TEXT', site: 'TEXT', mobile: 'TEXT', amount: 'REAL', done: 'INTEGER', quote_no: 'TEXT', note: 'TEXT', vat: 'REAL', client_vat: 'TEXT' }, order: 'date DESC, id DESC' },
   receipts: { cols: { no: 'TEXT', date: 'TEXT', order_inv: 'TEXT', client: 'TEXT', amount: 'REAL', method: 'TEXT', ref: 'TEXT', note: 'TEXT', account: 'TEXT' }, order: 'date DESC, id DESC' },
   payments: { cols: { no: 'TEXT', date: 'TEXT', paid_to: 'TEXT', amount: 'REAL', done: 'INTEGER', category: 'TEXT', lines: 'JSON', note: 'TEXT', account: 'TEXT', employee_id: 'INTEGER', method: 'TEXT', ref: 'TEXT' }, order: 'date DESC, id DESC' },
-  purchases: { cols: { date: 'TEXT', pv: 'TEXT', invoice: 'TEXT', supplier: 'TEXT', amount: 'REAL', order_inv: 'TEXT', note: 'TEXT' }, order: 'date DESC, id DESC' },
+  purchases: { cols: { date: 'TEXT', pv: 'TEXT', invoice: 'TEXT', supplier: 'TEXT', amount: 'REAL', order_inv: 'TEXT', note: 'TEXT', vat: 'REAL' }, order: 'date DESC, id DESC' },
   employees: { cols: { name: 'TEXT', salary: 'REAL', active: 'INTEGER', note: 'TEXT', role: 'TEXT', nationality: 'TEXT', id_no: 'TEXT', passport_no: 'TEXT', phone: 'TEXT', join_date: 'TEXT', left_date: 'TEXT', permit_expiry: 'TEXT', iban: 'TEXT', emergency: 'TEXT', address: 'TEXT' }, order: 'name' },
-  profiles: { cols: { code: 'TEXT', name: 'TEXT', series: 'TEXT', bar_length: 'REAL', price_bar: 'REAL', weight_m: 'REAL', color: 'TEXT' }, order: 'series, name' },
-  accessories: { cols: { code: 'TEXT', name: 'TEXT', unit: 'TEXT', price: 'REAL' }, order: 'name' },
-  glass_types: { cols: { name: 'TEXT', price_m2: 'REAL', thickness: 'TEXT' }, order: 'name' },
+  profiles: { cols: { code: 'TEXT', name: 'TEXT', series: 'TEXT', bar_length: 'REAL', price_bar: 'REAL', weight_m: 'REAL', color: 'TEXT', min_qty: 'REAL' }, order: 'series, name' },
+  accessories: { cols: { code: 'TEXT', name: 'TEXT', unit: 'TEXT', price: 'REAL', min_qty: 'REAL' }, order: 'name' },
+  glass_types: { cols: { name: 'TEXT', price_m2: 'REAL', thickness: 'TEXT', min_qty: 'REAL' }, order: 'name' },
   models: { cols: { name: 'TEXT', series: 'TEXT', kind: 'TEXT', category: 'TEXT', def_w: 'REAL', def_h: 'REAL', spec: 'JSON', note: 'TEXT' }, order: 'category, name' },
   suppliers: { cols: { name: 'TEXT', phone: 'TEXT', phone2: 'TEXT', address: 'TEXT', email: 'TEXT', note: 'TEXT' }, order: 'name' },
   items: { cols: { code: 'TEXT', name: 'TEXT', kind: 'TEXT', series: 'TEXT', supplier: 'TEXT', unit: 'TEXT', price: 'REAL', profile_id: 'INTEGER', glass_id: 'INTEGER', accessory_id: 'INTEGER', note: 'TEXT' }, order: 'kind, series, code' },
@@ -46,6 +46,10 @@ export const SCHEMA = {
   task_logs: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', ts: 'TEXT', kind: 'TEXT', text: 'TEXT', progress: 'REAL', minutes: 'REAL' }, order: 'ts DESC' },
   task_sessions: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', started: 'TEXT', ended: 'TEXT', kind: 'TEXT' }, order: 'started DESC' },
   employee_docs: { cols: { employee_id: 'INTEGER', type: 'TEXT', number: 'TEXT', expiry: 'TEXT', file_name: 'TEXT', file_path: 'TEXT', note: 'TEXT' }, order: 'expiry' },
+  credit_notes: { cols: { no: 'TEXT', date: 'TEXT', order_inv: 'TEXT', client: 'TEXT', client_vat: 'TEXT', lines: 'JSON', vat_rate: 'REAL', net: 'REAL', vat: 'REAL', total: 'REAL', reason: 'TEXT', status: 'TEXT', requested_by: 'TEXT', approval_note: 'TEXT' }, order: 'date DESC, id DESC' },
+  events: { cols: { date: 'TEXT', end_date: 'TEXT', start: 'TEXT', end: 'TEXT', kind: 'TEXT', title: 'TEXT', order_inv: 'TEXT', quote_no: 'TEXT', client: 'TEXT', site: 'TEXT', mobile: 'TEXT', team: 'JSON', status: 'TEXT', note: 'TEXT' }, order: 'date, start' },
+  surveys: { cols: { date: 'TEXT', client: 'TEXT', mobile: 'TEXT', site: 'TEXT', status: 'TEXT', items: 'JSON', notes: 'TEXT', quote_no: 'TEXT', surveyor: 'TEXT' }, order: 'date DESC, id DESC' },
+  attachments: { cols: { ref_type: 'TEXT', ref_key: 'TEXT', tag: 'TEXT', kind: 'TEXT', file_name: 'TEXT', file_path: 'TEXT', mime: 'TEXT', note: 'TEXT', user_name: 'TEXT', size: 'INTEGER' }, order: 'id' },
 };
 
 const ddl = [];
@@ -55,6 +59,7 @@ for (const [t, s] of Object.entries(SCHEMA)) {
 }
 ddl.push('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);');
 ddl.push('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE COLLATE NOCASE, name TEXT, role TEXT, salt TEXT, hash TEXT, active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);');
+ddl.push('CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT DEFAULT CURRENT_TIMESTAMP, user_id INTEGER, user_name TEXT, tbl TEXT, row_id INTEGER, label TEXT, action TEXT, changes TEXT);');
 ddl.push('CREATE TABLE IF NOT EXISTS work_days (user_id INTEGER, day TEXT, first_seen TEXT, PRIMARY KEY (user_id, day));');
 ddl.push('CREATE INDEX IF NOT EXISTS ix_receipts_order ON receipts(order_inv);');
 ddl.push('CREATE INDEX IF NOT EXISTS ix_purchases_order ON purchases(order_inv);');
@@ -68,6 +73,7 @@ for (const [t, sc] of Object.entries(SCHEMA)) {
 db.exec(`CREATE INDEX IF NOT EXISTS ix_receipts_date ON receipts(date); CREATE INDEX IF NOT EXISTS ix_purchases_date ON purchases(date); CREATE INDEX IF NOT EXISTS ix_orders_date ON orders(date);
   CREATE INDEX IF NOT EXISTS ix_payments_date ON payments(date); CREATE INDEX IF NOT EXISTS ix_quotes_date ON quotes(date); CREATE INDEX IF NOT EXISTS ix_tasks_status ON tasks(status, hidden);
   CREATE INDEX IF NOT EXISTS ix_tasks_order ON tasks(order_inv); CREATE INDEX IF NOT EXISTS ix_sess_open ON task_sessions(ended, user_id); CREATE INDEX IF NOT EXISTS ix_tl_ts ON task_logs(ts);`);
+db.exec('CREATE INDEX IF NOT EXISTS ix_audit_ts ON audit_log(ts); CREATE INDEX IF NOT EXISTS ix_audit_tbl ON audit_log(tbl, row_id); CREATE INDEX IF NOT EXISTS ix_att_ref ON attachments(ref_type, ref_key); CREATE INDEX IF NOT EXISTS ix_ev_date ON events(date); CREATE INDEX IF NOT EXISTS ix_cn_order ON credit_notes(order_inv);');
 db.exec('CREATE INDEX IF NOT EXISTS ix_stock_profile ON stock(profile_id, kind); CREATE INDEX IF NOT EXISTS ix_tl ON task_logs(task_id); CREATE INDEX IF NOT EXISTS ix_ts ON task_sessions(task_id, user_id); CREATE INDEX IF NOT EXISTS ix_att ON attendance(employee_id, date); CREATE INDEX IF NOT EXISTS ix_ev ON employee_events(employee_id);');
 
 export const getSetting = (k, d = null) => {
@@ -87,9 +93,13 @@ export const DEFAULT_SETTINGS = {
     phones: '+973 3664 55 48 | +973 3616 33 11',
     address: '',
     currency: 'BD',
+    vat_no: '',
+    bank: '',
   },
   vat_rate: 10,
-  counters: { quote: 1, invoice: 1, receipt: 1, payment: 1, po: 1 },
+  counters: { quote: 1, invoice: 1, receipt: 1, payment: 1, po: 1, credit: 1 },
+  approvals: { discount_pct: 10, credit_notes: true },
+  purchase_vat_default: false,
   colours: ['White', 'Brown', 'Black', 'Bronze', 'Silver', 'Wood', 'Grey'],
   opening: { cash: 0, bank: 0 },
   leftover_pct: 60,
@@ -129,6 +139,7 @@ export function nextNumber(kind, date, consume = false) {
     case 'receipt': return `R ${pad(n)}`;
     case 'payment': return `P ${pad(n)}`;
     case 'po': return `PO${ym(date)}${pad(n)}`;
+    case 'credit': return `CN${ym(date)}${pad(n)}`;
   }
   throw new Error('bad kind');
 }

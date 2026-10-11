@@ -1,5 +1,9 @@
 import { api, $, $$, toast, esc, modal, formHTML, readForm, guard } from './ui.js';
 import { ROLES, canPage } from './perm.js';
+import { initI18n, isAr, setLang } from './i18n.js';
+
+initI18n();
+for (const id of ['langBtn', 'loginLang']) { const b = document.getElementById(id); if (b) { b.textContent = isAr() ? 'English' : 'العربية'; b.setAttribute('data-noi18n', ''); b.onclick = () => setLang(isAr() ? 'en' : 'ar'); } }
 
 // Shared state, loaded once and refreshed after edits to the library tables.
 export const S = { me: null, settings: {}, price_items: [], profiles: [], accessories: [], glass_types: [], models: [], employees: [], next: {} };
@@ -8,13 +12,16 @@ export async function refresh() { Object.assign(S, await api.get('bootstrap')); 
 const ROUTES = [
   { path: '', title: 'Dashboard', icon: '▦', mod: 'dashboard' },
   { group: 'Sales' },
+  { path: 'surveys', title: 'Site Surveys', icon: '📐', mod: 'surveys' },
   { path: 'quotes', title: 'Quotations', icon: '✎', mod: 'quotes' },
   { path: 'orders', title: 'Orders & Invoices', icon: '☰', mod: 'orders' },
+  { path: 'creditnotes', title: 'Credit Notes', icon: '↩', mod: 'creditnotes' },
   { path: 'receipts', title: 'Customer Receipts', icon: '⇩', mod: 'receipts' },
   { path: 'statements', title: 'Account Statements', icon: '≣', mod: 'statements' },
   { group: 'Work' },
   { path: 'mytasks', title: 'My Tasks', icon: '☑', mod: 'mytasks' },
   { path: 'tasks', title: 'Tasks', icon: '⚑', mod: 'tasks' },
+  { path: 'calendar', title: 'Calendar', icon: '📅', mod: 'calendar' },
   { path: 'activity', title: 'Worker Activity', icon: '◷', mod: 'activity' },
   { group: 'Production' },
   { path: 'models', title: 'Models', icon: '◫', mod: 'models' },
@@ -32,7 +39,9 @@ const ROUTES = [
   { path: 'payments', title: 'Payment Vouchers', icon: '⇧', mod: 'payments' },
   { path: 'employees', title: 'Employees', icon: '☺', mod: 'employees' },
   { group: 'Business' },
-  { path: 'reports', title: 'Reports', icon: '◔', mod: 'reports' },
+  { path: 'reports', title: 'Reports & VAT', icon: '◔', mod: 'reports' },
+  { path: 'approvals', title: 'Approvals', icon: '✔', mod: 'approvals' },
+  { path: 'audit', title: 'Audit Trail', icon: '☷', mod: 'audit' },
   { path: 'users', title: 'Users', icon: '⚿', mod: 'users' },
   { path: 'settings', title: 'Settings', icon: '⚙', mod: 'settings' },
 ];
@@ -55,6 +64,11 @@ $('#meBtn').onclick = () => {
 // Page modules are listed statically so the production build can bundle and split them.
 const PAGES = {
   activity: () => import('./pages/activity.js'),
+  approvals: () => import('./pages/approvals.js'),
+  audit: () => import('./pages/audit.js'),
+  calendar: () => import('./pages/calendar.js'),
+  creditnotes: () => import('./pages/creditnotes.js'),
+  surveys: () => import('./pages/surveys.js'),
   cashbank: () => import('./pages/cashbank.js'),
   cutting: () => import('./pages/cutting.js'),
   dashboard: () => import('./pages/dashboard.js'),

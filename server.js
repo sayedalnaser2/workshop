@@ -10,13 +10,15 @@ import {
 import { needsSetup, authenticate, createUser, updateUser, deleteUser, listUsers, setOwnPassword, makeToken, userFromToken, cookieOf } from './src/auth.js';
 import { tableAccess } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
-import { seedLibrary, seedKitchenOptions } from './src/seed.js';
+import { seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets } from './src/seed.js';
 import { isOnTask, taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated, markPresent, shiftStatus } from './src/tasks.js';
 import { exportWorkbook } from './src/exporter.js';
-import { quoteTotals } from './public/js/calc.js';
+import { quoteTotals, approvalFor, discountPct } from './public/js/calc.js';
+import { vatReport, orderVat } from './public/js/vat.js';
+import { audit, diff, labelOf, listAudit, notable } from './src/audit.js';
 import { respond, staticServer, throttleCheck, throttleFail, throttleOk, runBackup, listBackups, backupDir } from './src/web.js';
 
-seedLibrary(); seedKitchenOptions();
+seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets();
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DEV = process.env.WORKSHOP_DEV === '1';
@@ -37,12 +39,13 @@ const readJson = async (req) => { const b = await readBody(req, 5e6); return b.l
 // ------------------------------------------------------------------ computed views
 // one pass over receipts and purchases instead of two sub-queries per order
 const ordersLedger = () => db.prepare(`
-  SELECT o.*, IFNULL(r.paid, 0) AS paid, IFNULL(p.cost, 0) AS cost
+  SELECT o.*, IFNULL(r.paid, 0) AS paid, IFNULL(p.cost, 0) AS cost, IFNULL(c.credit, 0) AS credit
   FROM orders o
   LEFT JOIN (SELECT order_inv, SUM(amount) AS paid FROM receipts GROUP BY order_inv) r ON r.order_inv = o.inv
+  LEFT JOIN (SELECT order_inv, SUM(total) AS credit FROM credit_notes WHERE status = 'approved' GROUP BY order_inv) c ON c.order_inv = o.inv
   LEFT JOIN (SELECT order_inv, SUM(amount) AS cost FROM purchases GROUP BY order_inv) p ON p.order_inv = o.inv
   ORDER BY o.date DESC, o.id DESC`).all().map((o) => ({
-  ...o, paid: o.paid, balance: Math.round((o.amount - o.paid) * 100) / 100, profit: Math.round((o.amount - o.cost) * 100) / 100,
+  ...o, paid: o.paid, balance: Math.round((o.amount - o.credit - o.paid) * 100) / 100, profit: Math.round((o.amount - o.credit - o.cost) * 100) / 100,
 }));
 
 function summary() {
@@ -54,6 +57,8 @@ function summary() {
     payments: one('SELECT IFNULL(SUM(amount),0) v FROM payments').v,
     openOrders: one('SELECT COUNT(*) v FROM orders WHERE done IS NOT 1').v,
     quotesOpen: one("SELECT COUNT(*) v FROM quotes WHERE status IN ('draft','sent')").v,
+    credits: one("SELECT IFNULL(SUM(total),0) v FROM credit_notes WHERE status='approved'").v,
+    pendingApprovals: one("SELECT (SELECT COUNT(*) FROM quotes WHERE approval='pending') + (SELECT COUNT(*) FROM credit_notes WHERE status='pending') v").v,
   };
   const ledger = ordersLedger();
   const debtors = {};
@@ -71,7 +76,7 @@ function summary() {
     WHERE m IS NOT NULL GROUP BY m ORDER BY m DESC LIMIT 12`).all().reverse();
   const salary = one(`SELECT IFNULL(SUM(p.amount),0) v FROM payments p JOIN employees e ON upper(p.paid_to) LIKE '%'||upper(e.name)||'%'`).v;
   return {
-    ...t, balance: Math.round((t.invoiced - t.received) * 100) / 100, salary,
+    ...t, balance: Math.round((t.invoiced - t.credits - t.received) * 100) / 100, salary,
     debtors: Object.values(debtors).sort((a, b) => b.balance - a.balance).slice(0, 10), byYear, monthly,
     profit: Math.round((t.invoiced - t.purchases - t.payments) * 100) / 100,
   };
@@ -98,7 +103,7 @@ const bootstrap = (role = 'admin') => role === 'worker' ? ({
   settings: Object.fromEntries(db.prepare('SELECT key FROM settings').all().filter((r) => !['auth', 'session_secret'].includes(r.key)).map((r) => [r.key, getSetting(r.key)])),
   price_items: listRows('price_items'), profiles: listRows('profiles'), accessories: listRows('accessories'),
   glass_types: listRows('glass_types'), models: listRows('models'), employees: listRows('employees'),
-  next: { quote: nextNumber('quote'), invoice: nextNumber('invoice'), receipt: nextNumber('receipt'), payment: nextNumber('payment'), po: nextNumber('po') },
+  next: { quote: nextNumber('quote'), invoice: nextNumber('invoice'), receipt: nextNumber('receipt'), payment: nextNumber('payment'), po: nextNumber('po'), credit: nextNumber('credit') },
 });
 
 /** Benefit and cheque payments must carry their number. */
@@ -109,7 +114,40 @@ function checkRef(t, body, existing = {}) {
   const m = { ...existing, ...body };
   if (REF_LABEL[m.method] && !String(m.ref ?? '').trim()) throw Object.assign(new Error(`${REF_LABEL[m.method]} is required when paying by ${m.method}.`), { status: 400 });
 }
-const AUTO = { quotes: ['number', 'quote'], orders: ['inv', 'invoice'], receipts: ['no', 'receipt'], payments: ['no', 'payment'], purchase_orders: ['po', 'po'] };
+const AUTO = { quotes: ['number', 'quote'], orders: ['inv', 'invoice'], receipts: ['no', 'receipt'], payments: ['no', 'payment'], purchase_orders: ['po', 'po'], credit_notes: ['no', 'credit'] };
+
+
+// ------------------------------------------------------------------ approvals, credit notes, files
+const bad = (m, status = 400) => Object.assign(new Error(m), { status });
+const approvalCfg = () => ({ discount_pct: 10, credit_notes: true, ...(getSetting('approvals') || {}) });
+
+/** Quotation saved by a user: work out whether the discount needs the admin, and keep sent/accepted off until it is approved. */
+function quoteApproval(body, cur, user) {
+  const merged = { ...(cur || {}), ...body };
+  const a = approvalFor(merged, cur, Number(approvalCfg().discount_pct) || 0, user.role === 'admin');
+  if (a.approval === 'pending' && ['sent', 'accepted'].includes(merged.status)) body.status = 'draft'; // cannot go out until the admin approves the discount
+  body.approval = a.approval; body.approved_disc = a.approved_disc;
+  if (a.approval !== 'pending') body.approval_note = a.approval ? (cur?.approval === 'approved' && user.role !== 'admin' ? cur.approval_note : `Approved by ${user.name}`) : '';
+  else body.approval_note = '';
+}
+/** Totals of a credit note come from its lines, never from the browser. */
+function creditTotals(c) {
+  const lines = (c.lines || []).filter((l) => l && (Number(l.qty) || 0) * (Number(l.price) || 0) !== 0 || l?.desc);
+  const net = Math.round(lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.price) || 0), 0) * 1000) / 1000;
+  const vat = Math.round(net * (Number(c.vat_rate) || 0) / 100 * 1000) / 1000;
+  return { lines, net, vat, total: Math.round((net + vat) * 1000) / 1000 };
+}
+function checkCredit(c, selfId = 0) {
+  if (!(c.total > 0)) throw bad('A credit note needs at least one line with an amount.');
+  const o = c.order_inv && db.prepare('SELECT amount FROM orders WHERE inv=?').get(c.order_inv);
+  if (o) {
+    const other = db.prepare("SELECT IFNULL(SUM(total),0) v FROM credit_notes WHERE order_inv=? AND status IN ('approved','pending') AND id<>?").get(c.order_inv, selfId).v;
+    if (c.total + other > o.amount + 0.0005) throw bad(`Credit notes for ${c.order_inv} would be BD ${(c.total + other).toFixed(3)}, more than the invoice (BD ${o.amount.toFixed(3)}).`);
+  }
+}
+
+const FILE_TYPES = { 'image/jpeg': 'inline', 'image/png': 'inline', 'image/webp': 'inline', 'image/gif': 'inline', 'application/pdf': 'inline' };
+const filesDir = () => path.join(process.env.DATA_DIR || path.resolve('data'), 'files');
 
 // ------------------------------------------------------------------ router
 async function api(req, res, url) {
@@ -142,7 +180,7 @@ async function api(req, res, url) {
   if (p[0] === 'ledger') { need(isAA); return send(res, 200, ordersLedger()); }
 
   // --- tasks: workers use these endpoints (never the raw tables) so they only ever touch their own work
-  if (p[0] === 'staff') { need(isAA); return send(res, 200, listUsers().filter((u) => u.active).map((u) => ({ id: u.id, name: u.name, role: u.role }))); }
+  if (p[0] === 'staff') return send(res, 200, listUsers().filter((u) => u.active).map((u) => (isAA ? { id: u.id, name: u.name, role: u.role } : { id: u.id, name: u.name }))); // names only for workers (calendar teams)
   if (p[0] === 'shift') return send(res, 200, shiftStatus(user));
   if (p[0] === 'my-tasks') return send(res, 200, myTasks(user));
   if (p[0] === 'tasks-view') { need(isAA); return send(res, 200, taskViews()); }
@@ -157,13 +195,80 @@ async function api(req, res, url) {
     if (m === 'GET' && !p[2]) return send(res, 200, { task: t, logs: logsFor(tid), sessions: sessionsFor(tid) });
     if (m === 'POST' && p[2] === 'action') return send(res, 200, taskAction(user, tid, await readJson(req)));
   }
+
+  // --- approvals: discounts above the limit and credit notes made by Accounts wait for the admin
+  if (p[0] === 'approvals') {
+    need(isAA);
+    if (!p[1] && m === 'GET') {
+      const quotes = db.prepare("SELECT id, number, client, date, discount, approval, approval_note, items, vat_rate, vat_waived, prepared_by FROM quotes WHERE approval IN ('pending','rejected') ORDER BY id DESC").all().map((q) => ({ ...q, items: JSON.parse(q.items || '[]') })).map((q) => ({ id: q.id, number: q.number, client: q.client, date: q.date, discount: q.discount, pct: discountPct(q), total: quoteTotals(q).grand, approval: q.approval, note: q.approval_note, prepared_by: q.prepared_by }));
+      const credits = db.prepare("SELECT id, no, client, date, order_inv, total, reason, status, requested_by, approval_note FROM credit_notes WHERE status IN ('pending','rejected') ORDER BY id DESC").all();
+      return send(res, 200, { limit: approvalCfg().discount_pct, quotes, credits });
+    }
+    if (m === 'POST' && (p[1] === 'quotes' || p[1] === 'credit_notes') && p[2]) {
+      need(role === 'admin');
+      const { decision, note = '' } = await readJson(req); const id = Number(p[2]);
+      if (!['approve', 'reject'].includes(decision)) throw bad('Decision must be approve or reject.');
+      const cur = getRow(p[1], id); if (!cur) return send(res, 404, { error: 'Not found' });
+      const patch = p[1] === 'quotes'
+        ? (decision === 'approve' ? { approval: 'approved', approved_disc: cur.discount, approval_note: `Approved by ${user.name}${note ? ': ' + note : ''}` } : { approval: 'rejected', approved_disc: 0, approval_note: `Rejected by ${user.name}${note ? ': ' + note : ''}` })
+        : (decision === 'approve' ? { status: 'approved', approval_note: `Approved by ${user.name}${note ? ': ' + note : ''}` } : { status: 'rejected', approval_note: `Rejected by ${user.name}${note ? ': ' + note : ''}` });
+      const saved = updateRow(p[1], id, patch);
+      audit(user, p[1], id, decision === 'approve' ? 'approved' : 'rejected', labelOf(saved), [{ f: 'decision', from: '', to: decision + (note ? ` — ${note}` : '') }]);
+      return send(res, 200, saved);
+    }
+  }
+  if (p[0] === 'audit' && m === 'GET') {
+    need(role === 'admin'); const q = url.searchParams;
+    return send(res, 200, listAudit({ table: q.get('table') || '', user: Number(q.get('user')) || 0, from: q.get('from') || '', to: q.get('to') || '', q: q.get('q') || '', limit: Number(q.get('limit')) || 100, offset: Number(q.get('offset')) || 0 }));
+  }
+  if (p[0] === 'vat-report' && m === 'GET') {
+    need(isAA); const q = url.searchParams;
+    const credits = listRows('credit_notes').filter((c) => c.status === 'approved');
+    return send(res, 200, vatReport({ orders: listRows('orders'), quotes: listRows('quotes'), credits, purchases: listRows('purchases'), payments: listRows('payments'), settings: { vat_rate: getSetting('vat_rate'), purchase_vat_default: getSetting('purchase_vat_default') } }, q.get('from') || '', q.get('to') || ''));
+  }
+
+  // --- photos and files on orders, tasks and site surveys
+  if (p[0] === 'files') {
+    const canTouch = (type, key) => {
+      if (isAA) return ['order', 'task', 'survey', 'quote', 'kitchen'].includes(type);
+      if (type === 'task') { const t = taskView(Number(key)); return !!t && !t.hidden && isOnTask(t, user.id); }
+      return type === 'survey';
+    };
+    if (!p[1] && m === 'GET') {
+      const type = url.searchParams.get('ref_type') || ''; const key = url.searchParams.get('ref_key') || '';
+      if (!canTouch(type, key)) throw forbid();
+      return send(res, 200, db.prepare('SELECT id, ref_type, ref_key, tag, kind, file_name, mime, note, user_name, size, created_at FROM attachments WHERE ref_type=? AND ref_key=? ORDER BY id').all(type, key));
+    }
+    if (!p[1] && m === 'POST') {
+      const q = url.searchParams; const type = q.get('ref_type') || ''; const key = q.get('ref_key') || '';
+      if (!key || !canTouch(type, key)) throw forbid();
+      const buf = await readBody(req, 14e6); if (!buf.length) throw bad('Empty file.');
+      const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase(); const name = (q.get('name') || 'file').replace(/[^\w.\- ]+/g, '_').slice(0, 80);
+      await mkdir(filesDir(), { recursive: true });
+      const file = `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${name}`; await writeFile(path.join(filesDir(), file), buf);
+      const row = insertRow('attachments', { ref_type: type, ref_key: key, tag: q.get('tag') || '', kind: q.get('kind') || 'file', file_name: name, file_path: file, mime: FILE_TYPES[mime] ? mime : 'application/octet-stream', note: q.get('note') || '', user_name: user.name, size: buf.length });
+      audit(user, 'attachments', row.id, 'created', `${type} ${key}: ${name}`);
+      const { file_path: _f, ...pub } = row; return send(res, 201, pub);
+    }
+    if (p[1] && (m === 'GET' || m === 'DELETE')) {
+      const a = getRow('attachments', Number(p[1])); if (!a) return send(res, 404, { error: 'Not found' });
+      if (!canTouch(a.ref_type, a.ref_key)) throw forbid();
+      if (m === 'DELETE') {
+        if (!isAA && a.user_name !== user.name) throw forbid();
+        deleteRow('attachments', a.id); unlink(path.join(filesDir(), path.basename(a.file_path))).catch(() => {});
+        audit(user, 'attachments', a.id, 'deleted', `${a.ref_type} ${a.ref_key}: ${a.file_name}`); return send(res, 200, { ok: true });
+      }
+      const buf = await readFile(path.join(filesDir(), path.basename(a.file_path))).catch(() => null); if (!buf) return send(res, 404, { error: 'File missing' });
+      return send(res, 200, buf, { 'Content-Type': a.mime || 'application/octet-stream', 'Content-Disposition': `${FILE_TYPES[a.mime] || 'attachment'}; filename="${encodeURIComponent(a.file_name || 'file')}"`, 'Cache-Control': 'private, max-age=3600' });
+    }
+  }
   if (p[0] === 'users') {
     need(role === 'admin');
     const uid = p[1] ? Number(p[1]) : null;
     if (!uid && m === 'GET') return send(res, 200, listUsers());
-    if (!uid && m === 'POST') return send(res, 201, createUser(await readJson(req)));
-    if (uid && m === 'PUT') return send(res, 200, updateUser(uid, await readJson(req), user.id));
-    if (uid && m === 'DELETE') { deleteUser(uid, user.id); return send(res, 200, { ok: true }); }
+    if (!uid && m === 'POST') { const b = await readJson(req); const u = createUser(b); audit(user, 'users', u.id, 'created', `${u.name} (${u.role})`); return send(res, 201, u); }
+    if (uid && m === 'PUT') { const b = await readJson(req); const before = listUsers().find((x) => x.id === uid); const u = updateUser(uid, b, user.id); audit(user, 'users', uid, 'updated', u.name, [...['name', 'username', 'role', 'active'].filter((k) => before && before[k] !== u[k]).map((k) => ({ f: k, from: String(before[k]), to: String(u[k]) })), ...(b.password ? [{ f: 'password', from: '', to: '(reset)' }] : [])]); return send(res, 200, u); }
+    if (uid && m === 'DELETE') { const before = listUsers().find((x) => x.id === uid); deleteUser(uid, user.id); audit(user, 'users', uid, 'deleted', before?.name || ''); return send(res, 200, { ok: true }); }
   }
 
   if (p[0] === 'password' && m === 'POST') {
@@ -173,7 +278,9 @@ async function api(req, res, url) {
   if (p[0] === 'settings' && m === 'PUT') {
     need(role === 'admin');
     const body = await readJson(req);
-    for (const [k, v] of Object.entries(body)) if (!['auth', 'session_secret'].includes(k)) setSetting(k, v);
+    const changed = [];
+    for (const [k, v] of Object.entries(body)) if (!['auth', 'session_secret'].includes(k)) { if (JSON.stringify(getSetting(k)) !== JSON.stringify(v)) changed.push({ f: k, from: '', to: typeof v === 'object' ? '(changed)' : String(v) }); setSetting(k, v); }
+    if (changed.length) audit(user, 'settings', null, 'updated', 'Settings', changed);
     return send(res, 200, bootstrap().settings);
   }
   if (p[0] === 'backups') { // automatic daily copies of the database
@@ -199,7 +306,7 @@ async function api(req, res, url) {
     const buf = await readBody(req, 60e6);
     const tmp = path.join(os.tmpdir(), `import-${Date.now()}.xlsm`);
     await writeFile(tmp, buf);
-    try { return send(res, 200, { ok: true, imported: await importWorkbook(tmp) }); }
+    try { const imported = await importWorkbook(tmp); audit(user, 'import', null, 'imported', 'Excel workbook', Object.entries(imported).map(([k, v]) => ({ f: k, from: '', to: String(v) }))); return send(res, 200, { ok: true, imported }); }
     catch (e) { return send(res, 400, { error: 'Could not read that workbook: ' + e.message }); }
     finally { unlink(tmp).catch(() => {}); }
   }
@@ -233,10 +340,13 @@ async function api(req, res, url) {
     const q = getRow('quotes', Number(p[1]));
     if (!q) return send(res, 404, { error: 'Quote not found' });
     if (q.order_inv) return send(res, 400, { error: `Already converted to ${q.order_inv}` });
+    if (q.approval === 'pending' || q.approval === 'rejected') return send(res, 400, { error: q.approval === 'pending' ? 'This quotation has a discount waiting for the admin to approve it.' : `The admin did not approve the discount. ${q.approval_note || ''} Lower the discount and save again.` });
     const o = tx(() => {
       const inv = nextNumber('invoice', new Date().toISOString(), true);
-      const order = insertRow('orders', { inv, date: new Date().toISOString().slice(0, 10), client: q.client, site: q.site, mobile: q.mobile, amount: Math.round(quoteTotals(q).grand * 1000) / 1000, done: 0, quote_no: q.number });
+      const T = quoteTotals(q);
+      const order = insertRow('orders', { inv, date: new Date().toISOString().slice(0, 10), client: q.client, site: q.site, mobile: q.mobile, amount: Math.round(T.grand * 1000) / 1000, vat: Math.round(Math.max(0, T.vat - T.waived) * 1000) / 1000, client_vat: q.client_vat || '', done: 0, quote_no: q.number });
       updateRow('quotes', q.id, { order_inv: inv, status: 'accepted' });
+      audit(user, 'orders', order.id, 'created', `${inv} from ${q.number}`);
       return order;
     });
     return send(res, 200, o);
@@ -248,25 +358,56 @@ async function api(req, res, url) {
     const acc = tableAccess(role, t);
     if (!acc || (m !== 'GET' && acc !== 'rw')) throw forbid();
     const worker = role === 'worker';
-    if (!id && m === 'GET') return send(res, 200, worker ? listRows(t).map((r) => redact(t, r)) : listRows(t));
-    if (id && m === 'GET') { const r = getRow(t, id); return r ? send(res, 200, worker ? redact(t, r) : r) : send(res, 404, { error: 'Not found' }); }
+    // a worker's calendar only holds the jobs they are on
+    const visible = (r) => !(worker && t === 'events') || (r.team || []).map(Number).includes(user.id);
+    if (!id && m === 'GET') return send(res, 200, worker ? listRows(t).filter(visible).map((r) => redact(t, r)) : listRows(t));
+    if (id && m === 'GET') { const r = getRow(t, id); return r && visible(r) ? send(res, 200, worker ? redact(t, r) : r) : send(res, 404, { error: 'Not found' }); }
     if (!id && m === 'POST') {
       const body = await readJson(req);
       const row = tx(() => {
         checkRef(t, body);
         if (t === 'tasks') { body.status = body.status || 'todo'; body.progress = body.progress ?? 0; body.created_by = user.id; }
         if (worker && t === 'stock') { delete body.unit_cost; if (body.kind === 'leftover' && body.profile_id) { const pr = getRow('profiles', Number(body.profile_id)); body.unit_cost = pr && pr.bar_length > 0 ? Math.round((pr.price_bar / pr.bar_length) * (body.length || 0) * ((getSetting('leftover_pct') ?? 60) / 100) * 1000) / 1000 : 0; } }
+        if (t === 'quotes') quoteApproval(body, null, user);
+        if (t === 'surveys') { body.surveyor = body.surveyor || user.name; body.status = body.status || 'open'; }
+        if (t === 'events') body.status = body.status || 'planned';
+        if (t === 'credit_notes') {
+          Object.assign(body, creditTotals(body)); checkCredit(body);
+          body.status = user.role === 'admin' || !approvalCfg().credit_notes ? 'approved' : 'pending'; body.requested_by = user.name;
+          body.approval_note = body.status === 'approved' ? `Approved by ${user.name}` : '';
+        }
         const a = AUTO[t];
         if (a && !body[a[0]]) body[a[0]] = nextNumber(a[1], body.date, true);
-        const created = insertRow(t, body); if (t === 'tasks') onTaskCreated(created, user); return created;
+        const created = insertRow(t, body); if (t === 'tasks') onTaskCreated(created, user);
+        audit(user, t, created.id, 'created', labelOf(created), notable(created)); return created;
       });
       return send(res, 201, row);
     }
-    if (id && m === 'PUT') { const cur = getRow(t, id); if (!cur) return send(res, 404, { error: 'Not found' }); const body = await readJson(req); checkRef(t, body, cur); if (worker) delete body.unit_cost;
+    if (id && m === 'PUT') {
+      const cur = getRow(t, id); if (!cur || !visible(cur)) return send(res, 404, { error: 'Not found' });
+      const body = await readJson(req); checkRef(t, body, cur); if (worker) delete body.unit_cost;
       if (t === 'tasks' && 'hidden' in body) { need(role === 'admin'); body.hidden = body.hidden ? 1 : 0; } // only an admin hides or shows tasks
       if (t === 'tasks') { if (body.status === 'done' && cur.status !== 'done') { body.done_at = new Date().toISOString(); body.progress = 100; } else if (body.status && body.status !== 'done' && cur.status === 'done') body.done_at = null; }
-      const saved = updateRow(t, id, body); if (t === 'tasks') onTaskUpdated(cur, saved, user); return send(res, 200, saved); }
-    if (id && m === 'DELETE') { if (t === 'tasks') { db.prepare('DELETE FROM task_logs WHERE task_id=?').run(id); db.prepare('DELETE FROM task_sessions WHERE task_id=?').run(id); } deleteRow(t, id); return send(res, 200, { ok: true }); }
+      if (t === 'quotes') {
+        if (user.role !== 'admin') { delete body.approval; delete body.approved_disc; delete body.approval_note; }
+        quoteApproval(body, cur, user);
+      }
+      if (t === 'credit_notes') {
+        if (user.role !== 'admin') { delete body.status; delete body.approval_note; }
+        const merged = { ...cur, ...body }; Object.assign(body, creditTotals(merged)); checkCredit({ ...merged, ...body }, id);
+        if (user.role !== 'admin' && approvalCfg().credit_notes && ['approved', 'rejected'].includes(cur.status)) body.status = 'pending'; // changed after a decision: needs a new one
+      }
+      const saved = updateRow(t, id, body); if (t === 'tasks') onTaskUpdated(cur, saved, user);
+      const ch = diff(t, cur, saved); if (ch.length) audit(user, t, id, 'updated', labelOf(saved), ch);
+      return send(res, 200, saved);
+    }
+    if (id && m === 'DELETE') {
+      const cur = getRow(t, id);
+      if (t === 'tasks') { db.prepare('DELETE FROM task_logs WHERE task_id=?').run(id); db.prepare('DELETE FROM task_sessions WHERE task_id=?').run(id); }
+      if (t === 'credit_notes' && cur?.status === 'approved' && user.role !== 'admin') throw bad('Only the admin can delete an approved credit note.', 403);
+      deleteRow(t, id); audit(user, t, id, 'deleted', labelOf(cur), cur ? notable(cur).map((c) => ({ f: c.f, from: c.to, to: '' })) : null);
+      return send(res, 200, { ok: true });
+    }
   }
   return send(res, 404, { error: 'Unknown endpoint' });
 }

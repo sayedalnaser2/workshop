@@ -11,6 +11,7 @@ export function priceFor(item, w, h) {
   if (!item) return 0;
   const rate = Number(item.rate) || 0;
   if (item.type === 'area' && w > 0 && h > 0) return Math.round((w * h * (rate / 10000)) / 5) * 5;
+  if (item.type === 'length' && w > 0) return Math.round(((w / 100) * rate) * 1000) / 1000; // railings etc.: rate per metre of width
   return rate;
 }
 
@@ -26,6 +27,20 @@ export function quoteTotals(q) {
   const waived = Number(q.vat_waived) || 0;
   const grand = amount + vat - waived;
   return { subtotal, discount, amount, vat, waived, grand, discPct: subtotal ? (discount / subtotal) * 100 : 0 };
+}
+
+/** Discount as a percentage of the items total. */
+export const discountPct = (q) => { const t = quoteTotals(q); return t.subtotal > 0 ? (t.discount / t.subtotal) * 100 : 0; };
+/**
+ * Approval state a saved quotation should have. A discount above the limit needs an admin; once approved,
+ * the same or a smaller discount stays approved. Returns { approval, approved_disc }.
+ */
+export function approvalFor(q, cur, limitPct, isAdmin) {
+  const over = limitPct > 0 && discountPct(q) > limitPct + 1e-9;
+  if (!over) return { approval: '', approved_disc: 0 };
+  if (isAdmin) return { approval: 'approved', approved_disc: Number(q.discount) || 0 };
+  if (cur && cur.approval === 'approved' && (Number(q.discount) || 0) <= (Number(cur.approved_disc) || 0) + 1e-9) return { approval: 'approved', approved_disc: cur.approved_disc };
+  return { approval: 'pending', approved_disc: 0 };
 }
 
 // ---------------------------------------------------------------------------- amount in words
@@ -135,4 +150,46 @@ export function nestBars(pieces, barLength, kerf = 0) {
     bar.pieces.push(p);
   }
   return { bars, unfit };
+}
+
+// ---------------------------------------------------------------------------- amount in words, Arabic
+const A_ONES = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+const A_TENS = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+const A_HUND = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
+function arBelow1000(n) {
+  const parts = [];
+  if (n >= 100) { parts.push(A_HUND[Math.floor(n / 100)]); n %= 100; }
+  if (n >= 20) { const o = n % 10; const t = A_TENS[Math.floor(n / 10)]; parts.push(o ? `${A_ONES[o]} و${t}` : t); } else if (n > 0) parts.push(A_ONES[n]);
+  return parts.join(' و');
+}
+/** A whole number in Arabic words (masculine), up to billions. */
+export function arabicWords(n) {
+  if (n === 0) return 'صفر';
+  const scales = [[1e9, 'مليار', 'ملياران', 'مليارات'], [1e6, 'مليون', 'مليونان', 'ملايين'], [1e3, 'ألف', 'ألفان', 'آلاف']];
+  const parts = [];
+  for (const [v, one, two, many] of scales) {
+    if (n >= v) {
+      const c = Math.floor(n / v); n %= v;
+      parts.push(c === 1 ? one : c === 2 ? two : c <= 10 ? `${arBelow1000(c)} ${many}` : `${arBelow1000(c)} ${one}`);
+    }
+  }
+  if (n) parts.push(arBelow1000(n));
+  return parts.join(' و');
+}
+/** A counted noun in the right Arabic form: دينار واحد، ديناران، ثلاثة دنانير، أحد عشر ديناراً، مائة دينار. */
+function arCount(n, f) {
+  const r = n % 100;
+  if (n === 1) return f.one; if (n === 2) return f.two;
+  if (r === 1) return `${arabicWords(n - 1)} و${f.one}`;
+  if (r === 2) return `${arabicWords(n - 2)} و${f.two}`;
+  return `${arabicWords(n)} ${r >= 3 && r <= 10 ? f.few : r === 0 ? f.gen : f.acc}`;
+}
+const BHD = { one: 'دينار بحريني واحد', two: 'ديناران بحرينيان', few: 'دنانير بحرينية', acc: 'ديناراً بحرينياً', gen: 'دينار بحريني' };
+const FILS = { one: 'فلس واحد', two: 'فلسان', few: 'فلوس', acc: 'فلساً', gen: 'فلس' };
+/** 345.5 -> "فقط ثلاثمائة وخمسة وأربعون ديناراً بحرينياً وخمسمائة فلس لا غير" */
+export function amountInWordsAr(amount) {
+  const a = Math.round((Number(amount) || 0) * 1000) / 1000;
+  if (a <= 0) return '';
+  const whole = Math.floor(a); const fils = Math.round((a - whole) * 1000);
+  return `فقط ${[whole && arCount(whole, BHD), fils && arCount(fils, FILS)].filter(Boolean).join(' و')} لا غير`;
 }

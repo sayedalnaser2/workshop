@@ -2,7 +2,7 @@ import { S, refresh } from '../app.js';
 import { api, $, esc, money, dataTable, editRow, confirmBox, toast, guard, badge } from '../ui.js';
 import { guessPriceType } from '../calc.js';
 
-const TYPES = [['area', 'Per m² (windows: W×H, rounded to 5)'], ['fixed', 'Fixed price per unit'], ['note', 'Note / option line (no price)']];
+const TYPES = [['area', 'Per m² (windows: W×H, rounded to 5)'], ['fixed', 'Fixed price per unit'], ['length', 'Per metre of width (railings; height ignored)'], ['note', 'Note / option line (no price)']];
 
 export async function render(el) {
   const rows = await api.get('t/price_items');
@@ -26,7 +26,7 @@ export async function render(el) {
     rows, search: ['name', 'note'], page: 100,
     cols: [
       { key: 'name', label: 'Description' },
-      { key: 'type', label: 'Pricing', render: (r) => badge(r.type === 'area' ? 'per m²' : r.type === 'note' ? 'note' : 'fixed', r.type === 'area' ? 'blue' : '') },
+      { key: 'type', label: 'Pricing', render: (r) => badge(r.type === 'area' ? 'per m²' : r.type === 'length' ? 'per metre' : r.type === 'note' ? 'note' : 'fixed', r.type === 'area' || r.type === 'length' ? 'blue' : '') },
       { key: 'rate', label: 'Rate (BD)', num: true, render: (r) => (r.type === 'note' ? '' : money(r.rate)) },
       { key: 'model_id', label: 'Model', render: (r) => esc(S.models.find((m) => m.id === r.model_id)?.name || '') },
     ],

@@ -88,3 +88,83 @@ test('five wrong passwords lock the account for a minute', async () => {
   assert.equal(last, 429);
   assert.equal(await login('amina', 'acc12345'), 429); // even the right password waits
 });
+
+// ---------------------------------------------------------------- features added later
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+async function upload(user, query, body = PNG, type = 'image/png') {
+  const r = await fetch(base + '/api/files?' + new URLSearchParams(query), { method: 'POST', headers: { 'Content-Type': type, Cookie: jar[user] }, body });
+  return { status: r.status, data: await r.json().catch(() => null) };
+}
+
+test('a discount over the limit waits for the admin; credit notes reduce the balance only once approved', async () => {
+  const mk = (who, discount) => call(who, 'POST', '/api/t/quotes', { client: 'Big Discount Co', date: '2026-10-11', vat_rate: 10, vat_waived: 0, discount, items: [{ w: 100, h: 100, desc: 'Door', qty: 1, price: 1000 }], status: 'draft' });
+  const ok = (await mk('amina', 50)).data; assert.ok(!ok.approval); // 5%: fine
+  const q = (await mk('amina', 200)).data; assert.equal(q.approval, 'pending'); // 20%
+  assert.equal((await call('amina', 'PUT', `/api/t/quotes/${q.id}`, { status: 'sent' })).data.status, 'draft'); // cannot go out
+  assert.equal((await call('amina', 'POST', `/api/quotes/${q.id}/to-order`, {})).status, 400);
+  assert.equal((await call('amina', 'POST', `/api/approvals/quotes/${q.id}`, { decision: 'approve' })).status, 403); // only the admin decides
+  assert.equal((await call('boss', 'GET', '/api/approvals')).data.quotes.some((x) => x.id === q.id), true);
+  assert.equal((await call('boss', 'POST', `/api/approvals/quotes/${q.id}`, { decision: 'approve', note: 'ok' })).data.approval, 'approved');
+  assert.equal((await call('amina', 'PUT', `/api/t/quotes/${q.id}`, { discount: 150 })).data.approval, 'approved'); // lowered: stays approved
+  assert.equal((await call('amina', 'PUT', `/api/t/quotes/${q.id}`, { discount: 300 })).data.approval, 'pending'); // raised: asks again
+  assert.equal((await call('amina', 'PUT', `/api/t/quotes/${q.id}`, { discount: 150 })).data.approval, 'pending'); // the earlier approval was for the old figure; a raise resets it
+  assert.equal((await call('boss', 'POST', `/api/approvals/quotes/${q.id}`, { decision: 'approve' })).status, 200);
+  assert.equal((await call('boss', 'POST', `/api/quotes/${q.id}/to-order`, {})).status, 200);
+  const adm = (await mk('boss', 400)).data; assert.equal(adm.approval, 'approved'); // the admin's own discount needs nobody
+
+  const o = (await call('amina', 'GET', '/api/ledger')).data.find((x) => x.quote_no === q.number);
+  assert.ok(o.vat > 0 || o.vat === 0); // VAT saved on the order for the tax report
+  const cn = await call('amina', 'POST', '/api/t/credit_notes', { order_inv: o.inv, client: o.client, date: '2026-10-12', vat_rate: 10, reason: 'Door returned', lines: [{ desc: 'Door returned', qty: 1, price: 100 }] });
+  assert.equal(cn.status, 201); assert.equal(cn.data.status, 'pending'); assert.equal(cn.data.total, 110); assert.match(cn.data.no, /^CN\d{4}\d{3}$/);
+  assert.equal((await call('amina', 'GET', '/api/ledger')).data.find((x) => x.inv === o.inv).balance, o.balance); // not yet
+  assert.equal((await call('boss', 'POST', `/api/approvals/credit_notes/${cn.data.id}`, { decision: 'approve' })).data.status, 'approved');
+  const after = (await call('amina', 'GET', '/api/ledger')).data.find((x) => x.inv === o.inv);
+  assert.equal(after.credit, 110); assert.equal(after.balance, Math.round((o.balance - 110) * 100) / 100);
+  const big = await call('amina', 'POST', '/api/t/credit_notes', { order_inv: o.inv, client: o.client, vat_rate: 0, lines: [{ desc: 'x', qty: 1, price: 99999 }] });
+  assert.equal(big.status, 400); assert.match(big.data.error, /more than the invoice/);
+  assert.equal((await call('amina', 'DELETE', `/api/t/credit_notes/${cn.data.id}`)).status, 403); // approved ones are the admin's
+  const rep = (await call('amina', 'GET', '/api/vat-report?from=2026-01-01&to=2026-12-31')).data; assert.ok(rep.totals.credit_vat >= 10);
+  assert.equal((await call('wasim', 'GET', '/api/vat-report')).status, 403);
+});
+
+test('photos: stored with their type, workers only reach their own task and surveys', async () => {
+  const staff = (await call('boss', 'GET', '/api/staff')).data; const wid = staff.find((s) => s.name === 'Wasim').id;
+  const t = (await call('boss', 'POST', '/api/t/tasks', { title: 'Photo job', assignee_id: wid })).data;
+  const other = (await call('boss', 'POST', '/api/t/tasks', { title: 'Not his', assignee_id: 1 })).data;
+  const a = await upload('wasim', { ref_type: 'task', ref_key: String(t.id), kind: 'before', name: 'door.png' }); assert.equal(a.status, 201); assert.equal(a.data.mime, 'image/png');
+  assert.equal((await upload('wasim', { ref_type: 'task', ref_key: String(other.id), name: 'x.png' })).status, 403);
+  assert.equal((await upload('wasim', { ref_type: 'order', ref_key: 'I1', name: 'x.png' })).status, 403);
+  const raw = await fetch(base + `/api/files/${a.data.id}`, { headers: { Cookie: jar.wasim } });
+  assert.equal(raw.status, 200); assert.equal(raw.headers.get('content-type'), 'image/png'); assert.deepEqual(Buffer.from(await raw.arrayBuffer()), PNG);
+  const list = (await call('boss', 'GET', `/api/files?ref_type=task&ref_key=${t.id}`)).data; assert.equal(list.length, 1); assert.equal(list[0].kind, 'before');
+  const html = await upload('boss', { ref_type: 'order', ref_key: 'I1', name: 'evil.html' }, Buffer.from('<script>alert(1)</script>'), 'text/html');
+  assert.equal(html.data.mime, 'application/octet-stream'); // never served as a page
+  const dl = await fetch(base + `/api/files/${html.data.id}`, { headers: { Cookie: jar.boss } }); assert.match(dl.headers.get('content-disposition'), /^attachment/);
+  assert.equal((await call('wasim', 'DELETE', `/api/files/${html.data.id}`)).status, 403);
+  assert.equal((await call('wasim', 'DELETE', `/api/files/${a.data.id}`)).status, 200); // his own photo
+  const sv = await call('wasim', 'POST', '/api/t/surveys', { client: 'Walk-in', items: [{ uid: 'a', w: 100, h: 120 }] }); assert.equal(sv.status, 201); assert.equal(sv.data.surveyor, 'Wasim');
+  assert.equal((await upload('wasim', { ref_type: 'survey', ref_key: String(sv.data.id), tag: 'a' })).status, 201);
+});
+
+test('calendar: workers only see the jobs they are on and cannot change it', async () => {
+  const wid = (await call('boss', 'GET', '/api/staff')).data.find((s) => s.name === 'Wasim').id;
+  assert.equal((await call('amina', 'POST', '/api/t/events', { title: 'Install at Villa 1', date: '2026-10-20', start: '08:00', kind: 'install', team: [wid] })).status, 201);
+  assert.equal((await call('amina', 'POST', '/api/t/events', { title: 'Delivery elsewhere', date: '2026-10-20', kind: 'delivery', team: [] })).status, 201);
+  const mine = (await call('wasim', 'GET', '/api/t/events')).data; assert.deepEqual(mine.map((e) => e.title), ['Install at Villa 1']);
+  assert.equal((await call('boss', 'GET', '/api/t/events')).data.length, 2);
+  assert.equal((await call('wasim', 'POST', '/api/t/events', { title: 'x', date: '2026-10-21' })).status, 403);
+  assert.equal((await call('wasim', 'GET', '/api/staff')).data[0].role, undefined); // names only
+});
+
+test('audit trail: records who changed what, for the admin only', async () => {
+  const q = (await call('amina', 'POST', '/api/t/quotes', { client: 'Audit Co', date: '2026-10-11', vat_rate: 10, discount: 0, items: [{ qty: 1, price: 100, desc: 'x' }] })).data;
+  await call('amina', 'PUT', `/api/t/quotes/${q.id}`, { discount: 5, client: 'Audit Co Ltd' });
+  const log = (await call('boss', 'GET', `/api/audit?table=quotes&q=${encodeURIComponent(q.number)}`)).data;
+  const upd = log.rows.find((r) => r.action === 'updated'); assert.equal(upd.user_name, 'Amina');
+  assert.deepEqual(upd.changes.map((c) => c.f).sort(), ['client', 'discount']);
+  assert.equal(upd.changes.find((c) => c.f === 'client').to, 'Audit Co Ltd');
+  assert.ok(log.rows.some((r) => r.action === 'created'));
+  assert.equal((await call('amina', 'GET', '/api/audit')).status, 403);
+  await call('amina', 'DELETE', `/api/t/quotes/${q.id}`);
+  assert.ok((await call('boss', 'GET', `/api/audit?q=${encodeURIComponent(q.number)}`)).data.rows.some((r) => r.action === 'deleted'));
+});

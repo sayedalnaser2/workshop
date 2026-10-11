@@ -28,7 +28,7 @@ async function editor(el, id) {
       <label class="field"><span>Name</span><input id="name" value="${esc(m.name)}"></label>
       <label class="field"><span>Series / system</span><input id="series" value="${esc(m.series || '')}" placeholder="45 Series"></label>
       <label class="field"><span>Drawing</span><select id="kind">${Object.entries(KINDS).map(([k, l]) => `<option value="${k}" ${m.kind === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      <label class="field"><span>Category</span><select id="category">${['Window', 'Door', 'Partition', 'Other'].map((c) => `<option ${m.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+      <label class="field"><span>Category</span><select id="category">${[...new Set(['Window', 'Door', 'Shower & Glass', 'Partition', 'Railing', 'Curtain wall', 'Mirror', 'Other', ...S.models.map((x) => x.category), m.category].filter(Boolean))].map((c) => `<option ${m.category === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
       <label class="field"><span>Default width (cm)</span><input id="def_w" type="number" step="any" value="${m.def_w ?? ''}"></label>
       <label class="field"><span>Default height (cm)</span><input id="def_h" type="number" step="any" value="${m.def_h ?? ''}"></label>
       <label class="field full"><span>Auto-link to price-list items containing…</span><input id="match" value="${esc(m.spec.match || '')}" placeholder="e.g. Single Hinged window 45"><small>When you pick a price-list item whose name contains this text in a quotation, this model is attached automatically.</small></label>

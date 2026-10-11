@@ -7,6 +7,7 @@ import { kitchenModel } from '../kitchen.js';
 import { elevationSVG } from '../kitchen-draw.js';
 import { computeModel } from '../calc.js';
 import { dot } from './stock.js';
+import { attachmentsPanel } from '../attachments.js';
 
 const KIND = { hidden: '🙈', start: '▶ started', pause: '⏸ paused', update: '✎', blocked: '⛔ blocked', unblock: '✔ unblocked', done: '✔ finished', reopen: '↺ reopened', time: '⏱ added time', assigned: '👤', created: '＋', estimate: '⏲' };
 export const logLine = (l) => `${KIND[l.kind] || ''} ${esc(l.text || '')}${l.progress != null && l.kind === 'update' ? ` <b>(${Math.round(l.progress)}%)</b>` : ''}${l.kind === 'done' && l.minutes != null ? ` <b>(took ${fmtMin(l.minutes)})</b>` : ''}${l.kind === 'time' && l.minutes ? ` <b>(+${fmtMin(l.minutes)})</b>` : ''}`;
@@ -153,8 +154,10 @@ async function jobSheet(el, id) {
         ${t.status === 'done' ? '' : `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">${here ? badge('● You are on this task', 'ok') : '<button class="btn primary" data-a="start">▶ Work on this</button>'}<button class="btn" data-a="update">✎ Update</button>${t.status === 'blocked' ? '<button class="btn" data-a="unblock">Unblock</button>' : '<button class="btn" data-a="blocked">⛔ Blocked</button>'}<button class="btn" data-a="done" style="margin-left:auto">✔ Done</button></div>`}</div></div></div>
     ${kitchenHtml}
     ${q ? `<h3 style="margin:18px 0 8px">What to make <span class="muted" style="font-weight:400">(${n} item${n === 1 ? '' : 's'})</span></h3>${items || '<div class="card muted">The quotation has no items.</div>'}${mats}` : ''}
+    <div class="card" style="margin-top:14px" id="photos"></div>
     <div class="card" style="margin-top:14px"><h3>Updates</h3><table class="grid"><tbody>${logs.map((l) => `<tr><td class="muted" style="white-space:nowrap">${ago(l.ts)}</td><td><b>${esc(l.user_name)}</b></td><td>${logLine(l)}</td></tr>`).join('') || '<tr><td class="empty">No updates yet</td></tr>'}</tbody></table></div></div>`;
   startTicker(el);
+  attachmentsPanel($('#photos', el), { type: 'task', key: String(id), title: 'Photos — before & after', kinds: [['before', 'Before'], ['after', 'After'], ['file', 'Other']] });
   bindActions($('#job', el), () => jobSheet(el, id), async () => t);
 }
 const fmtQty = (n) => (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });

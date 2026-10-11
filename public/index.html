@@ -18,12 +18,14 @@
     <input type="password" id="loginPw" placeholder="Password" autocomplete="current-password" required>
     <button class="btn primary" type="submit">Continue</button>
     <p class="err" id="loginErr"></p>
+    <button type="button" class="btn sm" id="loginLang"></button>
   </form>
 </div>
 <div id="app" hidden>
   <aside id="side">
     <a class="brand" href="#/"><img src="/img/icon.png" alt=""><span>Workshop<br><small>Manager</small></span></a>
     <nav id="nav"></nav>
+    <button id="langBtn" class="lang-btn" data-noi18n></button>
     <button id="meBtn" class="mebtn" title="My account"><span id="meAvatar"></span><span><b id="meName"></b><small id="meRole"></small></span></button>
   </aside>
   <div class="main-wrap">

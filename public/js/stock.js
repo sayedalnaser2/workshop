@@ -122,3 +122,17 @@ export function poSuggestions(q, { models, profiles, accessories, glassTypes, it
   }
   return lines;
 }
+
+/**
+ * Library items (profiles, glass, accessories) whose new stock is at or below their alert level.
+ * Returns [{type,id,name,code,onHand,min,unit,suggest}] — suggest orders enough to reach twice the minimum.
+ */
+export function lowStock(stock, { profiles = [], glassTypes = [], accessories = [] }) {
+  const out = []; const nw = stock.filter((s) => s.kind === 'new');
+  const sum = (f) => nw.filter(f).reduce((a, s) => a + (Number(s.qty) || 0), 0);
+  const add = (type, r, onHand, unit) => { const min = Number(r.min_qty) || 0; if (min > 0 && onHand <= min + 1e-9) out.push({ type, id: r.id, name: type === 'profile' ? `${r.series || ''} ${r.name}`.trim() : r.name, code: r.code || '', onHand, min, unit, suggest: Math.max(1, Math.ceil(min * 2 - onHand)) }); };
+  for (const p of profiles) add('profile', p, sum((s) => s.profile_id === p.id), 'bar');
+  for (const g of glassTypes) add('glass', g, sum((s) => s.glass_id === g.id), 'sheet');
+  for (const a of accessories) add('accessory', a, sum((s) => s.item_type === 'accessory' && same(s.name, a.name)), a.unit || 'ea');
+  return out.sort((a, b) => a.onHand / a.min - b.onHand / b.min);
+}

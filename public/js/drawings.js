@@ -3,7 +3,9 @@
 export const KINDS = {
   fix: 'Fixed window', hinged1: 'Single hinged', hinged2: 'Two-leaf hinged', bottom: 'Bottom hinged', tilt: 'Tilt & turn',
   sliding2: 'Sliding – 2 panels', sliding3: 'Sliding – 3 panels', sliding4: 'Sliding – 4 panels',
-  door1: 'Single swing door', door2: 'Double swing door', partition: 'Frameless / partition',
+  door1: 'Single swing door', door2: 'Double swing door', partition: 'Frameless / partition', partition_frame: 'Framed partition',
+  shower_fix: 'Shower – fixed panel', shower_door: 'Shower – hinged door', shower_slide: 'Shower – sliding',
+  railing: 'Glass railing', railing_bar: 'Railing – posts & balusters', curtain: 'Curtain wall', mirror: 'Mirror', folding: 'Folding door',
 };
 
 export function drawModel(kind, w = 100, h = 100, { dims = true } = {}) {
@@ -59,6 +61,53 @@ export function drawModel(kind, w = 100, h = 100, { dims = true } = {}) {
     case 'partition':
       s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" ${glass} stroke-width="1.5"/><path d="M${x0 + 12} ${y1 - 10} L${x0 + 44} ${y0 + 10}" stroke="#fff" stroke-width="3" opacity=".7"/>`;
       break;
+    case 'partition_frame': {
+      const n = 2; const pw = iw / n;
+      for (let i = 0; i < n; i++) s += pane(ix + i * pw + (i ? 2 : 0), iy, pw - (i ? 2 : 0) - (i < n - 1 ? 2 : 0), ih);
+      s += `<line x1="${ix + pw}" y1="${iy}" x2="${ix + pw}" y2="${iy + ih}" stroke="#26435f" stroke-width="3"/>`;
+      break;
+    }
+    case 'shower_fix':
+      s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" ${glass} stroke-width="1.5"/>` + [0.15, 0.85].map((f) => `<circle cx="${x0 + 7}" cy="${y0 + H * f}" r="3" fill="#26435f"/>`).join('') + `<path d="M${x0 + 14} ${y1 - 12} L${x0 + 44} ${y0 + 12}" stroke="#fff" stroke-width="3" opacity=".7"/>`;
+      break;
+    case 'shower_door':
+      s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" ${glass} stroke-width="1.5"/>` + [0.12, 0.88].map((f) => `<rect x="${x0 - 1}" y="${y0 + H * f - 5}" width="9" height="10" fill="#26435f" rx="1"/>`).join('') + tri(x0 + 4, y0 + 4, W - 8, H - 8, 'L') + `<rect x="${x1 - 10}" y="${y0 + H / 2 - 14}" width="3.5" height="28" rx="1.7" fill="#26435f"/>`;
+      break;
+    case 'shower_slide': {
+      s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="none" stroke="#26435f" stroke-width="1.5"/><rect x="${x0}" y="${y0}" width="${W}" height="4" fill="#9aa7b5"/><rect x="${x0}" y="${y1 - 4}" width="${W}" height="4" fill="#9aa7b5"/>`;
+      const pw = (W - 2) / 2 + 3;
+      s += `<rect x="${x0 + 1}" y="${y0 + 5}" width="${pw}" height="${H - 10}" ${glass} fill-opacity=".75"/><rect x="${x1 - pw - 1}" y="${y0 + 5}" width="${pw}" height="${H - 10}" ${glass}/>` + arrow(x0 + 10, y0 + H / 2, 1);
+      break;
+    }
+    case 'railing': {
+      const n = Math.max(1, Math.round(w / 120)); const pw = (W - 4) / n;
+      s = `<rect x="${x0}" y="${y0}" width="${W}" height="6" rx="3" fill="#7d8a9a" stroke="#26435f"/><rect x="${x0}" y="${y1 - 5}" width="${W}" height="5" fill="#9aa7b5" stroke="#26435f"/>`;
+      for (let i = 0; i < n; i++) s += `<rect x="${x0 + 2 + i * pw + 1}" y="${y0 + 8}" width="${pw - 2}" height="${H - 15}" ${glass}/>`;
+      for (let i = 0; i <= n; i++) s += `<rect x="${x0 + i * pw + (i === n ? 0 : 0) - 1}" y="${y0 + 6}" width="4" height="${H - 11}" fill="#26435f"/>`;
+      break;
+    }
+    case 'railing_bar': {
+      const n = Math.max(2, Math.round(w / 11)); const np = Math.max(2, Math.round(w / 120) + 1);
+      s = `<rect x="${x0}" y="${y0}" width="${W}" height="6" rx="3" fill="#7d8a9a" stroke="#26435f"/><rect x="${x0}" y="${y1 - 8}" width="${W}" height="5" fill="#9aa7b5" stroke="#26435f"/>`;
+      for (let i = 1; i < n; i++) s += `<rect x="${x0 + (W * i) / n - 1}" y="${y0 + 6}" width="2" height="${H - 14}" fill="#55627a"/>`;
+      for (let i = 0; i < np; i++) s += `<rect x="${x0 + ((W - 5) * i) / (np - 1)}" y="${y0 + 3}" width="5" height="${H - 3}" fill="#26435f"/>`;
+      break;
+    }
+    case 'curtain': {
+      const nc = Math.max(1, Math.ceil(w / 100)); const nr = Math.max(1, Math.ceil(h / 125));
+      s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="#9aa7b5" stroke="#26435f" stroke-width="1.5"/>`;
+      for (let c = 0; c < nc; c++) for (let r = 0; r < nr; r++) s += `<rect x="${x0 + (W * c) / nc + 2}" y="${y0 + (H * r) / nr + 2}" width="${W / nc - 4}" height="${H / nr - 4}" ${glass}/>`;
+      break;
+    }
+    case 'mirror':
+      s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="#7d8a9a" stroke="#26435f" stroke-width="1.5"/><rect x="${ix}" y="${iy}" width="${iw}" height="${ih}" fill="#e8f0f6" stroke="#26435f"/><path d="M${ix + 8} ${iy + ih - 6} L${ix + 38} ${iy + 8}" stroke="#fff" stroke-width="5" opacity=".9"/><path d="M${ix + 24} ${iy + ih - 6} L${ix + 44} ${iy + 24}" stroke="#fff" stroke-width="3" opacity=".8"/>`;
+      break;
+    case 'folding': {
+      const n = 4; const pw = iw / n;
+      for (let i = 0; i < n; i++) s += `<rect x="${ix + i * pw}" y="${iy}" width="${pw}" height="${ih}" fill="#e9eef4" stroke="#26435f"/>` + pane(ix + i * pw + pw * .15, iy + ih * .08, pw * .7, ih * .6);
+      s += [1, 2, 3].map((i) => `<line x1="${ix + i * pw}" y1="${iy}" x2="${ix + i * pw}" y2="${iy + ih}" stroke="#26435f" stroke-width="2"/>`).join('') + arrow(ix + 8, y0 + H * .55, 1);
+      break;
+    }
     default: s += pane(ix, iy, iw, ih);
   }
   if (dims) {

@@ -119,18 +119,19 @@ export function counterTops(runs, c, style = DEFAULT_STYLE) {
     for (const cab of run.cabinets || []) {
       const type = CAB_TYPES[cab.type] || CAB_TYPES.base;
       if (!type.counter) { close(); continue; }
-      if (!cur) cur = { run: ri, runName: run.name, len: 0, depth: 0, from: 0 };
+      if (!cur) cur = { run: ri, runName: run.name, len: 0, depth: 0, from: 0, island: !!run.island, over: run.island ? +run.overhang || 0 : 0 };
       cur.len += +cab.w || 0; cur.depth = Math.max(cur.depth, +cab.d || 0);
       if (type.sink) sinks += type.sink; if (type.hob) hobs += type.hob; if (type.corner) corners++;
     }
     close();
   });
-  const out = pieces.map((p) => ({ ...p, len: r1(p.len + 2 * (+c.side || 0)), depth: r1(p.depth + (+c.front || 0)), splash: c.splash_h > 0 ? r1(p.len) : 0 }));
+  // an island stands free: no splash back, and a seating overhang on the far side
+  const out = pieces.map((p) => ({ ...p, len: r1(p.len + 2 * (+c.side || 0)), depth: r1(p.depth + (+c.front || 0) + p.over), splash: c.splash_h > 0 && !p.island ? r1(p.len) : 0 }));
   const area = out.reduce((a, p) => a + (p.len * p.depth + p.splash * c.splash_h) / 10000, 0);
   const slabsPieces = []; for (const p of out) { slabsPieces.push({ w: p.len, h: p.depth, qty: 1, label: `${p.runName || 'Run'} top` }); if (p.splash) slabsPieces.push({ w: p.splash, h: c.splash_h, qty: 1, label: 'Splash' }); }
   const slabs = packSheets(slabsPieces, c.slab_w, c.slab_h, 0.5);
   const run_m = out.reduce((a, p) => a + p.len, 0) / 100;
-  const polish_m = out.reduce((a, p) => a + (p.len + 2 * p.depth + (p.splash ? p.splash : 0)) / 100, 0);
+  const polish_m = out.reduce((a, p) => a + (p.island ? 2 * p.len + 2 * p.depth : p.len + 2 * p.depth + (p.splash ? p.splash : 0)) / 100, 0);
   return { pieces: out, area_m2: area, run_m, polish_m, sinks, hobs, corners, slabs, slab_area: area * (1 + (+c.waste || 0) / 100) };
 }
 

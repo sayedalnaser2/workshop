@@ -3,6 +3,7 @@ import { api, $, $$, esc, dmy, today, toast, guard, confirmBox, dataTable, badge
 import { fmtMin, parseDur, ago, localTime, localDay, variance, startTicker, fmtSec } from '../time.js';
 import { openTaskForm, addStandardTasks } from '../task-form.js';
 import { logLine } from './mytasks.js';
+import { attachmentsPanel } from '../attachments.js';
 
 const ST = { todo: ['To do', ''], doing: ['In progress', 'warn'], blocked: ['Blocked', 'bad'], done: ['Done', 'ok'] };
 
@@ -57,8 +58,10 @@ async function detail(el, id) {
   ${t.description ? `<div class="card" style="margin-bottom:14px"><b>Details</b><p style="margin:6px 0 0">${esc(t.description)}</p></div>` : ''}
   <div class="cols2" style="align-items:start"><div class="card"><h3>Timeline</h3><table class="grid"><tbody>${logs.map((l) => `<tr><td style="white-space:nowrap" class="muted">${new Date(l.ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${localTime(l.ts)}</td><td><b>${esc(l.user_name)}</b></td><td>${logLine(l)}</td></tr>`).join('') || '<tr><td class="empty">Nothing yet</td></tr>'}</tbody></table></div>
   <div class="card"><h3>Time on this task <span class="muted" style="font-weight:400">(counted automatically during shifts)</span></h3><table class="grid"><thead><tr><th>Worker</th><th>Went on the task</th><th>Left it</th><th class="num">Time counted</th></tr></thead><tbody>${sessions.map((s) => `<tr><td>${esc(s.user_name)}${s.kind === 'manual' ? ' <span class="muted">(added manually)</span>' : ''}</td><td>${dmy(localDay(s.started))} ${localTime(s.started)}</td><td>${s.ended ? localTime(s.ended) : '<span class="pos">still on it</span>'}</td><td class="num">${fmtMin(s.minutes)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No time recorded yet</td></tr>'}</tbody><tfoot><tr><td colspan="3">Total</td><td class="num">${fmtMin(t.actual_min)}</td></tr></tfoot></table></div></div>
+  <div class="card" style="margin-top:14px" id="photos"></div>
   <div class="sticky-actions"><button class="btn primary" id="edit">Edit task</button><button class="btn" id="note">Add a note</button><button class="btn" id="time">+ Add time</button>${t.status === 'done' ? '<button class="btn" id="reopen">Re-open</button>' : '<button class="btn" id="done">Mark done</button>'}<button class="btn danger" id="del">Delete</button>${S.me.role === 'admin' ? `<button class="btn" id="hide">${t.hidden ? 'Show in lists again' : 'Hide task'}</button>` : ''}</div>`;
   startTicker(el);
+  attachmentsPanel($('#photos', el), { type: 'task', key: String(id), title: 'Photos & files from the job', kinds: [['before', 'Before'], ['after', 'After'], ['file', 'Other']] });
   $('#lead', el).onchange = guard(async (e) => { await api.put(`t/tasks/${id}`, { assignee_id: e.target.value ? Number(e.target.value) : null }); toast('Assignment saved'); detail(el, id); });
   const act = (body) => api.post(`tasks/${id}/action`, body).then(() => detail(el, id));
   $('#edit', el).onclick = () => openTaskForm({ task: t, onSaved: () => detail(el, id) });

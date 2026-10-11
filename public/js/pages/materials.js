@@ -4,19 +4,19 @@ import { api, $, $$, esc, money, dataTable, editRow, confirmBox, toast, guard } 
 const TABS = {
   profiles: {
     label: 'Aluminium profiles', title: 'profile', blank: { bar_length: 600 },
-    fields: [{ key: 'code', label: 'Code' }, { key: 'name', label: 'Name', required: true }, { key: 'series', label: 'Series' }, { key: 'color', label: 'Colour / finish' }, { key: 'bar_length', label: 'Bar length (cm)', type: 'number' }, { key: 'price_bar', label: 'Price per bar (BD)', type: 'number' }, { key: 'weight_m', label: 'Weight kg/m', type: 'number' }],
-    cols: [{ key: 'code', label: 'Code' }, { key: 'name', label: 'Name' }, { key: 'series', label: 'Series' }, { key: 'color', label: 'Finish' }, { key: 'bar_length', label: 'Bar cm', num: true }, { key: 'price_bar', label: 'Price / bar', num: true, render: (r) => money(r.price_bar) }],
+    fields: [{ key: 'code', label: 'Code' }, { key: 'name', label: 'Name', required: true }, { key: 'series', label: 'Series' }, { key: 'color', label: 'Colour / finish' }, { key: 'bar_length', label: 'Bar length (cm)', type: 'number' }, { key: 'price_bar', label: 'Price per bar (BD)', type: 'number' }, { key: 'weight_m', label: 'Weight kg/m', type: 'number' }, { key: 'min_qty', label: 'Alert when new stock falls below (bars)', type: 'number', hint: 'Leave empty for no alert' }],
+    cols: [{ key: 'code', label: 'Code' }, { key: 'name', label: 'Name' }, { key: 'series', label: 'Series' }, { key: 'color', label: 'Finish' }, { key: 'bar_length', label: 'Bar cm', num: true }, { key: 'price_bar', label: 'Price / bar', num: true, render: (r) => money(r.price_bar) }, { key: 'min_qty', label: 'Alert below', num: true, render: (r) => (r.min_qty ? r.min_qty : '') }],
     search: ['code', 'name', 'series'],
   },
   glass_types: {
     label: 'Glass types', title: 'glass type', blank: {},
-    fields: [{ key: 'name', label: 'Name', required: true }, { key: 'thickness', label: 'Thickness' }, { key: 'price_m2', label: 'Price per m² (BD)', type: 'number' }],
-    cols: [{ key: 'name', label: 'Name' }, { key: 'thickness', label: 'Thickness' }, { key: 'price_m2', label: 'Price / m²', num: true, render: (r) => money(r.price_m2) }], search: ['name'],
+    fields: [{ key: 'name', label: 'Name', required: true }, { key: 'thickness', label: 'Thickness' }, { key: 'price_m2', label: 'Price per m² (BD)', type: 'number' }, { key: 'min_qty', label: 'Alert when new stock falls below (sheets)', type: 'number', hint: 'Leave empty for no alert' }],
+    cols: [{ key: 'name', label: 'Name' }, { key: 'thickness', label: 'Thickness' }, { key: 'price_m2', label: 'Price / m²', num: true, render: (r) => money(r.price_m2) }, { key: 'min_qty', label: 'Alert below', num: true, render: (r) => (r.min_qty ? r.min_qty : '') }], search: ['name'],
   },
   accessories: {
     label: 'Accessories & hardware', title: 'accessory', blank: { unit: 'ea' },
-    fields: [{ key: 'code', label: 'Code' }, { key: 'name', label: 'Name', required: true }, { key: 'unit', label: 'Unit (ea, m, set…)' }, { key: 'price', label: 'Unit price (BD)', type: 'number' }],
-    cols: [{ key: 'code', label: 'Code' }, { key: 'name', label: 'Name' }, { key: 'unit', label: 'Unit' }, { key: 'price', label: 'Price', num: true, render: (r) => money(r.price) }], search: ['code', 'name'],
+    fields: [{ key: 'code', label: 'Code' }, { key: 'name', label: 'Name', required: true }, { key: 'unit', label: 'Unit (ea, m, set…)' }, { key: 'price', label: 'Unit price (BD)', type: 'number' }, { key: 'min_qty', label: 'Alert when new stock falls below', type: 'number', hint: 'Leave empty for no alert' }],
+    cols: [{ key: 'code', label: 'Code' }, { key: 'name', label: 'Name' }, { key: 'unit', label: 'Unit' }, { key: 'price', label: 'Price', num: true, render: (r) => money(r.price) }, { key: 'min_qty', label: 'Alert below', num: true, render: (r) => (r.min_qty ? r.min_qty : '') }], search: ['code', 'name'],
   },
 };
 

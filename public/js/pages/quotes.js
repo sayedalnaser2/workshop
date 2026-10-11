@@ -1,7 +1,9 @@
 import { S, refresh } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, toast, guard, confirmBox, dataTable, badge, datalist } from '../ui.js';
-import { quoteTotals, priceFor, amountInWords, modelCost } from '../calc.js';
-import { printView, docHeader } from '../doc.js';
+import { quoteTotals, priceFor, modelCost, amountInWords } from '../calc.js';
+import { printView, docHeader, L, wordsBlock, termsBlock, AR } from '../doc.js';
+import { elevationSVG, planSVG } from '../kitchen-draw.js';
+import { kitchenModel } from '../kitchen.js';
 import { quotePieces, allocateLeftovers } from '../stock.js';
 import { openPoDialog } from '../po-dialog.js';
 import { dot } from './stock.js';
@@ -29,7 +31,7 @@ async function list(el) {
       { key: 'client', label: 'Client' }, { key: 'site', label: 'Site' },
       { key: 'count', label: 'Items', num: true },
       { key: 'total', label: 'Total (BD)', num: true, render: (r) => money(r.total) },
-      { key: 'status', label: 'Status', render: (r) => badge(...(STATUS[r.status] || STATUS.draft)) + (r.order_inv ? ` <a href="#/orders" class="badge">${esc(r.order_inv)}</a>` : '') },
+      { key: 'status', label: 'Status', render: (r) => badge(...(STATUS[r.status] || STATUS.draft)) + (r.approval === 'pending' ? ' ' + badge('Discount waiting', 'warn') : r.approval === 'rejected' ? ' ' + badge('Discount refused', 'bad') : '') + (r.order_inv ? ` <a href="#/orders" class="badge">${esc(r.order_inv)}</a>` : '') },
     ],
     filterKey: 'quotes',
     filters: [{ label: 'All' }, { label: 'Open', fn: (r) => r.status === 'draft' || r.status === 'sent' }, { label: 'Draft', fn: (r) => r.status === 'draft' }, { label: 'Sent', fn: (r) => r.status === 'sent' }, { label: 'Accepted', fn: (r) => r.status === 'accepted' }],
@@ -63,15 +65,17 @@ async function editor(el, id) {
   el.innerHTML = `
   <div class="ph"><h1>${id ? 'Quotation ' + esc(q.number) : 'New quotation'}</h1>${id ? badge(...(STATUS[q.status] || STATUS.draft)) : ''}<span class="grow"></span><a class="btn" href="#/quotes">← All quotations</a></div>
   ${datalist('dl-clients', clients)}${datalist('dl-prices', S.price_items.filter((p) => p.type !== 'note').map((p) => p.name))}
+  <div id="apr"></div>
   <div class="card"><div class="qhead">
     <label class="field"><span>Quote #</span><input id="number" value="${esc(q.number)}" placeholder="Auto: ${esc(S.next.quote)}"></label>
     <label class="field"><span>Date</span><input id="date" type="date" value="${esc(q.date)}"></label>
     <label class="field"><span>Client</span><input id="client" list="dl-clients" value="${esc(q.client)}" autocomplete="off"></label>
     <label class="field"><span>Mobile</span><input id="mobile" value="${esc(q.mobile)}"></label>
     <label class="field"><span>Site</span><input id="site" value="${esc(q.site)}"></label>
-    <label class="field" style="grid-column: span 2"><span>Heading line (printed above the items)</span><input id="title" value="${esc(q.title)}"></label>
+    <label class="field"><span>Client VAT No. (for tax invoice)</span><input id="client_vat" value="${esc(q.client_vat || '')}"></label>
     <label class="field"><span>Colour (whole quotation)</span><select id="colour"><option value="">— not set —</option>${(S.settings.colours || []).map((c) => `<option ${q.colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
     <label class="field"><span>Status</span><select id="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label class="field" style="grid-column: 1 / -1"><span>Heading line (printed above the items)</span><input id="title" value="${esc(q.title)}"></label>
   </div></div>
   <div class="card" style="margin-top:14px"><div class="items-wrap"><table class="items"><thead><tr><th></th><th>Width cm</th><th>Height cm</th><th>Description (pick from price list or type)</th><th>Model</th><th>Glass</th><th>Colour</th><th>Qty</th><th>Unit price</th><th class="tot">Amount</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="addItem">+ Add item</button><button class="btn" id="addNote">+ Add heading / note line</button></div>
@@ -82,7 +86,7 @@ async function editor(el, id) {
     <div class="totals" id="totals"></div>
   </div></div>
   <div class="sticky-actions"><button class="btn primary" id="save">Save quotation</button>
-    ${id ? `<a class="btn" href="#/quotes/${id}/print">Print preview</a><a class="btn" href="#/cutting/${id}">Cutting list</a><button class="btn" id="toOrder" ${q.order_inv ? 'disabled' : ''}>${q.order_inv ? 'Order ' + esc(q.order_inv) : 'Convert to order / invoice'}</button><button class="btn" id="dup">Duplicate</button><button class="btn danger" id="del">Delete</button>` : ''}</div>`;
+    ${id ? `<a class="btn" href="#/quotes/${id}/print">Print preview</a><a class="btn" href="#/cutting/${id}">Cutting list</a><button class="btn" id="toOrder" ${q.order_inv || q.approval === 'pending' || q.approval === 'rejected' ? 'disabled' : ''} ${q.approval === 'pending' || q.approval === 'rejected' ? 'title="Waiting for the admin to approve the discount"' : ''}>${q.order_inv ? 'Order ' + esc(q.order_inv) : 'Convert to order / invoice'}</button><button class="btn" id="dup">Duplicate</button><button class="btn danger" id="del">Delete</button>` : ''}</div>`;
 
   const tbody = $('#rows', el);
   const modelOpts = (sel) => `<option value="">—</option>` + S.models.map((m) => `<option value="${m.id}" ${Number(sel) === m.id ? 'selected' : ''}>${esc(m.name)} (${esc(m.series || '')})</option>`).join('');
@@ -109,6 +113,14 @@ async function editor(el, id) {
   };
   const rowBtns = (i) => `<button class="btn sm" data-a="up" title="Move up">↑</button><button class="btn sm" data-a="dup" title="Duplicate">⧉</button><button class="btn sm danger" data-a="rm" title="Remove">×</button>`;
 
+  const limit = Number(S.settings.approvals?.discount_pct ?? 10); const isAdmin = S.me.role === 'admin';
+  const aprBanner = (state) => {
+    const a = state.approval; const box = $('#apr', el); if (!box) return;
+    box.innerHTML = a === 'pending' ? `<div class="card" style="margin-bottom:12px;border-color:var(--warn)">⏳ <b>Waiting for the admin.</b> The discount is above ${limit}%. The quotation cannot be sent, accepted or turned into an order until it is approved. <a href="#/approvals">Approvals</a></div>`
+      : a === 'rejected' ? `<div class="card" style="margin-bottom:12px;border-color:var(--bad)">✖ <b>The admin did not approve this discount.</b> ${esc(state.approval_note || '')} Lower the discount and save again.</div>`
+      : a === 'approved' && limit ? `<div class="card" style="margin-bottom:12px;border-color:var(--ok)">✔ Discount approved. ${esc(state.approval_note || '')}</div>` : '';
+  };
+  aprBanner(q);
   function update() {
     const T = quoteTotals(q);
     let costTotal = 0;
@@ -127,7 +139,8 @@ async function editor(el, id) {
       <div class="row"><span>Amount</span><b>${money(T.amount)}</b></div>
       <div class="row"><span>VAT <input id="vat_rate" type="number" step="any" value="${q.vat_rate ?? 0}" style="width:60px"> %</span><b>${money(T.vat)}</b></div>
       <div class="row"><span>VAT adjustment <small class="muted">(enter VAT to waive)</small></span><input id="vat_waived" type="number" step="any" value="${q.vat_waived || 0}"></div>
-      <div class="row grand"><span>Grand amount (BD)</span><span>${money(T.grand)}</span></div>`;
+      <div class="row grand"><span>Grand amount (BD)</span><span>${money(T.grand)}</span></div>
+      <p class="neg" id="dwarn" style="margin:6px 0 0;text-align:right" ${limit > 0 && T.discPct > limit + 1e-9 && !isAdmin ? '' : 'hidden'}>Discount above ${limit}% — the admin will have to approve it.</p>`;
     $('#words', el).textContent = T.grand > 0 ? amountInWords(T.grand) : '';
     $('#costline', el).textContent = costTotal ? `Estimated material cost ≈ BD ${money(costTotal, 2)} → margin ≈ BD ${money(T.amount - costTotal, 2)} (before VAT)` : '';
     for (const [k] of [['discount'], ['vat_rate'], ['vat_waived']]) $('#' + k, el).oninput = (e) => { q[k] = num(e.target.value); update2(); };
@@ -173,6 +186,7 @@ async function editor(el, id) {
     rows[2].lastElementChild.textContent = money(T.amount);
     rows[3].lastElementChild.textContent = money(T.vat);
     $('.grand span:last-child', el).textContent = money(T.grand);
+    $('#dwarn', el).hidden = !(limit > 0 && T.discPct > limit + 1e-9 && !isAdmin);
     $('#words', el).textContent = T.grand > 0 ? amountInWords(T.grand) : '';
   };
 
@@ -209,7 +223,7 @@ async function editor(el, id) {
   $('#addNote', el).onclick = () => { q.items.push({ kind: 'note', desc: '', qty: 0, price: 0 }); drawRows(); };
 
   const collect = () => ({
-    number: $('#number', el).value.trim(), date: $('#date', el).value, client: $('#client', el).value.trim(), mobile: $('#mobile', el).value.trim(), site: $('#site', el).value.trim(),
+    client_vat: $('#client_vat', el).value.trim(), number: $('#number', el).value.trim(), date: $('#date', el).value, client: $('#client', el).value.trim(), mobile: $('#mobile', el).value.trim(), site: $('#site', el).value.trim(),
     title: $('#title', el).value.trim(), colour: $('#colour', el).value, status: $('#status', el).value, notes: $('#notes', el).value, prepared_by: $('#prepared_by', el).value.trim(),
     items: q.items.filter((it) => it.kind === 'note' ? it.desc.trim() : (it.desc.trim() || it.price)), discount: q.discount || 0, vat_rate: q.vat_rate ?? 0, vat_waived: q.vat_waived || 0,
   });
@@ -217,12 +231,16 @@ async function editor(el, id) {
     const data = collect();
     if (!data.client) { toast('Enter the client name', 'err'); return null; }
     const saved = id ? await api.put(`t/quotes/${id}`, data) : await api.post('t/quotes', data);
-    await refresh(); toast(`Saved ${saved.number}`); return saved;
+    await refresh();
+    if (saved.approval === 'pending') { toast(`Saved ${saved.number} — the discount is waiting for the admin`, 'err'); $('#status', el).value = saved.status; }
+    else toast(`Saved ${saved.number}`);
+    aprBanner(saved); $('#toOrder', el)?.toggleAttribute('disabled', !!q.order_inv || saved.approval === 'pending' || saved.approval === 'rejected'); q.approval = saved.approval; q.approval_note = saved.approval_note; return saved;
   };
   $('#save', el).onclick = guard(async () => { const s = await save(); if (s && !id) location.hash = `#/quotes/${s.id}`; });
   if (id) {
     $('#toOrder', el).onclick = guard(async () => {
-      if (!(await save())) return;
+      const sv = await save(); if (!sv) return;
+      if (sv.approval === 'pending' || sv.approval === 'rejected') return toast('The discount must be approved by the admin first', 'err');
       if (!await confirmBox(`Create an order/invoice from ${q.number} for BD ${money(quoteTotals(collect()).grand)}?`, 'Create order', 'primary')) return;
       const o = await api.post(`quotes/${id}/to-order`, {}); await refresh(); toast(`Created ${o.inv}`); location.hash = '#/orders';
       const fresh = await api.get(`t/quotes/${id}`);
@@ -244,14 +262,18 @@ async function printQuote(el, id) {
     n++;
     return `<tr><td>${n}</td><td class="n">${it.w ? fq(it.w) : ''}${it.w && it.h ? ' × ' + fq(it.h) : ''}</td><td>${esc(it.desc)}${it.note ? `<div class="note">${esc(it.note).replace(/\n/g, '<br>')}</div>` : ''}</td><td class="n">${fq(it.qty)}</td><td class="n">${money(it.price, 2)}</td><td class="n">${money(num(it.qty) * num(it.price), 2)}</td></tr>`;
   }).join('');
-  const terms = (S.settings.terms || []).map((t) => `<div>${esc(t)}</div>`).join('');
-  const html = `${docHeader('QUOTATION')}
-    <div class="meta"><div><b>QUOTE:</b> ${esc(q.number)}</div><div><b>Mob:</b> ${esc(q.mobile)}</div><div><b>DATE:</b> ${dmy(q.date)}</div><div><b>W/Site:</b> ${esc(q.site)}</div><div style="grid-column:1/-1"><b>Client:</b> ${esc(q.client)}</div></div>
+  // kitchens on this quotation come with their drawings
+  const kids = [...new Set((q.items || []).map((i) => i.kitchen_id).filter(Boolean))];
+  const kitchens = (await Promise.all(kids.map((k) => api.get(`t/kitchens/${k}`).catch(() => null)))).filter(Boolean);
+  const drawings = kitchens.map((k) => { const spec = k.spec || {}; return `<div style="break-before:page"><h3>${L('kitchen', 'Kitchen design')}: ${esc(k.name)}</h3><div class="ar-title" style="margin:0 0 6px">${AR.design}</div><div style="color:#111">${elevationSVG(spec, { maxW: 700 })}</div><div style="color:#111;margin-top:8px">${planSVG(spec, kitchenModel(spec), { maxW: 700 })}</div></div>`; }).join('');
+  const html = `${docHeader('QUOTATION', AR.quotation)}
+    ${q.approval === 'pending' ? '<div class="stamp">DRAFT — DISCOUNT WAITING FOR APPROVAL</div>' : ''}
+    <div class="meta"><div><b>${L('quote', 'QUOTE')}:</b> ${esc(q.number)}</div><div><b>${L('mobile', 'Mob')}:</b> ${esc(q.mobile)}</div><div><b>${L('date', 'DATE')}:</b> ${dmy(q.date)}</div><div><b>${L('site', 'W/Site')}:</b> ${esc(q.site)}</div><div style="grid-column:1/-1"><b>${L('client', 'Client')}:</b> ${esc(q.client)}${q.client_vat ? ` &nbsp; <b>${L('vatNo', 'VAT No.')}:</b> ${esc(q.client_vat)}` : ''}</div></div>
     ${q.title ? `<div class="banner">${esc(q.title)}</div>` : ''}
-    <table class="items-print"><thead><tr><th>#</th><th class="n">Size (W × H cm)</th><th>Description</th><th class="n">Qty</th><th class="n">Unit</th><th class="n">Amount</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="tot"><div><span>Total</span><span>${money(T.subtotal, 2)}</span></div>${T.discount ? `<div><span>Disc ${T.discPct.toFixed(2)}%</span><span>- ${money(T.discount, 2)}</span></div><div><span>Amount</span><span>${money(T.amount, 2)}</span></div>` : ''}${q.vat_rate ? `<div><span>VAT ${fq(q.vat_rate)}%</span><span>${money(T.vat, 2)}</span></div>` : ''}${T.waived ? `<div><span>VAT adjustment</span><span>- ${money(T.waived, 2)}</span></div>` : ''}<div class="g"><span>Grand Amount BD</span><span>${money(T.grand, 2)}</span></div></div>
-    <p><b>Amount in words:</b> ${esc(amountInWords(T.grand))}</p>
-    <div class="sign"><div>Prepared ${esc(q.prepared_by || '')}</div><div>Cust. Sign</div></div>
-    <div class="terms">${terms}</div>`;
+    <table class="items-print"><thead><tr><th>#</th><th class="n">${L('size', 'Size (W × H cm)')}</th><th>${L('description', 'Description')}</th><th class="n">${L('qty', 'Qty')}</th><th class="n">${L('unit', 'Unit')}</th><th class="n">${L('amount', 'Amount')}</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="tot"><div><span>${L('total', 'Total')}</span><span>${money(T.subtotal, 2)}</span></div>${T.discount ? `<div><span>${L('disc', 'Disc')} ${T.discPct.toFixed(2)}%</span><span>- ${money(T.discount, 2)}</span></div><div><span>${L('amount', 'Amount')}</span><span>${money(T.amount, 2)}</span></div>` : ''}${q.vat_rate ? `<div><span>${L('vat', 'VAT')} ${fq(q.vat_rate)}%</span><span>${money(T.vat, 2)}</span></div>` : ''}${T.waived ? `<div><span>${L('vatAdj', 'VAT adjustment')}</span><span>- ${money(T.waived, 2)}</span></div>` : ''}<div class="g"><span>${L('grand', 'Grand Amount BD')}</span><span>${money(T.grand, 2)}</span></div></div>
+    ${wordsBlock(T.grand)}
+    <div class="sign"><div>${L('prepared', 'Prepared')} ${esc(q.prepared_by || '')}</div><div>${L('custSign', 'Cust. Sign')}</div></div>
+    ${termsBlock()}${drawings}`;
   printView(el, { back: `#/quotes/${id}`, html, extraButtons: `<a class="btn" href="#/cutting/${id}">Cutting list</a>` });
 }

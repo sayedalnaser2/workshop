@@ -1,7 +1,7 @@
 import { S, refresh } from '../app.js';
 import { api, $, esc, money, dmy, today, dataTable, editRow, confirmBox, toast, guard, datalist, num, wireRef, requireRef, REF_LABEL } from '../ui.js';
 import { amountInWords } from '../calc.js';
-import { printView, docHeader } from '../doc.js';
+import { printView, docHeader, L, wordsBlock, AR } from '../doc.js';
 
 export async function render(el, [a, b, c]) {
   if (a === 'new') return form(el, b ? Number(b) : null);
@@ -58,15 +58,15 @@ async function print(el, id) {
   const o = ledger.find((x) => x.inv === r.order_inv);
   const receipts = (await api.get('t/receipts')).filter((x) => x.order_inv === r.order_inv && (x.date < r.date || (x.date === r.date && x.id <= r.id)));
   const paidBefore = receipts.filter((x) => x.id !== r.id).reduce((s, x) => s + x.amount, 0);
-  const html = `${docHeader('RECEIPT')}
-    <div class="meta"><div><b>Receipt:</b> ${esc(r.no)}</div><div><b>DATE:</b> ${dmy(r.date)}</div><div><b>Order:</b> ${esc(r.order_inv || '')}</div><div><b>Paid by:</b> ${esc(r.method || '')}${r.ref ? ` — ${esc(REF_LABEL[r.method] || 'Ref')} <b>${esc(r.ref)}</b>` : ''}</div><div style="grid-column:1/-1"><b>Customer:</b> ${esc(r.client || o?.client || '')}</div></div>
-    <table><thead><tr><th>Date</th><th>Order</th><th>Customer</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th></tr></thead><tbody>
+  const html = `${docHeader('RECEIPT', AR.receipt)}
+    <div class="meta"><div><b>${L('receiptNo', 'Receipt')}:</b> ${esc(r.no)}</div><div><b>${L('date', 'DATE')}:</b> ${dmy(r.date)}</div><div><b>${L('order', 'Order')}:</b> ${esc(r.order_inv || '')}</div><div><b>${L('paidBy', 'Paid by')}:</b> ${esc(r.method || '')}${r.ref ? ` — ${esc(REF_LABEL[r.method] || 'Ref')} <b>${esc(r.ref)}</b>` : ''}</div><div style="grid-column:1/-1"><b>${L('customer', 'Customer')}:</b> ${esc(r.client || o?.client || '')}</div></div>
+    <table><thead><tr><th>${L('date', 'Date')}</th><th>${L('order', 'Order')}</th><th>${L('customer', 'Customer')}</th><th class="n">${L('debit', 'Debit')}</th><th class="n">${L('credit', 'Credit')}</th><th class="n">${L('balance', 'Balance')}</th></tr></thead><tbody>
       ${o ? `<tr><td>${dmy(o.date)}</td><td>${esc(o.inv)}</td><td>${esc(o.client)}</td><td class="n">${money(o.amount, 2)}</td><td></td><td></td></tr>` : ''}
-      ${paidBefore ? `<tr><td></td><td colspan="2">Previous payments</td><td></td><td class="n">${money(paidBefore, 2)}</td><td></td></tr>` : ''}
-      <tr><td>${dmy(r.date)}</td><td colspan="2"><b>This receipt ${esc(r.no)}</b></td><td></td><td class="n"><b>${money(r.amount, 2)}</b></td><td class="n"><b>${o ? money(o.amount - paidBefore - r.amount, 2) : ''}</b></td></tr></tbody></table>
-    <p style="margin-top:14px"><b>Received the sum of:</b> ${esc(amountInWords(r.amount))}</p>
-    ${r.note ? `<p><b>Note:</b> ${esc(r.note)}</p>` : ''}
-    <div class="sign"><div>Prepared</div><div>Customer</div></div>
-    <div class="terms"><b>Note:</b>${(S.settings.receipt_notes || []).map((t) => `<div>${esc(t)}</div>`).join('')}</div>`;
+      ${paidBefore ? `<tr><td></td><td colspan="2">${L('previous', 'Previous payments')}</td><td></td><td class="n">${money(paidBefore, 2)}</td><td></td></tr>` : ''}
+      <tr><td>${dmy(r.date)}</td><td colspan="2"><b>${L('thisReceipt', 'This receipt')} ${esc(r.no)}</b></td><td></td><td class="n"><b>${money(r.amount, 2)}</b></td><td class="n"><b>${o ? money(o.amount - paidBefore - r.amount, 2) : ''}</b></td></tr></tbody></table>
+    ${wordsBlock(r.amount)}
+    ${r.note ? `<p><b>${L('note', 'Note')}:</b> ${esc(r.note)}</p>` : ''}
+    <div class="sign"><div>${L('prepared', 'Prepared')}</div><div>${L('customer', 'Customer')}</div></div>
+    <div class="terms"><b>${L('note', 'Note')}:</b>${(S.settings.receipt_notes || []).map((t) => `<div>${esc(t)}</div>`).join('')}</div>`;
   printView(el, { back: '#/receipts', html });
 }

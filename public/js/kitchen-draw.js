@@ -18,7 +18,7 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
     const ext = run.cabinets.map((c) => { const t = CAB_TYPES[c.type] || CAB_TYPES.base; const f = floorOf(t); return [t.counter || t.gap ? (t.gap ? 0 : 0) : f, f + (+c.h || 0) + (t.counter ? ct : 0)]; });
     const bottom = Math.min(...ext.map((e) => e[0])); const top = Math.max(...ext.map((e) => e[1]));
     const rowH = (top - bottom) * k + 64; const base = y0 + 20 + (top - bottom) * k; // y of the lowest drawn level
-    out += `<text x="${padL}" y="${y0 + 12}" font-size="12" font-weight="700" fill="currentColor">${esc(run.name || 'Run')}${bottom > 0 ? ` <tspan font-weight="400" opacity=".7">(hung ${bottom} cm above the floor)</tspan>` : ''}</text>`;
+    out += `<text x="${padL}" y="${y0 + 12}" font-size="12" font-weight="700" fill="currentColor">${esc(run.name || 'Run')}${run.island ? ' <tspan font-weight="400" opacity=".7">(island — free-standing)</tspan>' : ''}${bottom > 0 ? ` <tspan font-weight="400" opacity=".7">(hung ${bottom} cm above the floor)</tspan>` : ''}</text>`;
     out += `<line x1="${padL - 8}" y1="${base}" x2="${padL + widest * k + 8}" y2="${base}" stroke="${INK}" stroke-width="1.2" ${bottom > 0 ? 'stroke-opacity=".25"' : ''} stroke-dasharray="5 4"/>`;
     let x = padL;
     for (const c of run.cabinets) {
@@ -54,8 +54,9 @@ export function planSVG(spec, model, { maxW = 760 } = {}) {
   const c = model.counter; const widest = Math.max(...runs.map((r) => r.cabinets.reduce((a, x) => a + (+x.w || 0), 0)), 100);
   const k = Math.min(2.2, (maxW - 50) / widest); const padL = 24; let y0 = 0; let out = '';
   runs.forEach((run, ri) => {
-    const depth = Math.max(...run.cabinets.map((x) => +x.d || 0), 60) + (+c.front || 0); const rowH = depth * k + 40; const yb = y0 + 22;
-    out += `<text x="${padL}" y="${y0 + 12}" font-size="12" font-weight="700" fill="currentColor">${esc(run.name || 'Run')}</text>`;
+    const over = run.island ? (+run.overhang || 0) : 0;
+    const depth = Math.max(...run.cabinets.map((x) => +x.d || 0), 60) + (+c.front || 0); const rowH = (depth + over) * k + 40; const yb = y0 + 22 + over * k;
+    out += `<text x="${padL}" y="${y0 + 12}" font-size="12" font-weight="700" fill="currentColor">${esc(run.name || 'Run')}${run.island ? ' (island)' : ''}</text>`;
     let x = padL;
     for (const cab of run.cabinets) {
       const t = CAB_TYPES[cab.type] || CAB_TYPES.base; const w = (+cab.w || 0) * k; const d = (+cab.d || 0) * k;
@@ -69,7 +70,7 @@ export function planSVG(spec, model, { maxW = 760 } = {}) {
     let ci = 0; const runCabs = run.cabinets;
     for (const p of tops) { // find first counter cabinet that begins this piece
       while (ci < runCabs.length && !(CAB_TYPES[runCabs[ci].type] || {}).counter) ci++;
-      const startX = padL + starts[ci] * k; out += `<rect x="${startX - (+c.side || 0) * k}" y="${yb - 0}" width="${p.len * k}" height="${p.depth * k}" fill="${TOP}" fill-opacity=".32" stroke="${TOP}" stroke-width="1.6"/>`;
+      const startX = padL + starts[ci] * k;  out += `<rect x="${startX - (+c.side || 0) * k}" y="${yb - (p.over || 0) * k}" width="${p.len * k}" height="${p.depth * k}" fill="${TOP}" fill-opacity=".32" stroke="${TOP}" stroke-width="1.6"/>`;
       let cum = 0; while (ci < runCabs.length && (CAB_TYPES[runCabs[ci].type] || {}).counter && cum < p.len - 2 * (+c.side || 0) - 0.01) { const cab = runCabs[ci]; const t = CAB_TYPES[cab.type]; const w = (+cab.w || 0) * k; const bx = padL + starts[ci] * k;
         if (t.sink) out += `<rect x="${bx + w * .12}" y="${yb + (+cab.d || 0) * k * .2}" width="${w * .76}" height="${(+cab.d || 0) * k * .55}" rx="5" fill="#fff" stroke="${INK}" stroke-width="1.2"/><text x="${bx + w / 2}" y="${yb + (+cab.d || 0) * k * .5}" font-size="9" text-anchor="middle" fill="${INK}">sink</text>`;
         if (t.hob) { const r = Math.min(w, (+cab.d || 0) * k) * .12; for (const [dx, dy] of [[.3, .3], [.7, .3], [.3, .65], [.7, .65]]) out += `<circle cx="${bx + w * dx}" cy="${yb + (+cab.d || 0) * k * dy}" r="${r}" fill="#fff" stroke="${INK}"/>`; }

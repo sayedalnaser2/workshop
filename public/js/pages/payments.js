@@ -1,7 +1,7 @@
 import { S, refresh } from '../app.js';
 import { api, $, $$, esc, money, dmy, today, num, dataTable, editRow, confirmBox, toast, guard, datalist, badge, formHTML, readForm, REF_LABEL } from '../ui.js';
 import { amountInWords } from '../calc.js';
-import { printView, docHeader } from '../doc.js';
+import { printView, docHeader, L, wordsBlock, AR } from '../doc.js';
 
 const CATS = ['', 'Salary', 'Rent', 'Workshop expense', 'Supplier payment', 'Other'];
 
@@ -66,9 +66,10 @@ async function form(el, pre) {
 async function print(el, id) {
   const p = await api.get(`t/payments/${id}`);
   const lines = p.lines?.length ? p.lines : [{ text: p.category || 'Payment', amount: p.amount }];
-  const html = `${docHeader('PAYMENT VOUCHER')}
-    <div class="meta"><div><b>DATE:</b> ${dmy(p.date)}</div><div><b>VOUCHER NO:</b> ${esc(p.no)}</div><div><b>PAID BY:</b> ${esc(p.method || '')}${p.ref ? ` — ${esc(REF_LABEL[p.method] || 'Ref')} <b>${esc(p.ref)}</b>` : ''}</div><div style="grid-column:1/-1"><b>PAID TO MR / MISS:</b> ${esc(p.paid_to)}</div><div style="grid-column:1/-1"><b>THE SUM OF B.D:</b> ${esc(amountInWords(p.amount))}</div></div>
-    <table><thead><tr><th>PARTICULARS</th><th class="n">DEBIT (BD)</th></tr></thead><tbody>${lines.map((l) => `<tr><td>${esc(l.text)}</td><td class="n">${money(l.amount, 3)}</td></tr>`).join('')}<tr><td><b>TOTAL</b></td><td class="n"><b>${money(p.amount, 3)}</b></td></tr></tbody></table>
-    <div class="sign" style="margin-top:60px"><div>PREPARED BY</div><div>APPROVED BY</div><div>RECEIVED BY</div></div>`;
+  const html = `${docHeader('PAYMENT VOUCHER', AR.voucher)}
+    <div class="meta"><div><b>${L('date', 'DATE')}:</b> ${dmy(p.date)}</div><div><b>${L('no', 'VOUCHER NO')}:</b> ${esc(p.no)}</div><div><b>${L('paidBy', 'PAID BY')}:</b> ${esc(p.method || '')}${p.ref ? ` — ${esc(REF_LABEL[p.method] || 'Ref')} <b>${esc(p.ref)}</b>` : ''}</div><div style="grid-column:1/-1"><b>${L('paidTo', 'PAID TO MR / MISS')}:</b> ${esc(p.paid_to)}</div></div>
+    ${wordsBlock(p.amount)}
+    <table><thead><tr><th>${L('description', 'PARTICULARS')}</th><th class="n">${L('debit', 'DEBIT (BD)')}</th></tr></thead><tbody>${lines.map((l) => `<tr><td>${esc(l.text)}</td><td class="n">${money(l.amount, 3)}</td></tr>`).join('')}<tr><td><b>${L('total', 'TOTAL')}</b></td><td class="n"><b>${money(p.amount, 3)}</b></td></tr></tbody></table>
+    <div class="sign" style="margin-top:60px"><div>${L('prepared', 'PREPARED BY')}</div><div>APPROVED BY <span class="ar">اعتمده</span></div><div>${L('received', 'RECEIVED BY')}</div></div>`;
   printView(el, { back: '#/payments', html });
 }
