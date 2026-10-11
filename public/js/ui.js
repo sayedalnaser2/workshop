@@ -130,6 +130,7 @@ export function dataTable(el, { cols, rows, search = [], page = 100, onRow, acti
     $('.count', el).textContent = `${list.length} ${list.length === 1 ? 'row' : 'rows'}`;
     pager.innerHTML = pages > 1 ? `<button class="btn sm" data-p="-1" ${pg === 0 ? 'disabled' : ''}>‹ Prev</button><span>Page ${pg + 1} of ${pages}</span><button class="btn sm" data-p="1" ${pg >= pages - 1 ? 'disabled' : ''}>Next ›</button>` : '';
     body.onclick = (e) => {
+      if (e.target.closest('select,input')) return;
       const tr = e.target.closest('tr[data-i]'); if (!tr) return;
       const row = slice[Number(tr.dataset.i)];
       const btn = e.target.closest('[data-act]');

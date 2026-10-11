@@ -30,7 +30,7 @@ export const SCHEMA = {
   cash_entries: { cols: { date: 'TEXT', account: 'TEXT', direction: 'TEXT', amount: 'REAL', category: 'TEXT', party: 'TEXT', note: 'TEXT' }, order: 'date DESC, id DESC' },
   employee_events: { cols: { employee_id: 'INTEGER', date: 'TEXT', type: 'TEXT', amount: 'REAL', note: 'TEXT' }, order: 'date DESC, id DESC' },
   attendance: { cols: { employee_id: 'INTEGER', date: 'TEXT', status: 'TEXT', hours: 'REAL', site: 'TEXT', note: 'TEXT' }, order: 'date' },
-  tasks: { cols: { order_inv: 'TEXT', quote_no: 'TEXT', title: 'TEXT', description: 'TEXT', stage: 'TEXT', assignee_id: 'INTEGER', status: 'TEXT', progress: 'REAL', estimate_min: 'REAL', due: 'TEXT', priority: 'TEXT', created_by: 'INTEGER', started_at: 'TEXT', done_at: 'TEXT', note: 'TEXT' }, order: 'id DESC' },
+  tasks: { cols: { order_inv: 'TEXT', quote_no: 'TEXT', title: 'TEXT', description: 'TEXT', stage: 'TEXT', assignee_id: 'INTEGER', team: 'JSON', status: 'TEXT', progress: 'REAL', estimate_min: 'REAL', due: 'TEXT', priority: 'TEXT', created_by: 'INTEGER', started_at: 'TEXT', done_at: 'TEXT', note: 'TEXT' }, order: 'id DESC' },
   task_logs: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', ts: 'TEXT', kind: 'TEXT', text: 'TEXT', progress: 'REAL', minutes: 'REAL' }, order: 'ts DESC' },
   task_sessions: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', started: 'TEXT', ended: 'TEXT', kind: 'TEXT' }, order: 'started DESC' },
   employee_docs: { cols: { employee_id: 'INTEGER', type: 'TEXT', number: 'TEXT', expiry: 'TEXT', file_name: 'TEXT', file_path: 'TEXT', note: 'TEXT' }, order: 'expiry' },

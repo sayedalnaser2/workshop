@@ -25,7 +25,8 @@ export async function openTaskForm({ task = null, order_inv = '', onSaved }) {
   ];
   const v = task ? { ...task, est: durText(task.estimate_min), assignee_id: task.assignee_id ?? '' } : { stage: STAGES()[0], priority: 'normal', order_inv, assignee_id: '' };
   const w = document.createElement('div');
-  w.innerHTML = datalist('dl-ord', orders.filter((o) => !o.done).map((o) => o.inv)) + formHTML(fields, v) + '<p class="muted" id="hint" style="margin:8px 0 0"></p>';
+  const team0 = new Set((task?.team || []).map(Number));
+  w.innerHTML = datalist('dl-ord', orders.filter((o) => !o.done).map((o) => o.inv)) + formHTML(fields, v) + `<div class="field full" style="margin-top:12px"><span>Also working on it (team) — they see it on their own list and their time adds up on this task</span><div id="team" style="display:flex;gap:6px 14px;flex-wrap:wrap">${staff.map((u) => `<label style="display:flex;gap:5px;align-items:center"><input type="checkbox" value="${u.id}" ${team0.has(u.id) ? 'checked' : ''} style="width:auto">${esc(u.name)}</label>`).join('')}</div></div><p class="muted" id="hint" style="margin:8px 0 0"></p>`;
   const hint = () => { const a = avgs[$('[name=stage]', w).value]; $('#hint', w).textContent = a ? `Past ${$('[name=stage]', w).value} tasks took ${fmtMin(a.avg)} on average (${a.n} finished).` : ''; };
   $('[name=stage]', w).onchange = hint; hint();
   modal({
@@ -33,7 +34,7 @@ export async function openTaskForm({ task = null, order_inv = '', onSaved }) {
       label: task ? 'Save' : 'Create task', kind: 'primary', onClick: async () => {
         const d = readForm(w, fields); if (!d.title) { toast('Give the task a name', 'err'); return false; }
         const est = parseDur(d.est); if (d.est && est == null) { toast('Estimate: use 2:30, 2h 30m or minutes', 'err'); return false; }
-        const body = { title: d.title, order_inv: d.order_inv, stage: d.stage, assignee_id: d.assignee_id ? Number(d.assignee_id) : null, estimate_min: est, due: d.due, priority: d.priority, description: d.description };
+        const body = { title: d.title, order_inv: d.order_inv, stage: d.stage, assignee_id: d.assignee_id ? Number(d.assignee_id) : null, team: [...w.querySelectorAll('#team input:checked')].map((x) => Number(x.value)).filter((id) => id !== Number(d.assignee_id)), estimate_min: est, due: d.due, priority: d.priority, description: d.description };
         const saved = task ? await api.put(`t/tasks/${task.id}`, body) : await api.post('t/tasks', body);
         toast(task ? 'Task saved' : 'Task created'); onSaved?.(saved);
       },

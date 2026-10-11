@@ -139,7 +139,7 @@ async function jobSheet(el, id) {
     <div class="card" data-id="${t.id}" style="margin-bottom:14px">
       <div class="cols2" style="gap:18px;align-items:start"><div>
         <div style="font-size:12px" class="muted">Customer / site</div><div style="font-size:16px"><b>${esc(t.client || '—')}</b>${t.site ? ` — ${esc(t.site)}` : ''}</div>
-        <div class="muted" style="font-size:13px;margin-top:2px">${[t.order_inv && 'Order ' + t.order_inv, q && 'Quotation ' + q.number, t.due && 'Due ' + dmy(t.due)].filter(Boolean).map(esc).join(' · ')}</div>
+        <div class="muted" style="font-size:13px;margin-top:2px">${[t.order_inv && 'Order ' + t.order_inv, (t.team_names?.length || t.assignee_name) && 'Team: ' + [t.assignee_name, ...(t.team_names || [])].filter(Boolean).join(', '), q && 'Quotation ' + q.number, t.due && 'Due ' + dmy(t.due)].filter(Boolean).map(esc).join(' · ')}</div>
         ${t.description ? `<div style="margin-top:10px;padding:8px 10px;border-left:4px solid var(--brand-2);background:var(--soft);border-radius:4px"><b>Instructions</b><div style="white-space:pre-line">${esc(t.description)}</div></div>` : ''}
         ${q?.title ? `<div class="muted" style="margin-top:8px;font-size:13px">${esc(q.title)}</div>` : ''}
         ${!q ? '<p class="muted" style="margin-top:10px">This task is not linked to a quotation, so there is no item list. Follow the instructions above.</p>' : ''}</div>
