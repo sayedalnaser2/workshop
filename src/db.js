@@ -39,6 +39,7 @@ for (const [t, s] of Object.entries(SCHEMA)) {
   ddl.push(`CREATE TABLE IF NOT EXISTS ${t} (id INTEGER PRIMARY KEY AUTOINCREMENT, ${cols}, created_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
 }
 ddl.push('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);');
+ddl.push('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE COLLATE NOCASE, name TEXT, role TEXT, salt TEXT, hash TEXT, active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);');
 ddl.push('CREATE INDEX IF NOT EXISTS ix_receipts_order ON receipts(order_inv);');
 ddl.push('CREATE INDEX IF NOT EXISTS ix_purchases_order ON purchases(order_inv);');
 ddl.push('CREATE INDEX IF NOT EXISTS ix_orders_inv ON orders(inv);');

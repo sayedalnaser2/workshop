@@ -6,7 +6,8 @@ import os from 'node:os';
 import {
   db, SCHEMA, getSetting, setSetting, nextNumber, insertRow, updateRow, deleteRow, getRow, listRows, tx,
 } from './src/db.js';
-import { hasPassword, setPassword, checkPassword, makeToken, validToken, cookieOf } from './src/auth.js';
+import { needsSetup, authenticate, createUser, updateUser, deleteUser, listUsers, setOwnPassword, makeToken, userFromToken, cookieOf } from './src/auth.js';
+import { tableAccess } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
 import { seedLibrary } from './src/seed.js';
 import { exportWorkbook } from './src/exporter.js';
@@ -73,7 +74,24 @@ function summary() {
   };
 }
 
-const bootstrap = () => ({
+const forbid = () => Object.assign(new Error('You do not have permission to do that.'), { status: 403 });
+/** Workers see quantities and sizes, never prices, costs or money. */
+function redact(table, r) {
+  if (!r) return r;
+  switch (table) {
+    case 'profiles': return { ...r, price_bar: 0 };
+    case 'accessories': return { ...r, price: 0 };
+    case 'glass_types': return { ...r, price_m2: 0 };
+    case 'stock': return { ...r, unit_cost: 0 };
+    case 'quotes': return { ...r, discount: 0, vat_waived: 0, notes: '', items: (r.items || []).map((i) => ({ ...i, price: 0 })) };
+    default: return r;
+  }
+}
+const bootstrap = (role = 'admin') => role === 'worker' ? ({
+  settings: Object.fromEntries(['colours', 'bar_kerf', 'min_offcut', 'leftover_pct'].map((k) => [k, getSetting(k)]).concat([['company', { name: getSetting('company')?.name }]])),
+  price_items: [], profiles: listRows('profiles').map((r) => redact('profiles', r)), accessories: listRows('accessories').map((r) => redact('accessories', r)),
+  glass_types: listRows('glass_types').map((r) => redact('glass_types', r)), models: listRows('models'), employees: [], next: {},
+}) : ({
   settings: Object.fromEntries(db.prepare('SELECT key FROM settings').all().filter((r) => !['auth', 'session_secret'].includes(r.key)).map((r) => [r.key, getSetting(r.key)])),
   price_items: listRows('price_items'), profiles: listRows('profiles'), accessories: listRows('accessories'),
   glass_types: listRows('glass_types'), models: listRows('models'), employees: listRows('employees'),
@@ -96,41 +114,56 @@ async function api(req, res, url) {
   const m = req.method;
 
   // --- auth (no session needed)
-  if (p[0] === 'me') return send(res, 200, { needsSetup: !hasPassword(), loggedIn: validToken(cookieOf(req, 'ws')) });
+  if (p[0] === 'me') { const user = userFromToken(cookieOf(req, 'ws')); return send(res, 200, { needsSetup: needsSetup(), loggedIn: !!user, user }); }
   if (p[0] === 'login' && m === 'POST') {
-    const { password } = await readJson(req);
-    if (!hasPassword()) { if (!password || password.length < 6) return send(res, 400, { error: 'Choose a password with at least 6 characters.' }); setPassword(password); }
-    else if (!checkPassword(password)) { await new Promise((r) => setTimeout(r, 400)); return send(res, 401, { error: 'Wrong password.' }); }
-    return send(res, 200, { ok: true }, { 'Set-Cookie': `ws=${makeToken()}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${30 * 86400}` });
+    const { username, password, name } = await readJson(req);
+    let user;
+    if (needsSetup()) user = createUser({ username, name: name || username, role: 'admin', password }); // first run: this person becomes the admin
+    else { user = authenticate(username, password); if (!user) { await new Promise((r) => setTimeout(r, 400)); return send(res, 401, { error: 'Wrong username or password, or the account is switched off.' }); } }
+    return send(res, 200, { ok: true, user }, { 'Set-Cookie': `ws=${makeToken(user.id)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${30 * 86400}` });
   }
   if (p[0] === 'logout') return send(res, 200, { ok: true }, { 'Set-Cookie': 'ws=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
-  if (!validToken(cookieOf(req, 'ws'))) return send(res, 401, { error: 'Not signed in.' });
+  const user = userFromToken(cookieOf(req, 'ws'));
+  if (!user) return send(res, 401, { error: 'Not signed in.' });
+  const role = user.role; const isAA = role === 'admin' || role === 'account';
+  const need = (ok) => { if (!ok) throw forbid(); };
 
-  if (p[0] === 'bootstrap') return send(res, 200, bootstrap());
-  if (p[0] === 'summary') return send(res, 200, summary());
-  if (p[0] === 'ledger') return send(res, 200, ordersLedger());
+  if (p[0] === 'bootstrap') return send(res, 200, bootstrap(role));
+  if (p[0] === 'summary') { need(isAA); return send(res, 200, summary()); }
+  if (p[0] === 'ledger') { need(isAA); return send(res, 200, ordersLedger()); }
+
+  if (p[0] === 'users') {
+    need(role === 'admin');
+    const uid = p[1] ? Number(p[1]) : null;
+    if (!uid && m === 'GET') return send(res, 200, listUsers());
+    if (!uid && m === 'POST') return send(res, 201, createUser(await readJson(req)));
+    if (uid && m === 'PUT') return send(res, 200, updateUser(uid, await readJson(req), user.id));
+    if (uid && m === 'DELETE') { deleteUser(uid, user.id); return send(res, 200, { ok: true }); }
+  }
 
   if (p[0] === 'password' && m === 'POST') {
     const { current, password } = await readJson(req);
-    if (!checkPassword(current)) return send(res, 401, { error: 'Current password is wrong.' });
-    if (!password || password.length < 6) return send(res, 400, { error: 'New password must have at least 6 characters.' });
-    setPassword(password); return send(res, 200, { ok: true });
+    setOwnPassword(user.id, current, password); return send(res, 200, { ok: true });
   }
   if (p[0] === 'settings' && m === 'PUT') {
+    need(role === 'admin');
     const body = await readJson(req);
     for (const [k, v] of Object.entries(body)) if (!['auth', 'session_secret'].includes(k)) setSetting(k, v);
     return send(res, 200, bootstrap().settings);
   }
   if (p[0] === 'backup') {
+    need(role === 'admin');
     const out = { exported: new Date().toISOString(), settings: bootstrap().settings };
     for (const t of Object.keys(SCHEMA)) out[t] = listRows(t);
     return send(res, 200, out, { 'Content-Disposition': `attachment; filename="workshop-backup-${new Date().toISOString().slice(0, 10)}.json"` });
   }
   if (p[0] === 'export.xlsx') {
+    need(isAA);
     const buf = Buffer.from(await exportWorkbook());
     return send(res, 200, buf, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="TALENTS-export-${new Date().toISOString().slice(0, 10)}.xlsx"` });
   }
   if (p[0] === 'import' && m === 'POST') {
+    need(role === 'admin');
     const buf = await readBody(req, 60e6);
     const tmp = path.join(os.tmpdir(), `import-${Date.now()}.xlsm`);
     await writeFile(tmp, buf);
@@ -139,6 +172,7 @@ async function api(req, res, url) {
     finally { unlink(tmp).catch(() => {}); }
   }
   if (p[0] === 'assign-accounts' && m === 'POST') {
+    need(isAA);
     const { account } = await readJson(req);
     if (!['cash', 'bank'].includes(account)) return send(res, 400, { error: 'account must be cash or bank' });
     const a = db.prepare("UPDATE receipts SET account=? WHERE account IS NULL OR account=''").run(account).changes;
@@ -147,6 +181,7 @@ async function api(req, res, url) {
   }
   // employee documents: raw upload / download, stored under DATA_DIR/files
   if (p[0] === 'employee-docs' && p[2] === 'file') {
+    need(isAA);
     const id = Number(p[1]); const d = getRow('employee_docs', id);
     if (!d) return send(res, 404, { error: 'Not found' });
     if (m === 'POST') {
@@ -162,6 +197,7 @@ async function api(req, res, url) {
     return send(res, 200, buf, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${encodeURIComponent(d.file_name || 'file')}"` });
   }
   if (p[0] === 'quotes' && p[2] === 'to-order' && m === 'POST') {
+    need(isAA);
     const q = getRow('quotes', Number(p[1]));
     if (!q) return send(res, 404, { error: 'Quote not found' });
     if (q.order_inv) return send(res, 400, { error: `Already converted to ${q.order_inv}` });
@@ -177,19 +213,23 @@ async function api(req, res, url) {
   // --- generic CRUD
   if (p[0] === 't' && SCHEMA[p[1]]) {
     const t = p[1]; const id = p[2] ? Number(p[2]) : null;
-    if (!id && m === 'GET') return send(res, 200, listRows(t));
-    if (id && m === 'GET') { const r = getRow(t, id); return r ? send(res, 200, r) : send(res, 404, { error: 'Not found' }); }
+    const acc = tableAccess(role, t);
+    if (!acc || (m !== 'GET' && acc !== 'rw')) throw forbid();
+    const worker = role === 'worker';
+    if (!id && m === 'GET') return send(res, 200, worker ? listRows(t).map((r) => redact(t, r)) : listRows(t));
+    if (id && m === 'GET') { const r = getRow(t, id); return r ? send(res, 200, worker ? redact(t, r) : r) : send(res, 404, { error: 'Not found' }); }
     if (!id && m === 'POST') {
       const body = await readJson(req);
       const row = tx(() => {
         checkRef(t, body);
+        if (worker && t === 'stock') { delete body.unit_cost; if (body.kind === 'leftover' && body.profile_id) { const pr = getRow('profiles', Number(body.profile_id)); body.unit_cost = pr && pr.bar_length > 0 ? Math.round((pr.price_bar / pr.bar_length) * (body.length || 0) * ((getSetting('leftover_pct') ?? 60) / 100) * 1000) / 1000 : 0; } }
         const a = AUTO[t];
         if (a && !body[a[0]]) body[a[0]] = nextNumber(a[1], body.date, true);
         return insertRow(t, body);
       });
       return send(res, 201, row);
     }
-    if (id && m === 'PUT') { const cur = getRow(t, id); if (!cur) return send(res, 404, { error: 'Not found' }); const body = await readJson(req); checkRef(t, body, cur); return send(res, 200, updateRow(t, id, body)); }
+    if (id && m === 'PUT') { const cur = getRow(t, id); if (!cur) return send(res, 404, { error: 'Not found' }); const body = await readJson(req); checkRef(t, body, cur); if (worker) delete body.unit_cost; return send(res, 200, updateRow(t, id, body)); }
     if (id && m === 'DELETE') { deleteRow(t, id); return send(res, 200, { ok: true }); }
   }
   return send(res, 404, { error: 'Unknown endpoint' });

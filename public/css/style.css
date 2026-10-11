@@ -23,6 +23,10 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 #nav a { display: flex; gap: 10px; align-items: center; color: rgba(255, 255, 255, .82); padding: 8px 10px; border-radius: 8px; margin: 1px 0; }
 #nav a:hover { background: rgba(255, 255, 255, .1); color: #fff; }
 #nav a.on { background: rgba(255, 255, 255, .18); color: #fff; font-weight: 600; }
+.mebtn { display: flex; gap: 10px; align-items: center; width: 100%; margin-top: 14px; padding: 8px 10px; border: 0; border-top: 1px solid rgba(255, 255, 255, .15); background: none; color: #fff; cursor: pointer; text-align: left; font: inherit; border-radius: 0; }
+.mebtn:hover { background: rgba(255, 255, 255, .08); }
+.mebtn b, .mebtn small { display: block; line-height: 1.25; } .mebtn small { opacity: .65; font-size: 11px; }
+#meAvatar { width: 30px; height: 30px; border-radius: 50%; background: rgba(255, 255, 255, .2); display: grid; place-items: center; font-weight: 700; flex: none; }
 #nav .grp { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .55; padding: 14px 10px 4px; }
 .main-wrap { flex: 1; min-width: 0; }
 .topbar { display: none; align-items: center; gap: 10px; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; font-weight: 600; }

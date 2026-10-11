@@ -13,6 +13,8 @@
     <img src="/img/logo.png" alt="Talents" class="login-logo">
     <h2 id="loginTitle">Sign in</h2>
     <p id="loginHint" class="muted"></p>
+    <input type="text" id="loginName" placeholder="Your name" autocomplete="name" hidden>
+    <input type="text" id="loginUser" placeholder="Username" autocomplete="username" autocapitalize="none" required>
     <input type="password" id="loginPw" placeholder="Password" autocomplete="current-password" required>
     <button class="btn primary" type="submit">Continue</button>
     <p class="err" id="loginErr"></p>
@@ -22,6 +24,7 @@
   <aside id="side">
     <a class="brand" href="#/"><img src="/img/icon.png" alt=""><span>Workshop<br><small>Manager</small></span></a>
     <nav id="nav"></nav>
+    <button id="meBtn" class="mebtn" title="My account"><span id="meAvatar"></span><span><b id="meName"></b><small id="meRole"></small></span></button>
   </aside>
   <div class="main-wrap">
     <header class="topbar"><button id="menuBtn" class="icon" aria-label="Menu">☰</button><span id="pageTitle"></span></header>

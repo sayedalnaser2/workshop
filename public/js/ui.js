@@ -95,7 +95,8 @@ export function editRow({ table, title, fields, row = null, extra = '', defaults
           for (const f of fields) if (f.required && !wrap.querySelector(`[name="${f.key}"]`).value.trim()) { toast(`${f.label} is required`, 'err'); return false; }
           let data = readForm(wrap, fields);
           if (before) data = before(data, wrap) || data;
-          const saved = row ? await api.put(`t/${table}/${row.id}`, data) : await api.post(`t/${table}`, data);
+          const base = table === 'users' ? 'users' : `t/${table}`;
+          const saved = row ? await api.put(`${base}/${row.id}`, data) : await api.post(base, data);
           toast(row ? 'Saved' : 'Created');
           await onSaved?.(saved);
         },

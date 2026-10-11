@@ -11,7 +11,15 @@ export function barChart(data, la = 'Invoiced', lb = 'Received') {
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="${la} versus ${lb}">${grid}${bars}</svg><div class="legend"><span><i style="background:var(--brand-2)"></i>${la}</span><span><i style="background:var(--ok)"></i>${lb}</span></div>`;
 }
 
+async function workerHome(el) {
+  const stock = await api.get('t/stock');
+  const low = stock.filter((s) => s.kind === 'new' && s.qty > 0 && s.qty <= 2).length;
+  el.innerHTML = `<div class="ph"><h1>Hello ${esc(S.me.name)}</h1><span class="sub">${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</span></div>
+  <div class="cards"><a class="card stat" href="#/cutting" style="color:inherit"><div class="k">Cutting list</div><div class="v">✂ Open</div></a><a class="card stat" href="#/stock" style="color:inherit"><div class="k">Leftovers in stock</div><div class="v">${Math.round(stock.filter((s) => s.kind === 'leftover').reduce((a, s) => a + Math.max(0, s.qty || 0), 0))}</div></a><a class="card stat" href="#/stock" style="color:inherit"><div class="k">New stock running low (2 or fewer)</div><div class="v ${low ? 'neg' : ''}">${low}</div></a><a class="card stat" href="#/models" style="color:inherit"><div class="k">Models</div><div class="v">${S.models.length}</div></a></div>`;
+}
+
 export async function render(el) {
+  if (S.me?.role === 'worker') return workerHome(el);
   const [s, quotes] = await Promise.all([api.get('summary'), api.get('t/quotes')]);
   const c = S.settings.company || {};
   el.innerHTML = `<div class="ph"><h1>${esc(c.name || 'Workshop')}</h1><span class="sub">${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span><span class="grow"></span><a class="btn primary" href="#/quotes/new">+ New quotation</a><a class="btn" href="#/receipts/new">+ Receipt</a><a class="btn" href="#/payments/new">+ Payment voucher</a></div>

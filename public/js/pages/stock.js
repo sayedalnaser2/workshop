@@ -1,6 +1,7 @@
 import { S, refresh } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, dataTable, editRow, confirmBox, toast, guard, badge, modal, datalist, formHTML, readForm } from '../ui.js';
 import { leftoverValue } from '../stock.js';
+import { canWrite } from '../perm.js';
 
 const COL = { white: '#f3f3f0', brown: '#6b4a2f', black: '#222', bronze: '#8c6a3d', silver: '#bfc5cc', wood: '#a5733b', grey: '#8a8f98', gold: '#c9a227', champagne: '#d9c7a1', 'dark grey': '#555a63', natural: '#d8dadd' };
 export const dot = (c) => (c ? `<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${COL[String(c).toLowerCase()] || 'var(--muted)'};border:1px solid var(--line);vertical-align:-1px;margin-right:5px"></span>${esc(c)}` : '<span class="muted">—</span>');
@@ -14,12 +15,13 @@ export async function render(el) {
     const sumv = (k) => rows.filter((r) => r.kind === k && r.qty > 0).reduce((s, r) => s + r.value, 0);
     const pcs = (k) => rows.filter((r) => r.kind === k).reduce((s, r) => s + Math.max(0, r.qty || 0), 0);
     el.innerHTML = `<div class="ph"><h1>Stock</h1><span class="sub">New stock (full bars, sheets, hardware) and leftovers (cut-offs you can reuse)</span><span class="grow"></span><button class="btn primary" id="new">+ ${tab === 'new' ? 'Add new stock' : 'Add leftover'}</button></div>
-      <div class="cards"><div class="card stat"><div class="k">New stock value</div><div class="v">${money(sumv('new'), 2)}</div></div><div class="card stat"><div class="k">Leftover pieces</div><div class="v">${fq(pcs('leftover'))}</div></div><div class="card stat"><div class="k">Leftover value</div><div class="v">${money(sumv('leftover'), 2)}</div></div><div class="card stat"><div class="k">Reserved leftovers</div><div class="v">${fq(rows.filter((r) => r.kind === 'leftover' && r.reserved_for).reduce((s, r) => s + r.qty, 0))}</div></div></div>
+      <div class="cards">${S.me?.role !== 'worker' ? `<div class="card stat"><div class="k">New stock value</div><div class="v">${money(sumv('new'), 2)}</div></div>` : ''}<div class="card stat"><div class="k">Leftover pieces</div><div class="v">${fq(pcs('leftover'))}</div></div>${S.me?.role !== 'worker' ? `<div class="card stat"><div class="k">Leftover value</div><div class="v">${money(sumv('leftover'), 2)}</div></div>` : ''}<div class="card stat"><div class="k">Reserved leftovers</div><div class="v">${fq(rows.filter((r) => r.kind === 'leftover' && r.reserved_for).reduce((s, r) => s + r.qty, 0))}</div></div></div>
       <div class="tbar"><div class="seg"><button data-t="new" class="${tab === 'new' ? 'on' : ''}">New stock</button><button data-t="leftover" class="${tab === 'leftover' ? 'on' : ''}">Leftovers</button></div></div><div id="t"></div>`;
     $$('.seg button', el).forEach((b) => (b.onclick = () => { tab = b.dataset.t; sessionStorage.setItem('stock-tab', tab); draw(); }));
     const open = (row) => form(row, tab, draw);
     $('#new', el).onclick = () => open(null);
     const sizeOf = (r) => (r.item_type === 'glass' ? `${fq(r.length)} × ${fq(r.width)} cm` : r.length ? `${fq(r.length)} cm` : '');
+    const money$ = canWrite(S.me?.role, 'price_items') || S.me?.role !== 'worker';
     const cols = [
       { key: 'label', label: 'Item', render: (r) => `<b>${esc(r.label)}</b>${r.code ? `<div class="muted" style="font-size:11px">${esc(r.code)}</div>` : ''}` },
       { key: 'item_type', label: 'Type', render: (r) => esc(TYPES.find((t) => t[0] === r.item_type)?.[1] || '') },
@@ -30,13 +32,14 @@ export async function render(el) {
       { key: 'value', label: 'Value', num: true, render: (r) => money(r.value, 2) },
       { key: 'location', label: 'Location' },
     ];
+    if (!money$) for (const k of ['unit_cost', 'value']) cols.splice(cols.findIndex((c) => c.key === k), 1);
     if (tab === 'leftover') cols.push({ key: 'reserved_for', label: 'Reserved', render: (r) => (r.reserved_for ? badge(r.reserved_for, 'warn') : '') }, { key: 'order_inv', label: 'From', render: (r) => esc(r.order_inv || '') });
     const t = $('#t', el);
     dataTable(t, {
       rows: mine, search: ['label', 'code', 'colour', 'location', 'order_inv', 'reserved_for'], page: 100, empty: tab === 'new' ? 'No new stock recorded yet.' : 'No leftovers recorded yet — they are saved automatically from the Cutting List.',
       cols, onRow: open, filters: [{ label: 'In stock', fn: (r) => r.qty > 0 }, { label: 'All' }, ...(tab === 'leftover' ? [{ label: 'Reserved', fn: (r) => r.reserved_for }] : [])],
       actions: () => '<button class="btn sm" data-act="use">Use</button> <button class="btn sm danger" data-act="del">Delete</button>',
-      foot: (l) => `<tr><td colspan="4">Total (${l.length})</td><td class="num">${fq(l.reduce((s, r) => s + r.qty, 0))}</td><td></td><td class="num">${money(l.filter((r) => r.qty > 0).reduce((s, r) => s + r.value, 0), 2)}</td><td colspan="3"></td></tr>`,
+      foot: (l) => `<tr><td colspan="4">Total (${l.length})</td><td class="num">${fq(l.reduce((s, r) => s + r.qty, 0))}</td>${money$ ? `<td></td><td class="num">${money(l.filter((r) => r.qty > 0).reduce((s, r) => s + r.value, 0), 2)}</td>` : ''}<td colspan="3"></td></tr>`,
     });
     t.addEventListener('act', guard(async (e) => {
       const { act, row } = e.detail;
@@ -79,6 +82,7 @@ function form(row, kind, done) {
   g('profile_id').onchange = () => { const p = S.profiles.find((x) => x.id === Number(g('profile_id').value)); if (p) { if (!isLeft) { g('length').value = p.bar_length; g('unit_cost').value = p.price_bar || 0; } g('unit').value = isLeft ? 'pcs' : 'bar'; } suggest(); };
   g('length').oninput = suggest;
   showHide();
+  if (S.me?.role === 'worker') g('unit_cost').closest('label').hidden = true;
   modal({
     title: row ? 'Edit stock line' : isLeft ? 'Add leftover' : 'Add new stock', body: w, wide: true, buttons: [{ label: 'Cancel' }, {
       label: 'Save', kind: 'primary', onClick: async () => {

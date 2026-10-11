@@ -1,5 +1,6 @@
 import { S, refresh } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, toast, guard, confirmBox } from '../ui.js';
+import { canWrite } from '../perm.js';
 import { computeModel, modelCost } from '../calc.js';
 import { drawModel, KINDS } from '../drawings.js';
 
@@ -7,7 +8,7 @@ export async function render(el, [id]) {
   if (id) return editor(el, id === 'new' ? null : Number(id));
   const groups = {};
   for (const m of S.models) (groups[m.category || 'Other'] ||= []).push(m);
-  el.innerHTML = `<div class="ph"><h1>Models</h1><span class="sub">Window &amp; door templates — a drawing plus the formulas that turn any W×H into cut lengths, glass sizes and accessories</span><span class="grow"></span><a class="btn primary" href="#/models/new">+ New model</a></div>` +
+  el.innerHTML = `<div class="ph"><h1>Models</h1><span class="sub">Window &amp; door templates — a drawing plus the formulas that turn any W×H into cut lengths, glass sizes and accessories</span><span class="grow"></span>${canWrite(S.me?.role, 'models') ? '<a class="btn primary" href="#/models/new">+ New model</a>' : ''}</div>` +
     (Object.keys(groups).length ? Object.entries(groups).map(([g, ms]) => `<h3 style="margin:18px 0 8px">${esc(g)}</h3><div class="mgrid">${ms.map((m) => `<a class="card mcard" href="#/models/${m.id}" style="color:inherit">${drawModel(m.kind, m.def_w, m.def_h, { dims: false })}<b>${esc(m.name)}</b><span class="muted">${esc(m.series || '')} · ${fq(m.def_w)} × ${fq(m.def_h)} cm</span></a>`).join('')}</div>`).join('') : '<div class="card muted">No models yet.</div>');
 }
 
@@ -68,6 +69,11 @@ async function editor(el, id) {
       <p class="muted" style="margin-top:8px">${cost.total ? `Material cost ≈ BD ${money(cost.total, 2)} (profiles ${money(cost.profiles, 2)} · glass ${money(cost.glass, 2)} · accessories ${money(cost.accessories, 2)})` : 'Enter prices in Profiles, Glass &amp; Accessories to see a material cost estimate.'}</p>`;
   };
   drawSpec(); preview();
+  const readOnly = !canWrite(S.me?.role, 'models');
+  if (readOnly) {
+    el.insertAdjacentHTML('afterbegin', '<div class="card" style="margin-bottom:12px;border-color:var(--warn)">View only — your account cannot change models.</div>');
+    $$('input,select,textarea,#save,#dup,#del,[data-add],[data-rm]', el).filter((x) => !['tw', 'th', 'tg'].includes(x.id)).forEach((x) => (x.disabled = true));
+  }
 
   const spec = $('#spec', el);
   spec.addEventListener('input', (e) => { const tr = e.target.closest('tr[data-i]'); if (!tr) return; m.spec[tr.closest('table').dataset.sec][Number(tr.dataset.i)][e.target.dataset.k] = e.target.value; preview(); });
@@ -76,6 +82,7 @@ async function editor(el, id) {
     if (e.target.dataset.add) { m.spec[e.target.dataset.add].push(e.target.dataset.add === 'glass' ? { qty: '1' } : { qty: '1' }); drawSpec(); }
     if (e.target.matches('[data-rm]')) { const tr = e.target.closest('tr'); m.spec[tr.closest('table').dataset.sec].splice(Number(tr.dataset.i), 1); drawSpec(); preview(); }
   });
+  const origDraw = drawSpec;
   $('#tw', el).oninput = (e) => { test.w = num(e.target.value); preview(); };
   $('#th', el).oninput = (e) => { test.h = num(e.target.value); preview(); };
   $('#tg', el).onchange = (e) => { test.glass = e.target.value; preview(); };

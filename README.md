@@ -11,7 +11,15 @@ npm install
 npm start            # http://localhost:3000   (PORT=… to change)
 ```
 
-On first visit you choose a password. Data lives in `data/workshop.db` (SQLite) — back this file up. `DATA_DIR=/path` moves it.
+On first visit you create the admin account (name, username, password); add everyone else under **Users**. Older databases that used one shared password keep it as the user `admin`.
+
+| Role | Can |
+|---|---|
+| Admin | everything, incl. Users, Settings, Excel import, backup |
+| Accounts | sales, buying, cash & bank, employees, reports, prices, stock — not Users/Settings/import/backup |
+| Worker | Stock & leftovers, cutting list, models (view). Prices, costs and money are removed by the server |
+
+On first visit you create the admin account. Data lives in `data/workshop.db` (SQLite) — back this file up. `DATA_DIR=/path` moves it.
 
 ### Import your existing Excel data
 
