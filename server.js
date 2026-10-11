@@ -1,5 +1,6 @@
 import http from 'node:http';
-import { readFile, writeFile, unlink, stat, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
@@ -13,19 +14,18 @@ import { seedLibrary } from './src/seed.js';
 import { isOnTask, taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated, markPresent, shiftStatus } from './src/tasks.js';
 import { exportWorkbook } from './src/exporter.js';
 import { quoteTotals } from './public/js/calc.js';
+import { respond, staticServer, throttleCheck, throttleFail, throttleOk, runBackup, listBackups, backupDir } from './src/web.js';
 
 seedLibrary();
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const PUBLIC = path.join(ROOT, 'public');
+const DEV = process.env.WORKSHOP_DEV === '1';
+// the bundled, minified build when it exists (npm start builds it), otherwise the readable sources
+const PUBLIC = !DEV && existsSync(path.join(ROOT, 'dist/index.html')) ? path.join(ROOT, 'dist') : path.join(ROOT, 'public');
 const PORT = Number(process.env.PORT) || 3000;
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 
-const send = (res, code, body, headers = {}) => {
-  const isObj = typeof body === 'object' && !Buffer.isBuffer(body);
-  res.writeHead(code, { 'Content-Type': isObj ? 'application/json' : 'text/plain; charset=utf-8', ...headers });
-  res.end(isObj ? JSON.stringify(body) : body);
-};
+// responses over 1 KB are compressed when the browser accepts it (res.req gives us its Accept-Encoding)
+const send = (res, code, body, headers = {}) => respond(res.req, res, code, body, headers);
 const readBody = (req, limit = 25e6) => new Promise((resolve, reject) => {
   const chunks = []; let n = 0;
   req.on('data', (c) => { n += c.length; if (n > limit) { reject(new Error('Body too large')); req.destroy(); } else chunks.push(c); });
@@ -35,11 +35,13 @@ const readBody = (req, limit = 25e6) => new Promise((resolve, reject) => {
 const readJson = async (req) => { const b = await readBody(req, 5e6); return b.length ? JSON.parse(b.toString('utf8')) : {}; };
 
 // ------------------------------------------------------------------ computed views
+// one pass over receipts and purchases instead of two sub-queries per order
 const ordersLedger = () => db.prepare(`
-  SELECT o.*,
-    IFNULL((SELECT SUM(amount) FROM receipts r WHERE r.order_inv = o.inv), 0) AS paid,
-    IFNULL((SELECT SUM(amount) FROM purchases p WHERE p.order_inv = o.inv), 0) AS cost
-  FROM orders o ORDER BY o.date DESC, o.id DESC`).all().map((o) => ({
+  SELECT o.*, IFNULL(r.paid, 0) AS paid, IFNULL(p.cost, 0) AS cost
+  FROM orders o
+  LEFT JOIN (SELECT order_inv, SUM(amount) AS paid FROM receipts GROUP BY order_inv) r ON r.order_inv = o.inv
+  LEFT JOIN (SELECT order_inv, SUM(amount) AS cost FROM purchases GROUP BY order_inv) p ON p.order_inv = o.inv
+  ORDER BY o.date DESC, o.id DESC`).all().map((o) => ({
   ...o, paid: o.paid, balance: Math.round((o.amount - o.paid) * 100) / 100, profit: Math.round((o.amount - o.cost) * 100) / 100,
 }));
 
@@ -120,7 +122,12 @@ async function api(req, res, url) {
     const { username, password, name } = await readJson(req);
     let user;
     if (needsSetup()) user = createUser({ username, name: name || username, role: 'admin', password }); // first run: this person becomes the admin
-    else { user = authenticate(username, password); if (!user) { await new Promise((r) => setTimeout(r, 400)); return send(res, 401, { error: 'Wrong username or password, or the account is switched off.' }); } }
+    else {
+      const wait = throttleCheck(req, username); if (wait) return send(res, 429, { error: `Too many wrong passwords. Try again in ${wait} seconds.` });
+      user = authenticate(username, password);
+      if (!user) { throttleFail(req, username); await new Promise((r) => setTimeout(r, 400)); return send(res, 401, { error: 'Wrong username or password, or the account is switched off.' }); }
+      throttleOk(req, username);
+    }
     return send(res, 200, { ok: true, user }, { 'Set-Cookie': `ws=${makeToken(user.id)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${30 * 86400}` });
   }
   if (p[0] === 'logout') return send(res, 200, { ok: true }, { 'Set-Cookie': 'ws=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
@@ -145,7 +152,8 @@ async function api(req, res, url) {
   }
   if (p[0] === 'tasks' && p[1]) {
     const tid = Number(p[1]); const t = taskView(tid); if (!t) return send(res, 404, { error: 'Task not found' });
-    if (!isAA && (t.hidden || !isOnTask(t, user.id))) throw forbid();
+    if (!isAA && t.hidden) return send(res, 404, { error: 'Task not found' }); // hidden tasks do not exist for workers
+    if (!isAA && !isOnTask(t, user.id)) throw forbid();
     if (m === 'GET' && !p[2]) return send(res, 200, { task: t, logs: logsFor(tid), sessions: sessionsFor(tid) });
     if (m === 'POST' && p[2] === 'action') return send(res, 200, taskAction(user, tid, await readJson(req)));
   }
@@ -167,6 +175,13 @@ async function api(req, res, url) {
     const body = await readJson(req);
     for (const [k, v] of Object.entries(body)) if (!['auth', 'session_secret'].includes(k)) setSetting(k, v);
     return send(res, 200, bootstrap().settings);
+  }
+  if (p[0] === 'backups') { // automatic daily copies of the database
+    need(role === 'admin');
+    if (!p[1]) return send(res, 200, await listBackups());
+    if (!/^workshop-\d{4}-\d\d-\d\d\.db$/.test(p[1])) return send(res, 400, { error: 'Bad file name' });
+    const buf = await readFile(path.join(backupDir(), p[1])).catch(() => null);
+    return buf ? send(res, 200, buf, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${p[1]}"` }) : send(res, 404, { error: 'Not found' });
   }
   if (p[0] === 'backup') {
     need(role === 'admin');
@@ -256,19 +271,22 @@ async function api(req, res, url) {
   return send(res, 404, { error: 'Unknown endpoint' });
 }
 
-http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://x');
+const serveStatic = staticServer(PUBLIC, { dev: DEV });
+const server = http.createServer(async (req, res) => {
   try {
+    const url = new URL(req.url, 'http://x');
+    if (url.pathname === '/healthz') return await send(res, 200, { ok: true });
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
-    let file = path.normalize(path.join(PUBLIC, decodeURIComponent(url.pathname)));
-    if (!file.startsWith(PUBLIC)) return send(res, 403, 'Forbidden');
-    const s = await stat(file).catch(() => null);
-    if (!s || s.isDirectory()) file = path.join(PUBLIC, 'index.html');
-    const data = await readFile(file);
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
-    res.end(data);
+    return await serveStatic(req, res, decodeURIComponent(url.pathname));
   } catch (e) {
-    console.error(e);
-    send(res, e.status || 500, { error: e.message });
+    if (!e.status) console.error(e);
+    if (!res.headersSent) await send(res, e.status || 500, { error: e.message }); else res.end();
   }
-}).listen(PORT, () => console.log(`Workshop running on http://localhost:${PORT}`));
+});
+server.keepAliveTimeout = 65000;
+server.listen(PORT, () => console.log(`Workshop running on http://localhost:${PORT}${PUBLIC.endsWith('dist') ? ' (production build)' : ' (development, unbundled)'}`));
+
+// a consistent copy of the database every day (kept for 14 days), and tidy-up on shutdown
+const backup = () => runBackup().then((n) => n && console.log(`Backup saved: ${n}`)).catch((e) => console.error('Backup failed:', e.message));
+setTimeout(backup, 5000).unref(); setInterval(backup, 6 * 3600e3).unref();
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { db.exec('PRAGMA optimize'); } catch {} server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); });

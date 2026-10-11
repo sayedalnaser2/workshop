@@ -51,6 +51,32 @@ $('#meBtn').onclick = () => {
   modal({ title: 'My account', body: w, buttons: [{ label: 'Sign out', kind: 'danger', onClick: () => { logout(); } }, { label: 'Close' }, { label: 'Change password', kind: 'primary', onClick: async () => { const d = readForm(w, f); if (!d.current || !d.password) { toast('Fill in both passwords', 'err'); return false; } await api.post('password', d); toast('Password changed'); } }] });
 };
 
+// Page modules are listed statically so the production build can bundle and split them.
+const PAGES = {
+  activity: () => import('./pages/activity.js'),
+  cashbank: () => import('./pages/cashbank.js'),
+  cutting: () => import('./pages/cutting.js'),
+  dashboard: () => import('./pages/dashboard.js'),
+  employees: () => import('./pages/employees.js'),
+  materials: () => import('./pages/materials.js'),
+  models: () => import('./pages/models.js'),
+  mytasks: () => import('./pages/mytasks.js'),
+  orders: () => import('./pages/orders.js'),
+  payments: () => import('./pages/payments.js'),
+  pos: () => import('./pages/pos.js'),
+  prices: () => import('./pages/prices.js'),
+  purchases: () => import('./pages/purchases.js'),
+  quotes: () => import('./pages/quotes.js'),
+  receipts: () => import('./pages/receipts.js'),
+  reports: () => import('./pages/reports.js'),
+  settings: () => import('./pages/settings.js'),
+  statements: () => import('./pages/statements.js'),
+  stock: () => import('./pages/stock.js'),
+  suppliers: () => import('./pages/suppliers.js'),
+  tasks: () => import('./pages/tasks.js'),
+  users: () => import('./pages/users.js'),
+};
+
 async function route() {
   const hash = location.hash.replace(/^#\/?/, '');
   const [path, ...rest] = hash.split('/');
@@ -61,7 +87,7 @@ async function route() {
   $('#side').classList.remove('open');
   const view = $('#view'); view.innerHTML = '<p class="muted">Loading…</p>';
   try {
-    const mod = await import(`./pages/${r.mod}.js`);
+    const mod = await PAGES[r.mod]();
     view.innerHTML = '';
     await mod.render(view, rest);
     window.scrollTo(0, 0);

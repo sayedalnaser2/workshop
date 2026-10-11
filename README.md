@@ -8,8 +8,15 @@ Requires Node.js 22.13+.
 
 ```bash
 npm install
-npm start            # http://localhost:3000   (PORT=… to change)
+npm start            # builds the optimised front end, then serves http://localhost:3000   (PORT=… to change)
+npm run dev          # no build step: serves the readable sources (for changing the code)
+npm test             # unit + API tests (no browser needed)
+npm run bench        # times the API and counts bytes: node tools/bench.mjs http://localhost:3000 admin <password>
 ```
+
+**Docker:** `docker build -t workshop . && docker run -p 3000:3000 -v workshop-data:/data workshop` (the database and daily backups live in the `/data` volume).
+
+**Performance notes:** the browser code is bundled, minified and split per page with content-hashed file names (cached for a year); API and static responses are Brotli/gzip compressed; the database uses WAL, prepared-statement reuse and indexes on the date/status columns; login attempts are throttled; a consistent copy of the database is saved daily to `data/backups/` (last 14 kept).
 
 On first visit you create the admin account (name, username, password); add everyone else under **Users**. Older databases that used one shared password keep it as the user `admin`.
 

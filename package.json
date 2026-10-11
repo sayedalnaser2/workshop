@@ -8,10 +8,15 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "start": "node server.js",
-    "import": "node tools/import-xlsm.js"
+    "start": "node tools/build.js && node server.js",
+    "dev": "WORKSHOP_DEV=1 node server.js",
+    "build": "node tools/build.js",
+    "import": "node tools/import-xlsm.js",
+    "test": "node --test tests/*.test.js",
+    "bench": "node tools/bench.mjs"
   },
   "dependencies": {
+    "esbuild": "^0.25.12",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.2"
   }

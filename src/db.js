@@ -5,7 +5,17 @@ import path from 'node:path';
 const dir = process.env.DATA_DIR || path.resolve('data');
 mkdirSync(dir, { recursive: true });
 export const db = new DatabaseSync(path.join(dir, 'workshop.db'));
-db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON; PRAGMA temp_store = MEMORY; PRAGMA cache_size = -20000; PRAGMA mmap_size = 134217728; PRAGMA busy_timeout = 5000;');
+
+// Re-use compiled statements: the API runs the same few queries thousands of times.
+{
+  const compile = db.prepare.bind(db); const cache = new Map();
+  db.prepare = (sql) => {
+    let st = cache.get(sql);
+    if (!st) { if (cache.size > 400) cache.clear(); st = compile(sql); cache.set(sql, st); }
+    return st;
+  };
+}
 
 // Column definitions per table. `json: true` columns are stored as JSON text.
 export const SCHEMA = {
@@ -53,6 +63,9 @@ for (const [t, sc] of Object.entries(SCHEMA)) {
   const have = new Set(db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name));
   for (const [c, ty] of Object.entries(sc.cols)) if (!have.has(c)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${c} ${ty === 'JSON' ? 'TEXT' : ty}`);
 }
+db.exec(`CREATE INDEX IF NOT EXISTS ix_receipts_date ON receipts(date); CREATE INDEX IF NOT EXISTS ix_purchases_date ON purchases(date); CREATE INDEX IF NOT EXISTS ix_orders_date ON orders(date);
+  CREATE INDEX IF NOT EXISTS ix_payments_date ON payments(date); CREATE INDEX IF NOT EXISTS ix_quotes_date ON quotes(date); CREATE INDEX IF NOT EXISTS ix_tasks_status ON tasks(status, hidden);
+  CREATE INDEX IF NOT EXISTS ix_tasks_order ON tasks(order_inv); CREATE INDEX IF NOT EXISTS ix_sess_open ON task_sessions(ended, user_id); CREATE INDEX IF NOT EXISTS ix_tl_ts ON task_logs(ts);`);
 db.exec('CREATE INDEX IF NOT EXISTS ix_stock_profile ON stock(profile_id, kind); CREATE INDEX IF NOT EXISTS ix_tl ON task_logs(task_id); CREATE INDEX IF NOT EXISTS ix_ts ON task_sessions(task_id, user_id); CREATE INDEX IF NOT EXISTS ix_att ON attendance(employee_id, date); CREATE INDEX IF NOT EXISTS ix_ev ON employee_events(employee_id);');
 
 export const getSetting = (k, d = null) => {
