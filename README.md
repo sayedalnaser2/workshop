@@ -48,6 +48,7 @@ This loads the price list, all `Q…` quotation sheets, orders, receipts, paymen
 | **Account Statements** | `Account Statment` — per customer, printable. |
 | **Purchases / Payment Vouchers / Employees** | `Pur.List`, `Pay.List` + `P.VOUCHER`, salary table. |
 | **Reports** | yearly summary (`Sheet1`) and the ledger on `Setup`. |
+| **Kitchens** *(new)* | Design kitchen cabinets and countertops: base, drawer, sink, hob, corner, wall and tall units on one or more walls, with front elevation and plan drawings. Gives carcass/door/back cut lists, sheet layouts, edge banding, hinges, drawer sets and handles, countertop pieces with sink/hob cut-outs and slab layout, a cost estimate and a price (by metre rates or cost + mark-up). Add it to a quotation, raise a purchase order for boards and stone, and workers get the drawing and cut list on their job sheet. Boards, handles, hinges, drawer classes and stone come from your old workbook; prices are entered under *Kitchens → Options & prices*. |
 | **Models** *(new)* | Window/door templates with drawing + formulas (`W`, `H` in cm) for profile cut lengths, glass panes and accessories. |
 | **Cutting List & Glass** *(new)* | From a quotation (or ad-hoc lines): cut lengths per profile with bar nesting and waste %, glass sizes/areas, accessory totals, material cost. |
 | **Profiles, Glass & Accessories** *(new)* | Library with prices used by models and cost estimates. |

@@ -92,3 +92,20 @@ export function linkModelsToPriceItems() {
     if (m) updateRow('price_items', pi.id, { model_id: m.id });
   }
 }
+
+/** Kitchen choices from the old workbook (panel types, handles, hinge and drawer brands, marble), prices left at 0 to fill in. */
+export function seedKitchenOptions() {
+  if (db.prepare('SELECT COUNT(*) n FROM kitchen_options').get().n) return;
+  let n = 0; const add = (kind, name, unit = '', meta = null, note = '') => insertRow('kitchen_options', { kind, name, price: 0, unit, meta, note, sort: ++n });
+  for (const x of ['Indofiber Sheet', 'Lamaicafiber Sheet', 'Cladding sheet', 'Aluminum Sheet', 'Wooden']) add('panel', x, 'sheet');
+  add('handle', 'L&C Shape Profile', 'm'); add('handle', 'U Channel Profile', 'm'); add('handle', 'Type Shape', 'pcs'); add('handle', 'Normal', 'pcs');
+  for (const x of ['Blum - German', 'Hafele - German', 'Hettich - German', 'Bergo - UK', 'FGV - Italy', 'Economic (F&F, Roma, Milano)']) add('hinge', x, 'pcs');
+  for (const x of ['Deluxe - Blum', 'Deluxe - Hafele', 'Deluxe - Hettich', 'Class B - Bergo', 'Class B - FGV', 'Class C - Economic']) add('drawer', x, 'set');
+  add('marble', 'Black Galaxy', 'm²', { thickness: 2 }); add('marble', 'Black Galaxy', 'm²', { thickness: 4 });
+  add('glass', 'Clear', 'm²'); add('glass', 'Sandblasted', 'm²');
+  add('profile_colour', 'RAL 9016 (white)'); add('profile_colour', 'RAL 8014 (brown)');
+  const gen = [['edge_band_m', 'Edge banding, per metre'], ['leg', 'Plinth leg, each'], ['hanger', 'Wall hanger, each'], ['pin', 'Shelf pin, each'], ['polish_m', 'Countertop edge polishing, per metre'], ['cutout_sink', 'Sink cut-out, each'], ['cutout_hob', 'Hob cut-out, each'],
+    ['labour_cabinet', 'Workshop labour, per cabinet'], ['install_m', 'Installation, per metre run'], ['markup_pct', 'Mark-up on cost, %'],
+    ['rate_base_m', 'Selling rate: base cabinets, per metre'], ['rate_wall_m', 'Selling rate: wall cabinets, per metre'], ['rate_tall_m', 'Selling rate: tall units, per metre'], ['rate_counter_m', 'Selling rate: countertop, per metre'], ['rate_cutout', 'Selling rate: each sink/hob cut-out']];
+  for (const [k, label] of gen) add('general', k, '', null, label);
+}

@@ -68,3 +68,28 @@ test('shift clock: windows, breaks, days off and presence', () => {
 test('durations are read in the ways people type them', () => {
   assert.equal(parseDur('2:30'), 150); assert.equal(parseDur('1h 15m'), 75); assert.equal(parseDur('90'), 90); assert.equal(parseDur('1.5h'), 90); assert.equal(parseDur('abc'), null);
 });
+
+import { CAB_TYPES, cabinetParts, kitchenModel, packSheets, priceKitchen } from '../public/js/kitchen.js';
+test('kitchen: a base cabinet becomes panels, hinges and handles', () => {
+  const p = cabinetParts({ type: 'base', w: 60, h: 72, d: 56, doors: 1, drawers: 0, shelves: 1 });
+  const side = p.panels.find((x) => x.label.endsWith('Side')); assert.equal(side.qty, 2); assert.equal(side.h, 72);
+  assert.equal(p.panels.find((x) => x.label.endsWith('Bottom')).w, 56.4); // 60 − 2 × 1.8
+  assert.equal(p.hw.hinges, 2); assert.equal(p.hw.handles, 1); assert.equal(p.hw.legs, 4);
+  const tall = cabinetParts({ type: 'tall', w: 60, h: 210, d: 58, doors: 2, shelves: 4 });
+  assert.equal(tall.hw.hinges, 8); // two doors of about 210 cm → four hinges each
+  assert.equal(cabinetParts({ type: 'gap', w: 60 }).panels.length, 0);
+  assert.equal(cabinetParts({ type: 'drawers', w: 60, h: 72, d: 56, drawers: 3 }).hw.slides, 3);
+});
+test('kitchen: sheet packing never overlaps and reports parts that do not fit', () => {
+  const r = packSheets([{ w: 100, h: 60, qty: 6, label: 'a' }, { w: 300, h: 10, qty: 1, label: 'long' }], 244, 122, 0.3);
+  assert.equal(r.unfit.length, 1);
+  for (const s of r.sheets) { s.items.forEach((a, i) => s.items.slice(i + 1).forEach((b) => assert.ok(a.x + a.w <= b.x + 1e-6 || b.x + b.w <= a.x + 1e-6 || a.y + a.h <= b.y + 1e-6 || b.y + b.h <= a.y + 1e-6, 'overlap'))); for (const i of s.items) { assert.ok(i.x + i.w <= 244 + 1e-6 && i.y + i.h <= 122 + 1e-6); } }
+});
+test('kitchen: countertop is split at tall units / gaps, with sink cut-outs and a price', () => {
+  const cab = (type, w) => ({ type, w, h: 72, d: 56, doors: 1, drawers: 0, shelves: 0 });
+  const m = kitchenModel({ style: { carcass: 'Board' }, counter: { material: 'Stone', thickness: 2, front: 2, splash_h: 6, waste: 10 }, runs: [{ name: 'A', cabinets: [cab('base', 60), cab('sink', 90), cab('gap', 60), cab('base', 60)] }] });
+  assert.equal(m.tops.pieces.length, 2); assert.equal(m.tops.pieces[0].len, 150); assert.equal(m.tops.pieces[0].depth, 58); assert.equal(m.tops.sinks, 1);
+  assert.ok(Math.abs(m.meters.base - 2.1) < 1e-9);
+  const p = priceKitchen(m, { panel: { Board: { price: 20 } }, marble: { Stone: { price: 100 }, 'Stone|2': { price: 100 } }, general: { rate_base_m: 100, rate_counter_m: 50, markup_pct: 25 } });
+  assert.ok(p.cost > 0); assert.equal(p.rates.base, 210); assert.equal(Math.round(p.rates.counter * 100) / 100, Math.round(50 * 2.1 * 100) / 100); assert.equal(p.suggested, p.byRates);
+});

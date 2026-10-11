@@ -3,6 +3,8 @@ import { api, $, $$, esc, dmy, today, num, toast, guard, modal, badge, confirmBo
 import { fmtMin, fmtSec, parseDur, ago, localTime, startTicker, variance } from '../time.js';
 import { drawModel } from '../drawings.js';
 import { quotePieces } from '../stock.js';
+import { kitchenModel } from '../kitchen.js';
+import { elevationSVG } from '../kitchen-draw.js';
 import { computeModel } from '../calc.js';
 import { dot } from './stock.js';
 
@@ -100,7 +102,7 @@ const countBy = (arr, f) => { const m = new Map(); for (const x of arr) m.set(f(
 
 /** Everything the worker needs to do the job: where, what to make (drawings, sizes, colour, glass), cut sizes, materials, notes. */
 async function jobSheet(el, id) {
-  const [{ task: t, logs }, sh, quotes] = await Promise.all([api.get(`tasks/${id}`), api.get('shift'), api.get('t/quotes')]);
+  const [{ task: t, logs }, sh, quotes, kitchens0] = await Promise.all([api.get(`tasks/${id}`), api.get('shift'), api.get('t/quotes'), api.get('t/kitchens')]);
   const q = t.quote_no ? quotes.find((x) => x.number === t.quote_no) : null;
   const here = sh.current && sh.current.task_id === t.id; const live = here && t.ticking; const pct = Math.round(t.progress || 0);
   const lib = { profiles: S.profiles, accessories: S.accessories };
@@ -123,6 +125,9 @@ async function jobSheet(el, id) {
         ${it.note ? `<div style="margin-top:6px;padding:6px 8px;background:var(--soft);border-radius:6px;font-size:13px;white-space:pre-line">${esc(it.note)}</div>` : ''}${cut}</div></div>`;
   }).join('');
 
+  // a kitchen designed for this order
+  const kits = kitchens0.filter((x) => (t.order_inv && x.order_inv === t.order_inv) || (q && x.quote_no === q.number));
+  const kitchenHtml = kits.map((kk) => { const m = kitchenModel(kk.spec || {}); return `<div class="card" style="margin-top:14px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">🍳 Kitchen: ${esc(kk.name)}</h3><span class="muted">base ${fmtQty(m.meters.base)} m · wall ${fmtQty(m.meters.wall)} m · tall ${fmtQty(m.meters.tall)} m · ${m.sheets.carcass.sheets.length + m.sheets.door.sheets.length + m.sheets.back.sheets.length} sheets</span><span class="grow"></span><a class="btn sm" href="#/kitchens/${kk.id}">Open the cut list &amp; production sheet</a></div><div style="margin-top:8px;overflow-x:auto;color:inherit">${elevationSVG(kk.spec || {}, { maxW: 700 })}</div>${kk.notes ? `<p style="margin:6px 0 0"><b>Notes:</b> ${esc(kk.notes)}</p>` : ''}</div>`; }).join('');
   // totals for the whole job
   let mats = '';
   if (q) {
@@ -146,6 +151,7 @@ async function jobSheet(el, id) {
       <div><div class="bar" style="height:12px;margin:0"><i style="width:${pct}%;background:var(--ok)"></i></div><div style="display:flex;justify-content:space-between;font-size:12px;margin:3px 0 10px"><span>${pct}% done</span><span class="muted">Estimate ${t.estimate_min ? fmtMin(t.estimate_min) : '—'}</span></div>
         <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="muted">Time on this task</span><b style="font-size:20px;font-variant-numeric:tabular-nums" ${live ? `data-live data-base="${t.actual_min}"` : ''}>${live ? '' : fmtMin(t.actual_min)}</b></div>
         ${t.status === 'done' ? '' : `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">${here ? badge('● You are on this task', 'ok') : '<button class="btn primary" data-a="start">▶ Work on this</button>'}<button class="btn" data-a="update">✎ Update</button>${t.status === 'blocked' ? '<button class="btn" data-a="unblock">Unblock</button>' : '<button class="btn" data-a="blocked">⛔ Blocked</button>'}<button class="btn" data-a="done" style="margin-left:auto">✔ Done</button></div>`}</div></div></div>
+    ${kitchenHtml}
     ${q ? `<h3 style="margin:18px 0 8px">What to make <span class="muted" style="font-weight:400">(${n} item${n === 1 ? '' : 's'})</span></h3>${items || '<div class="card muted">The quotation has no items.</div>'}${mats}` : ''}
     <div class="card" style="margin-top:14px"><h3>Updates</h3><table class="grid"><tbody>${logs.map((l) => `<tr><td class="muted" style="white-space:nowrap">${ago(l.ts)}</td><td><b>${esc(l.user_name)}</b></td><td>${logLine(l)}</td></tr>`).join('') || '<tr><td class="empty">No updates yet</td></tr>'}</tbody></table></div></div>`;
   startTicker(el);

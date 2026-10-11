@@ -9,11 +9,11 @@ const ALL = ['admin', 'account', 'worker'];
 const AA = ['admin', 'account'];
 export const PAGE_ROLES = {
   dashboard: ALL, quotes: AA, orders: AA, receipts: AA, statements: AA, models: ALL, cutting: ALL, stock: ALL, materials: AA, prices: AA,
-  mytasks: ALL, tasks: AA, activity: AA, pos: AA, suppliers: AA, purchases: AA, cashbank: AA, payments: AA, employees: AA, reports: AA, settings: ['admin'], users: ['admin'],
+  mytasks: ALL, tasks: AA, activity: AA, kitchens: ALL, pos: AA, suppliers: AA, purchases: AA, cashbank: AA, payments: AA, employees: AA, reports: AA, settings: ['admin'], users: ['admin'],
 };
 export const canPage = (role, page) => (PAGE_ROLES[page === '' ? 'dashboard' : page] || []).includes(role);
 
-const WORKER_READ = new Set(['models', 'profiles', 'accessories', 'glass_types', 'quotes']);
+const WORKER_READ = new Set(['kitchens', 'models', 'profiles', 'accessories', 'glass_types', 'quotes']);
 /** 'rw' | 'r' | '' for a data table. */
 export function tableAccess(role, table) {
   if (role === 'admin' || role === 'account') return 'rw';

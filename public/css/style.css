@@ -173,7 +173,10 @@ table.mini { width: 100%; border-collapse: collapse; } .mini th { font-size: 11p
 .doc .banner { text-align: center; font-weight: 700; margin: 8px 0 4px; }
 .printbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 
+/* kitchens */
+.kgrid { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 14px; align-items: start; }
 @media (max-width: 900px) {
+  .kgrid { grid-template-columns: 1fr; }
   #side { position: fixed; left: -250px; z-index: 40; transition: left .2s; } #side.open { left: 0; }
   .topbar { display: flex; } main { padding: 14px 12px 60px; }
   .qhead, .cols2, .cols3, .form { grid-template-columns: 1fr; }

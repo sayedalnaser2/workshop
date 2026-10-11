@@ -10,13 +10,13 @@ import {
 import { needsSetup, authenticate, createUser, updateUser, deleteUser, listUsers, setOwnPassword, makeToken, userFromToken, cookieOf } from './src/auth.js';
 import { tableAccess } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
-import { seedLibrary } from './src/seed.js';
+import { seedLibrary, seedKitchenOptions } from './src/seed.js';
 import { isOnTask, taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated, markPresent, shiftStatus } from './src/tasks.js';
 import { exportWorkbook } from './src/exporter.js';
 import { quoteTotals } from './public/js/calc.js';
 import { respond, staticServer, throttleCheck, throttleFail, throttleOk, runBackup, listBackups, backupDir } from './src/web.js';
 
-seedLibrary();
+seedLibrary(); seedKitchenOptions();
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DEV = process.env.WORKSHOP_DEV === '1';

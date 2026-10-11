@@ -96,7 +96,7 @@ async function editor(el, id) {
         <td class="n">${i + 1}</td>
         <td><input class="w-s" data-k="w" type="number" step="any" value="${it.w ?? ''}"></td>
         <td><input class="w-s" data-k="h" type="number" step="any" value="${it.h ?? ''}"></td>
-        <td style="min-width:300px"><input data-k="desc" list="dl-prices" value="${esc(it.desc)}" autocomplete="off"><div class="sub"><textarea data-k="note" rows="1" placeholder="Sub-description (e.g. W/1 – one side swing, other side fix)">${esc(it.note || '')}</textarea></div></td>
+        <td style="min-width:300px"><input data-k="desc" list="dl-prices" value="${esc(it.desc)}" autocomplete="off">${it.kitchen_id ? `<a href="#/kitchens/${it.kitchen_id}" style="font-size:12px">🍳 open the kitchen design</a>` : ''}<div class="sub"><textarea data-k="note" rows="1" placeholder="Sub-description (e.g. W/1 – one side swing, other side fix)">${esc(it.note || '')}</textarea></div></td>
         <td><select data-k="model_id" style="width:120px">${modelOpts(it.model_id)}</select></td>
         <td><select data-k="glass_id" style="width:110px">${glassOpts(it.glass_id)}</select></td>
         <td><select data-k="colour" style="width:92px"><option value="">(as quote)</option>${(S.settings.colours || []).map((c) => `<option ${it.colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></td>

@@ -3,10 +3,10 @@ import { api, $, $$, esc, money, qty as fq, num, today, toast, modal, datalist }
 import { poSuggestions } from './stock.js';
 
 /** Choose suppliers and items for a purchase order. quote is optional: with one, lines are suggested from its models. */
-export async function openPoDialog({ quote = null, orderInv = '', onDone }) {
+export async function openPoDialog({ quote = null, orderInv = '', lines: given = null, onDone }) {
   const [suppliers, items, stock] = await Promise.all([api.get('t/suppliers'), api.get('t/items'), api.get('t/stock')]);
-  let lines = quote ? poSuggestions(quote, { models: S.models, profiles: S.profiles, accessories: S.accessories, glassTypes: S.glass_types, items, stock, kerf: S.settings.bar_kerf || 0 }) : [];
-  lines.forEach((l) => { l.on = l.qty > 0; });
+  let lines = given ? given.map((l) => ({ ...l })) : quote ? poSuggestions(quote, { models: S.models, profiles: S.profiles, accessories: S.accessories, glassTypes: S.glass_types, items, stock, kerf: S.settings.bar_kerf || 0 }) : [];
+  lines.forEach((l) => { l.on = l.on ?? l.qty > 0; });
   const wrap = document.createElement('div');
   wrap.innerHTML = `${datalist('dl-cat', items.map((i) => `${i.name}${i.code ? ' [' + i.code + ']' : ''} — ${i.supplier || ''}`))}
     <p class="muted" style="margin-top:0">${quote ? `Suggested from <b>${esc(quote.number)}</b>: bars needed after using leftovers, minus what is already in new stock. ` : ''}Pick the supplier for each line — one purchase order is created per supplier.</p>
