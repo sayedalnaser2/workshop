@@ -24,7 +24,7 @@ const effMin = (s, now, cfg, pres) => totalMin(sessionSegments(s, cfg, (day) => 
 export function taskViews(where = '1=1', params = []) {
   const nowMs = Date.now(); const cfg = shiftCfg(); const pres = presence();
   const rows = db.prepare(`
-    SELECT t.*, u.name AS assignee_name, o.client, o.site,
+    SELECT t.*, u.name AS assignee_name, o.client, o.site, COALESCE(NULLIF(t.quote_no, ''), o.quote_no) AS quote_no,
       (SELECT MAX(l.ts) FROM task_logs l WHERE l.task_id = t.id) AS last_activity
     FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id LEFT JOIN orders o ON o.inv = t.order_inv AND t.order_inv <> ''
     WHERE ${where} ORDER BY CASE t.status WHEN 'doing' THEN 0 WHEN 'blocked' THEN 1 WHEN 'todo' THEN 2 ELSE 3 END, CASE t.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, IFNULL(t.due, '9999'), t.id DESC`).all(...params);

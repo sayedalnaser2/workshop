@@ -84,7 +84,7 @@ function redact(table, r) {
     case 'accessories': return { ...r, price: 0 };
     case 'glass_types': return { ...r, price_m2: 0 };
     case 'stock': return { ...r, unit_cost: 0 };
-    case 'quotes': return { ...r, discount: 0, vat_waived: 0, notes: '', items: (r.items || []).map((i) => ({ ...i, price: 0 })) };
+    case 'quotes': return { ...r, discount: 0, vat_waived: 0, notes: '', mobile: '', items: (r.items || []).map((i) => ({ ...i, price: 0 })) };
     default: return r;
   }
 }
