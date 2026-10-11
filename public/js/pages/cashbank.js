@@ -11,8 +11,8 @@ export async function render(el) {
     const [receipts, payments, manual] = await Promise.all([api.get('t/receipts'), api.get('t/payments'), api.get('t/cash_entries')]);
     const opening = S.settings.opening || { cash: 0, bank: 0 };
     const all = [
-      ...receipts.map((r) => ({ key: 'r' + r.id, date: r.date || '', acct: acctOf(r, true), in: r.amount, out: 0, type: 'Receipt', ref: r.no, party: r.client || r.order_inv, detail: r.order_inv, link: `#/receipts/${r.id}/print` })),
-      ...payments.map((p) => ({ key: 'p' + p.id, date: p.date || '', acct: acctOf(p, false), in: 0, out: p.amount, type: 'Payment voucher', ref: p.no, party: p.paid_to, detail: p.category, link: `#/payments/${p.id}/print` })),
+      ...receipts.map((r) => ({ key: 'r' + r.id, date: r.date || '', acct: acctOf(r, true), in: r.amount, out: 0, type: 'Receipt', ref: r.no, party: r.client || r.order_inv, detail: [r.order_inv, r.method && (r.ref ? `${r.method} ${r.ref}` : r.method)].filter(Boolean).join(' · '), link: `#/receipts/${r.id}/print` })),
+      ...payments.map((p) => ({ key: 'p' + p.id, date: p.date || '', acct: acctOf(p, false), in: 0, out: p.amount, type: 'Payment voucher', ref: p.no, party: p.paid_to, detail: [p.category, p.method && (p.ref ? `${p.method} ${p.ref}` : p.method)].filter(Boolean).join(' · '), link: `#/payments/${p.id}/print` })),
       ...manual.map((m) => ({ key: 'm' + m.id, date: m.date || '', acct: m.account, in: m.direction === 'in' ? m.amount : 0, out: m.direction === 'out' ? m.amount : 0, type: m.category === 'Transfer' ? 'Transfer' : 'Manual', ref: m.category, party: m.party, detail: m.note, manual: m })),
     ];
     const bal = (a) => (opening[a] || 0) + all.filter((x) => x.acct === a).reduce((s, x) => s + x.in - x.out, 0);

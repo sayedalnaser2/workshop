@@ -132,7 +132,7 @@ export async function importWorkbook(file, { log = () => {} } = {}) {
     for (let r = 12; r <= rl.rowCount; r++) {
       const no = str(rl.getCell(r, 4)); const amt = num(rl.getCell(r, 7));
       if (!no || no === '-' || amt == null) continue;
-      insertRow('receipts', { no, date: date(rl.getCell(r, 3)), order_inv: str(rl.getCell(r, 5)), client: str(rl.getCell(r, 6)), amount: amt, method: '', account: str(rl.getCell(r, 8)).toLowerCase() });
+      insertRow('receipts', { no, date: date(rl.getCell(r, 3)), order_inv: str(rl.getCell(r, 5)), client: str(rl.getCell(r, 6)), amount: amt, method: str(rl.getCell(r, 9)), ref: str(rl.getCell(r, 10)), account: str(rl.getCell(r, 8)).toLowerCase() });
       c++;
     }
     out.receipts = c;
@@ -142,7 +142,7 @@ export async function importWorkbook(file, { log = () => {} } = {}) {
     for (let r = 12; r <= pl.rowCount; r++) {
       const no = str(pl.getCell(r, 4)); const amt = num(pl.getCell(r, 6));
       if (!no || no === '-' || amt == null) continue;
-      insertRow('payments', { no, date: date(pl.getCell(r, 3)), paid_to: str(pl.getCell(r, 5)), amount: amt, done: isDone(pl.getCell(r, 7)), category: '', lines: [], account: str(pl.getCell(r, 8)).toLowerCase() });
+      insertRow('payments', { no, date: date(pl.getCell(r, 3)), paid_to: str(pl.getCell(r, 5)), amount: amt, done: isDone(pl.getCell(r, 7)), category: '', lines: [], account: str(pl.getCell(r, 8)).toLowerCase(), method: str(pl.getCell(r, 9)), ref: str(pl.getCell(r, 10)) });
       c++;
     }
     out.payments = c;

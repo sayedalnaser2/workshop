@@ -80,6 +80,14 @@ const bootstrap = () => ({
   next: { quote: nextNumber('quote'), invoice: nextNumber('invoice'), receipt: nextNumber('receipt'), payment: nextNumber('payment'), po: nextNumber('po') },
 });
 
+/** Benefit and cheque payments must carry their number. */
+const REF_LABEL = { Benefit: 'Benefit number', Cheque: 'Cheque number' };
+function checkRef(t, body, existing = {}) {
+  if (t !== 'receipts' && t !== 'payments') return;
+  if (existing.id && !('method' in body) && !('ref' in body)) return; // e.g. moving between cash and bank
+  const m = { ...existing, ...body };
+  if (REF_LABEL[m.method] && !String(m.ref ?? '').trim()) throw Object.assign(new Error(`${REF_LABEL[m.method]} is required when paying by ${m.method}.`), { status: 400 });
+}
 const AUTO = { quotes: ['number', 'quote'], orders: ['inv', 'invoice'], receipts: ['no', 'receipt'], payments: ['no', 'payment'], purchase_orders: ['po', 'po'] };
 
 // ------------------------------------------------------------------ router
@@ -174,13 +182,14 @@ async function api(req, res, url) {
     if (!id && m === 'POST') {
       const body = await readJson(req);
       const row = tx(() => {
+        checkRef(t, body);
         const a = AUTO[t];
         if (a && !body[a[0]]) body[a[0]] = nextNumber(a[1], body.date, true);
         return insertRow(t, body);
       });
       return send(res, 201, row);
     }
-    if (id && m === 'PUT') { if (!getRow(t, id)) return send(res, 404, { error: 'Not found' }); return send(res, 200, updateRow(t, id, await readJson(req))); }
+    if (id && m === 'PUT') { const cur = getRow(t, id); if (!cur) return send(res, 404, { error: 'Not found' }); const body = await readJson(req); checkRef(t, body, cur); return send(res, 200, updateRow(t, id, body)); }
     if (id && m === 'DELETE') { deleteRow(t, id); return send(res, 200, { ok: true }); }
   }
   return send(res, 404, { error: 'Unknown endpoint' });
@@ -199,6 +208,6 @@ http.createServer(async (req, res) => {
     res.end(data);
   } catch (e) {
     console.error(e);
-    send(res, 500, { error: e.message });
+    send(res, e.status || 500, { error: e.message });
   }
 }).listen(PORT, () => console.log(`Workshop running on http://localhost:${PORT}`));

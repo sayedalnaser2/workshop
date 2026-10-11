@@ -83,9 +83,10 @@ export function readForm(root, fields) {
 export const datalist = (id, values) => `<datalist id="${id}">${[...new Set(values.filter(Boolean))].map((v) => `<option value="${esc(v)}"></option>`).join('')}</datalist>`;
 
 /** Open a create/edit form modal for a generic table row. */
-export function editRow({ table, title, fields, row = null, extra = '', defaults = {}, onSaved, before }) {
+export function editRow({ table, title, fields, row = null, extra = '', defaults = {}, onSaved, before, setup }) {
   const wrap = document.createElement('div');
   wrap.innerHTML = formHTML(fields, row || defaults) + extra;
+  setup?.(wrap);
   modal({
     title, body: wrap, buttons: [
       { label: 'Cancel', close: true },
@@ -142,5 +143,19 @@ export function dataTable(el, { cols, rows, search = [], page = 100, onRow, acti
   return { redraw: draw, setRows: (r) => { rows = r; draw(); } };
 }
 
+/** Benefit / cheque payments need their number: show the right label, mark it required, and check it on save. */
+export const REF_LABEL = { Benefit: 'Benefit number', Cheque: 'Cheque number' };
+export function wireRef(root, methodSel = '[name=method]', refSel = '[name=ref]') {
+  const m = root.querySelector(methodSel); const r = root.querySelector(refSel); if (!m || !r) return;
+  const lab = r.closest('label'); const sp = lab.querySelector('span');
+  const sync = () => { const l = REF_LABEL[m.value]; lab.hidden = !l; r.required = !!l; if (l) { sp.textContent = l + ' *'; r.placeholder = l; } };
+  m.addEventListener('change', () => { sync(); if (REF_LABEL[m.value]) r.focus(); }); sync();
+}
+export function requireRef(d, root) {
+  const l = REF_LABEL[d.method];
+  if (l && !String(d.ref || '').trim()) { root?.querySelector('[name=ref],#ref')?.focus(); throw new Error(`${l} is required when paying by ${d.method}.`); }
+  if (!l) d.ref = '';
+  return d;
+}
 export const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
 export const iconBtn = (act, label, cls = '') => `<button class="btn sm ${cls}" data-act="${act}">${label}</button>`;

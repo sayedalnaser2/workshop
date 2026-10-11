@@ -33,14 +33,14 @@ export async function exportWorkbook() {
   ol.columns.forEach((col, i) => { col.width = [4, 5, 11, 30, 22, 12, 11, 11, 11, 11, 8, 4, 4, 12][i] || 10; });
 
   // ---- Rec.List
-  const rl = wb.addWorksheet('Rec.List'); head(rl, 11, [null, '#', 'Date', 'Rec#', 'Order', 'Client', 'Amount', 'Account']);
+  const rl = wb.addWorksheet('Rec.List'); head(rl, 11, [null, '#', 'Date', 'Rec#', 'Order', 'Client', 'Amount', 'Account', 'Method', 'Ref']);
   rl.getRow(12).values = [null, 0, D('2021-01-01'), '-', '-', '-', 0];
-  db.prepare('SELECT * FROM receipts ORDER BY date, id').all().forEach((r, i) => { rl.getRow(13 + i).values = [null, i + 1, D(r.date), r.no, r.order_inv, r.client, r.amount, r.account || '']; rl.getCell(13 + i, 3).numFmt = 'dd/mm/yyyy'; });
+  db.prepare('SELECT * FROM receipts ORDER BY date, id').all().forEach((r, i) => { rl.getRow(13 + i).values = [null, i + 1, D(r.date), r.no, r.order_inv, r.client, r.amount, r.account || '', r.method || '', r.ref || '']; rl.getCell(13 + i, 3).numFmt = 'dd/mm/yyyy'; });
   rl.columns.forEach((col, i) => { col.width = [4, 5, 12, 10, 12, 30, 12][i]; });
 
   // ---- Pay.List
-  const pl = wb.addWorksheet('Pay.List'); head(pl, 11, [null, '#', 'Date', 'PAY-VOU', 'Paid to', 'Amount', 'Done', 'Account']);
-  db.prepare('SELECT * FROM payments ORDER BY date, id').all().forEach((r, i) => { pl.getRow(12 + i).values = [null, i + 1, D(r.date), r.no, r.paid_to, r.amount, r.done ? 'Done' : '', r.account || '']; pl.getCell(12 + i, 3).numFmt = 'dd/mm/yyyy'; });
+  const pl = wb.addWorksheet('Pay.List'); head(pl, 11, [null, '#', 'Date', 'PAY-VOU', 'Paid to', 'Amount', 'Done', 'Account', 'Method', 'Ref']);
+  db.prepare('SELECT * FROM payments ORDER BY date, id').all().forEach((r, i) => { pl.getRow(12 + i).values = [null, i + 1, D(r.date), r.no, r.paid_to, r.amount, r.done ? 'Done' : '', r.account || '', r.method || '', r.ref || '']; pl.getCell(12 + i, 3).numFmt = 'dd/mm/yyyy'; });
   pl.columns.forEach((col, i) => { col.width = [4, 5, 12, 10, 34, 12, 8][i]; });
 
   // ---- Pur.List (data from row 13 like the original)
