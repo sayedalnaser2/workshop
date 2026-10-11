@@ -10,6 +10,7 @@ import { needsSetup, authenticate, createUser, updateUser, deleteUser, listUsers
 import { tableAccess } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
 import { seedLibrary } from './src/seed.js';
+import { taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated } from './src/tasks.js';
 import { exportWorkbook } from './src/exporter.js';
 import { quoteTotals } from './public/js/calc.js';
 
@@ -132,6 +133,20 @@ async function api(req, res, url) {
   if (p[0] === 'summary') { need(isAA); return send(res, 200, summary()); }
   if (p[0] === 'ledger') { need(isAA); return send(res, 200, ordersLedger()); }
 
+  // --- tasks: workers use these endpoints (never the raw tables) so they only ever touch their own work
+  if (p[0] === 'staff') { need(isAA); return send(res, 200, listUsers().filter((u) => u.active).map((u) => ({ id: u.id, name: u.name, role: u.role }))); }
+  if (p[0] === 'my-tasks') return send(res, 200, myTasks(user));
+  if (p[0] === 'tasks-view') { need(isAA); return send(res, 200, taskViews()); }
+  if (p[0] === 'activity') {
+    need(isAA); const q = url.searchParams; const today = new Date().toISOString().slice(0, 10);
+    return send(res, 200, activity(q.get('from') || today, q.get('to') || today, q.get('user') ? Number(q.get('user')) : null));
+  }
+  if (p[0] === 'tasks' && p[1]) {
+    const tid = Number(p[1]); const t = taskView(tid); if (!t) return send(res, 404, { error: 'Task not found' });
+    if (!isAA && t.assignee_id && t.assignee_id !== user.id) throw forbid();
+    if (m === 'GET' && !p[2]) return send(res, 200, { task: t, logs: logsFor(tid), sessions: sessionsFor(tid) });
+    if (m === 'POST' && p[2] === 'action') return send(res, 200, taskAction(user, tid, await readJson(req)));
+  }
   if (p[0] === 'users') {
     need(role === 'admin');
     const uid = p[1] ? Number(p[1]) : null;
@@ -222,15 +237,18 @@ async function api(req, res, url) {
       const body = await readJson(req);
       const row = tx(() => {
         checkRef(t, body);
+        if (t === 'tasks') { body.status = body.status || 'todo'; body.progress = body.progress ?? 0; body.created_by = user.id; }
         if (worker && t === 'stock') { delete body.unit_cost; if (body.kind === 'leftover' && body.profile_id) { const pr = getRow('profiles', Number(body.profile_id)); body.unit_cost = pr && pr.bar_length > 0 ? Math.round((pr.price_bar / pr.bar_length) * (body.length || 0) * ((getSetting('leftover_pct') ?? 60) / 100) * 1000) / 1000 : 0; } }
         const a = AUTO[t];
         if (a && !body[a[0]]) body[a[0]] = nextNumber(a[1], body.date, true);
-        return insertRow(t, body);
+        const created = insertRow(t, body); if (t === 'tasks') onTaskCreated(created, user); return created;
       });
       return send(res, 201, row);
     }
-    if (id && m === 'PUT') { const cur = getRow(t, id); if (!cur) return send(res, 404, { error: 'Not found' }); const body = await readJson(req); checkRef(t, body, cur); if (worker) delete body.unit_cost; return send(res, 200, updateRow(t, id, body)); }
-    if (id && m === 'DELETE') { deleteRow(t, id); return send(res, 200, { ok: true }); }
+    if (id && m === 'PUT') { const cur = getRow(t, id); if (!cur) return send(res, 404, { error: 'Not found' }); const body = await readJson(req); checkRef(t, body, cur); if (worker) delete body.unit_cost;
+      if (t === 'tasks') { if (body.status === 'done' && cur.status !== 'done') { body.done_at = new Date().toISOString(); body.progress = 100; } else if (body.status && body.status !== 'done' && cur.status === 'done') body.done_at = null; }
+      const saved = updateRow(t, id, body); if (t === 'tasks') onTaskUpdated(cur, saved, user); return send(res, 200, saved); }
+    if (id && m === 'DELETE') { if (t === 'tasks') { db.prepare('DELETE FROM task_logs WHERE task_id=?').run(id); db.prepare('DELETE FROM task_sessions WHERE task_id=?').run(id); } deleteRow(t, id); return send(res, 200, { ok: true }); }
   }
   return send(res, 404, { error: 'Unknown endpoint' });
 }

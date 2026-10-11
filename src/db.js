@@ -30,6 +30,9 @@ export const SCHEMA = {
   cash_entries: { cols: { date: 'TEXT', account: 'TEXT', direction: 'TEXT', amount: 'REAL', category: 'TEXT', party: 'TEXT', note: 'TEXT' }, order: 'date DESC, id DESC' },
   employee_events: { cols: { employee_id: 'INTEGER', date: 'TEXT', type: 'TEXT', amount: 'REAL', note: 'TEXT' }, order: 'date DESC, id DESC' },
   attendance: { cols: { employee_id: 'INTEGER', date: 'TEXT', status: 'TEXT', hours: 'REAL', site: 'TEXT', note: 'TEXT' }, order: 'date' },
+  tasks: { cols: { order_inv: 'TEXT', quote_no: 'TEXT', title: 'TEXT', description: 'TEXT', stage: 'TEXT', assignee_id: 'INTEGER', status: 'TEXT', progress: 'REAL', estimate_min: 'REAL', due: 'TEXT', priority: 'TEXT', created_by: 'INTEGER', started_at: 'TEXT', done_at: 'TEXT', note: 'TEXT' }, order: 'id DESC' },
+  task_logs: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', ts: 'TEXT', kind: 'TEXT', text: 'TEXT', progress: 'REAL', minutes: 'REAL' }, order: 'ts DESC' },
+  task_sessions: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', started: 'TEXT', ended: 'TEXT' }, order: 'started DESC' },
   employee_docs: { cols: { employee_id: 'INTEGER', type: 'TEXT', number: 'TEXT', expiry: 'TEXT', file_name: 'TEXT', file_path: 'TEXT', note: 'TEXT' }, order: 'expiry' },
 };
 
@@ -49,7 +52,7 @@ for (const [t, sc] of Object.entries(SCHEMA)) {
   const have = new Set(db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name));
   for (const [c, ty] of Object.entries(sc.cols)) if (!have.has(c)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${c} ${ty === 'JSON' ? 'TEXT' : ty}`);
 }
-db.exec('CREATE INDEX IF NOT EXISTS ix_stock_profile ON stock(profile_id, kind); CREATE INDEX IF NOT EXISTS ix_att ON attendance(employee_id, date); CREATE INDEX IF NOT EXISTS ix_ev ON employee_events(employee_id);');
+db.exec('CREATE INDEX IF NOT EXISTS ix_stock_profile ON stock(profile_id, kind); CREATE INDEX IF NOT EXISTS ix_tl ON task_logs(task_id); CREATE INDEX IF NOT EXISTS ix_ts ON task_sessions(task_id, user_id); CREATE INDEX IF NOT EXISTS ix_att ON attendance(employee_id, date); CREATE INDEX IF NOT EXISTS ix_ev ON employee_events(employee_id);');
 
 export const getSetting = (k, d = null) => {
   const r = db.prepare('SELECT value FROM settings WHERE key=?').get(k);
@@ -75,6 +78,8 @@ export const DEFAULT_SETTINGS = {
   opening: { cash: 0, bank: 0 },
   leftover_pct: 60,
   min_offcut: 30,
+  task_templates: [{ stage: 'Cutting', title: 'Cut profiles & glass', minutes: 120 }, { stage: 'Assembly', title: 'Assemble frames & fit glass', minutes: 240 }, { stage: 'Delivery', title: 'Deliver to site', minutes: 60 }, { stage: 'Installation', title: 'Install on site', minutes: 300 }],
+  task_stages: ['Cutting', 'Assembly', 'Glazing', 'Painting', 'Delivery', 'Installation', 'Maintenance', 'Other'],
   terms: [
     '- Our delivery time will be within 30 days after our final measurement.',
     '- Payment 50% on acceptance this quotation, 25% while stages working & 25% before fixing on the site.',

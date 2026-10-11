@@ -1,5 +1,7 @@
 import { S, refresh } from '../app.js';
 import { openPoDialog } from '../po-dialog.js';
+import { openTaskForm, addStandardTasks } from '../task-form.js';
+import { fmtMin, variance } from '../time.js';
 import { api, $, esc, money, dmy, today, dataTable, editRow, confirmBox, toast, guard, badge, modal } from '../ui.js';
 
 export async function render(el, [id]) {
@@ -35,8 +37,9 @@ export async function render(el, [id]) {
 }
 
 async function detail(el, id) {
-  const [ledger, receipts, purchases] = await Promise.all([api.get('ledger'), api.get('t/receipts'), api.get('t/purchases')]);
+  const [ledger, receipts, purchases, allTasks] = await Promise.all([api.get('ledger'), api.get('t/receipts'), api.get('t/purchases'), api.get('tasks-view')]);
   const o = ledger.find((x) => x.id === id); if (!o) { el.innerHTML = '<p class="err">Order not found</p>'; return; }
+  const tasks = allTasks.filter((t) => t.order_inv === o.inv);
   const rec = receipts.filter((r) => r.order_inv === o.inv); const pur = purchases.filter((p) => p.order_inv === o.inv);
   el.innerHTML = `<div class="ph"><h1>${esc(o.inv)} — ${esc(o.client)}</h1>${o.done ? badge('Done', 'ok') : badge('Open', 'warn')}<span class="grow"></span><a class="btn" href="#/orders">← Orders</a></div>
   <div class="cards"><div class="card stat"><div class="k">Gross amount</div><div class="v">${money(o.amount, 2)}</div></div><div class="card stat"><div class="k">Paid</div><div class="v">${money(o.paid, 2)}</div></div><div class="card stat"><div class="k">Balance</div><div class="v ${o.balance > 0 ? 'neg' : 'pos'}">${money(o.balance, 2)}</div></div><div class="card stat"><div class="k">Purchases / Profit</div><div class="v">${money(o.cost, 2)} <small class="muted">/ ${money(o.profit, 2)}</small></div></div></div>
@@ -44,7 +47,10 @@ async function detail(el, id) {
   <div class="cols2" style="margin-top:14px;align-items:start">
    <div class="card"><h3>Receipts (${rec.length})</h3><table class="grid"><thead><tr><th>Rec #</th><th>Date</th><th class="num">Amount</th><th></th></tr></thead><tbody>${rec.map((r) => `<tr><td>${esc(r.no)}</td><td>${dmy(r.date)}</td><td class="num">${money(r.amount, 2)}</td><td class="act"><a class="btn sm" href="#/receipts/${r.id}/print">Print</a></td></tr>`).join('') || '<tr><td colspan="4" class="empty">No receipts yet</td></tr>'}</tbody></table></div>
    <div class="card"><h3>Purchases charged to this order (${pur.length})</h3><table class="grid"><thead><tr><th>Date</th><th>Supplier</th><th class="num">Amount</th></tr></thead><tbody>${pur.map((p) => `<tr><td>${dmy(p.date)}</td><td>${esc(p.supplier)}</td><td class="num">${money(p.amount, 2)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">None</td></tr>'}</tbody></table></div></div>
+  <div class="card" style="margin-top:14px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Tasks (${tasks.length})</h3><span class="grow"></span><button class="btn sm" id="stdt">Add standard tasks</button><button class="btn sm primary" id="newt">+ Task</button></div><table class="grid" style="margin-top:8px"><thead><tr><th>Task</th><th>Worker</th><th>Status</th><th class="num">Progress</th><th class="num">Estimate</th><th class="num">Actual</th><th>Vs est.</th></tr></thead><tbody>${tasks.map((t) => `<tr class="click" onclick="location.hash='#/tasks/${t.id}'"><td><b>${esc(t.title)}</b> <span class="muted">${esc(t.stage || '')}</span></td><td>${esc(t.assignee_name || '—')}</td><td>${badge({ todo: 'To do', doing: 'In progress', blocked: 'Blocked', done: 'Done' }[t.status], t.status === 'done' ? 'ok' : t.status === 'blocked' ? 'bad' : t.status === 'doing' ? 'warn' : '')}${t.running_since ? ' <span class="pos">●</span>' : ''}</td><td class="num">${Math.round(t.progress || 0)}%</td><td class="num">${t.estimate_min ? fmtMin(t.estimate_min) : '—'}</td><td class="num">${fmtMin(t.actual_min)}</td><td>${t.actual_min ? variance(t.estimate_min, t.actual_min) : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No tasks yet</td></tr>'}</tbody></table></div>
   <div class="sticky-actions"><a class="btn primary" href="#/receipts/new/${o.id}">+ Receive payment</a><a class="btn" href="#/statements/${encodeURIComponent(o.client)}">Customer statement</a><button class="btn" id="po">Purchase order</button><button class="btn" id="done">${o.done ? 'Re-open order' : 'Mark as done'}</button><button class="btn danger" id="del">Delete order</button></div>`;
+  $('#newt', el).onclick = () => openTaskForm({ order_inv: o.inv, onSaved: () => detail(el, id) });
+  $('#stdt', el).onclick = guard(() => addStandardTasks(o.inv, () => detail(el, id)));
   $('#po', el).onclick = guard(async () => { const q = o.quote_no ? (await api.get('t/quotes')).find((x) => x.number === o.quote_no) : null; openPoDialog({ quote: q || null, orderInv: o.inv, onDone: () => (location.hash = '#/pos') }); });
   $('#done', el).onclick = guard(async () => { await api.put(`t/orders/${id}`, { done: o.done ? 0 : 1 }); toast('Updated'); detail(el, id); });
   $('#del', el).onclick = guard(async () => { if (await confirmBox(`Delete order ${o.inv}? Receipts keep their reference.`)) { await api.del(`t/orders/${id}`); location.hash = '#/orders'; } });
