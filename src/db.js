@@ -11,18 +11,26 @@ db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 export const SCHEMA = {
   price_items: { cols: { name: 'TEXT', rate: 'REAL', type: 'TEXT', unit: 'TEXT', note: 'TEXT', model_id: 'INTEGER', sort: 'INTEGER' }, order: 'sort, id' },
   quotes: {
-    cols: { number: 'TEXT', date: 'TEXT', client: 'TEXT', mobile: 'TEXT', site: 'TEXT', title: 'TEXT', items: 'JSON', discount: 'REAL', vat_rate: 'REAL', vat_waived: 'REAL', status: 'TEXT', prepared_by: 'TEXT', notes: 'TEXT', order_inv: 'TEXT' },
+    cols: { number: 'TEXT', date: 'TEXT', client: 'TEXT', mobile: 'TEXT', site: 'TEXT', title: 'TEXT', items: 'JSON', discount: 'REAL', vat_rate: 'REAL', vat_waived: 'REAL', status: 'TEXT', prepared_by: 'TEXT', notes: 'TEXT', order_inv: 'TEXT', colour: 'TEXT' },
     order: 'date DESC, id DESC',
   },
   orders: { cols: { inv: 'TEXT', date: 'TEXT', client: 'TEXT', site: 'TEXT', mobile: 'TEXT', amount: 'REAL', done: 'INTEGER', quote_no: 'TEXT', note: 'TEXT' }, order: 'date DESC, id DESC' },
-  receipts: { cols: { no: 'TEXT', date: 'TEXT', order_inv: 'TEXT', client: 'TEXT', amount: 'REAL', method: 'TEXT', note: 'TEXT' }, order: 'date DESC, id DESC' },
-  payments: { cols: { no: 'TEXT', date: 'TEXT', paid_to: 'TEXT', amount: 'REAL', done: 'INTEGER', category: 'TEXT', lines: 'JSON', note: 'TEXT' }, order: 'date DESC, id DESC' },
+  receipts: { cols: { no: 'TEXT', date: 'TEXT', order_inv: 'TEXT', client: 'TEXT', amount: 'REAL', method: 'TEXT', note: 'TEXT', account: 'TEXT' }, order: 'date DESC, id DESC' },
+  payments: { cols: { no: 'TEXT', date: 'TEXT', paid_to: 'TEXT', amount: 'REAL', done: 'INTEGER', category: 'TEXT', lines: 'JSON', note: 'TEXT', account: 'TEXT', employee_id: 'INTEGER' }, order: 'date DESC, id DESC' },
   purchases: { cols: { date: 'TEXT', pv: 'TEXT', invoice: 'TEXT', supplier: 'TEXT', amount: 'REAL', order_inv: 'TEXT', note: 'TEXT' }, order: 'date DESC, id DESC' },
-  employees: { cols: { name: 'TEXT', salary: 'REAL', active: 'INTEGER', note: 'TEXT' }, order: 'name' },
+  employees: { cols: { name: 'TEXT', salary: 'REAL', active: 'INTEGER', note: 'TEXT', role: 'TEXT', nationality: 'TEXT', id_no: 'TEXT', passport_no: 'TEXT', phone: 'TEXT', join_date: 'TEXT', left_date: 'TEXT', permit_expiry: 'TEXT', iban: 'TEXT', emergency: 'TEXT', address: 'TEXT' }, order: 'name' },
   profiles: { cols: { code: 'TEXT', name: 'TEXT', series: 'TEXT', bar_length: 'REAL', price_bar: 'REAL', weight_m: 'REAL', color: 'TEXT' }, order: 'series, name' },
   accessories: { cols: { code: 'TEXT', name: 'TEXT', unit: 'TEXT', price: 'REAL' }, order: 'name' },
   glass_types: { cols: { name: 'TEXT', price_m2: 'REAL', thickness: 'TEXT' }, order: 'name' },
   models: { cols: { name: 'TEXT', series: 'TEXT', kind: 'TEXT', category: 'TEXT', def_w: 'REAL', def_h: 'REAL', spec: 'JSON', note: 'TEXT' }, order: 'category, name' },
+  suppliers: { cols: { name: 'TEXT', phone: 'TEXT', phone2: 'TEXT', address: 'TEXT', email: 'TEXT', note: 'TEXT' }, order: 'name' },
+  items: { cols: { code: 'TEXT', name: 'TEXT', kind: 'TEXT', series: 'TEXT', supplier: 'TEXT', unit: 'TEXT', price: 'REAL', profile_id: 'INTEGER', glass_id: 'INTEGER', accessory_id: 'INTEGER', note: 'TEXT' }, order: 'kind, series, code' },
+  stock: { cols: { kind: 'TEXT', item_type: 'TEXT', profile_id: 'INTEGER', glass_id: 'INTEGER', name: 'TEXT', code: 'TEXT', colour: 'TEXT', length: 'REAL', width: 'REAL', qty: 'REAL', unit: 'TEXT', unit_cost: 'REAL', location: 'TEXT', reserved_for: 'TEXT', order_inv: 'TEXT', date: 'TEXT', note: 'TEXT' }, order: 'kind, name, colour, length DESC' },
+  purchase_orders: { cols: { po: 'TEXT', date: 'TEXT', supplier: 'TEXT', order_inv: 'TEXT', quote_no: 'TEXT', status: 'TEXT', lines: 'JSON', total: 'REAL', note: 'TEXT' }, order: 'date DESC, id DESC' },
+  cash_entries: { cols: { date: 'TEXT', account: 'TEXT', direction: 'TEXT', amount: 'REAL', category: 'TEXT', party: 'TEXT', note: 'TEXT' }, order: 'date DESC, id DESC' },
+  employee_events: { cols: { employee_id: 'INTEGER', date: 'TEXT', type: 'TEXT', amount: 'REAL', note: 'TEXT' }, order: 'date DESC, id DESC' },
+  attendance: { cols: { employee_id: 'INTEGER', date: 'TEXT', status: 'TEXT', hours: 'REAL', site: 'TEXT', note: 'TEXT' }, order: 'date' },
+  employee_docs: { cols: { employee_id: 'INTEGER', type: 'TEXT', number: 'TEXT', expiry: 'TEXT', file_name: 'TEXT', file_path: 'TEXT', note: 'TEXT' }, order: 'expiry' },
 };
 
 const ddl = [];
@@ -35,6 +43,12 @@ ddl.push('CREATE INDEX IF NOT EXISTS ix_receipts_order ON receipts(order_inv);')
 ddl.push('CREATE INDEX IF NOT EXISTS ix_purchases_order ON purchases(order_inv);');
 ddl.push('CREATE INDEX IF NOT EXISTS ix_orders_inv ON orders(inv);');
 db.exec(ddl.join('\n'));
+// add columns introduced after a database was first created
+for (const [t, sc] of Object.entries(SCHEMA)) {
+  const have = new Set(db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name));
+  for (const [c, ty] of Object.entries(sc.cols)) if (!have.has(c)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${c} ${ty === 'JSON' ? 'TEXT' : ty}`);
+}
+db.exec('CREATE INDEX IF NOT EXISTS ix_stock_profile ON stock(profile_id, kind); CREATE INDEX IF NOT EXISTS ix_att ON attendance(employee_id, date); CREATE INDEX IF NOT EXISTS ix_ev ON employee_events(employee_id);');
 
 export const getSetting = (k, d = null) => {
   const r = db.prepare('SELECT value FROM settings WHERE key=?').get(k);
@@ -55,7 +69,11 @@ export const DEFAULT_SETTINGS = {
     currency: 'BD',
   },
   vat_rate: 10,
-  counters: { quote: 1, invoice: 1, receipt: 1, payment: 1 },
+  counters: { quote: 1, invoice: 1, receipt: 1, payment: 1, po: 1 },
+  colours: ['White', 'Brown', 'Black', 'Bronze', 'Silver', 'Wood', 'Grey'],
+  opening: { cash: 0, bank: 0 },
+  leftover_pct: 60,
+  min_offcut: 30,
   terms: [
     '- Our delivery time will be within 30 days after our final measurement.',
     '- Payment 50% on acceptance this quotation, 25% while stages working & 25% before fixing on the site.',
@@ -87,6 +105,7 @@ export function nextNumber(kind, date, consume = false) {
     case 'invoice': return `I${ym(date)}${pad(n)}`;
     case 'receipt': return `R ${pad(n)}`;
     case 'payment': return `P ${pad(n)}`;
+    case 'po': return `PO${ym(date)}${pad(n)}`;
   }
   throw new Error('bad kind');
 }

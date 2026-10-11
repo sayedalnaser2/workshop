@@ -36,6 +36,11 @@ This loads the price list, all `Q…` quotation sheets, orders, receipts, paymen
 | **Models** *(new)* | Window/door templates with drawing + formulas (`W`, `H` in cm) for profile cut lengths, glass panes and accessories. |
 | **Cutting List & Glass** *(new)* | From a quotation (or ad-hoc lines): cut lengths per profile with bar nesting and waste %, glass sizes/areas, accessory totals, material cost. |
 | **Profiles, Glass & Accessories** *(new)* | Library with prices used by models and cost estimates. |
+| **Stock & Leftovers** *(new)* | New stock (bars, glass, hardware) and leftovers/offcuts with colour, length and location. The Cutting List uses leftovers first, takes bars out of stock and saves new offcuts. |
+| **Leftover suggestions on quotations** *(new)* | Per quotation colour; matches the pieces each model needs against leftovers of the same colour, shows new cost vs leftover cost (the price difference) and can reserve them. |
+| **Suppliers, Catalogue, Purchase Orders** *(new)* | Converting a quotation to an invoice opens a purchase-order dialog: bars needed (after leftovers and stock), glass and accessories, pick the supplier per line. Receiving a PO adds stock and records the purchase against the order. |
+| **Cash & Bank** *(new)* | Separate bank and cash statements with running balances, opening balances, manual in/out entries, transfers. Receipts and vouchers choose the account. |
+| **Employee files** *(new)* | Profile, salary payments, advances/deductions, monthly attendance, documents with expiry dates and file upload, printable file. |
 
 The starter models/profiles use generic deductions and zero prices — edit them under **Models** and **Profiles, Glass & Accessories** to match your profile system.
 

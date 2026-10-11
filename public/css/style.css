@@ -105,7 +105,7 @@ table.grid { width: 100%; border-collapse: collapse; }
 /* quote editor */
 .qhead { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .items-wrap { overflow-x: auto; }
-table.items { width: 100%; border-collapse: collapse; min-width: 980px; }
+table.items { width: 100%; border-collapse: collapse; min-width: 1120px; }
 .items th { font-size: 11px; text-transform: uppercase; color: var(--muted); text-align: left; padding: 6px 4px; }
 .items td { padding: 3px 3px; vertical-align: top; border-top: 1px solid var(--line); }
 .items td input, .items td select, .items td textarea { padding: 5px 6px; }

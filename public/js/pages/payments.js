@@ -36,7 +36,7 @@ async function form(el, pre) {
   if (!v.lines?.length) v.lines = [{ text: '', amount: '' }];
   el.innerHTML = `<div class="ph"><h1>New payment voucher</h1><span class="grow"></span><a class="btn" href="#/payments">← Vouchers</a></div>${datalist('dl-payees', payees)}
   <div class="card" style="max-width:820px"><div class="form"><label class="field"><span>Voucher # (blank = ${esc(S.next.payment)})</span><input id="no"></label><label class="field"><span>Date</span><input id="date" type="date" value="${esc(v.date)}"></label>
-  <label class="field"><span>Paid to (Mr / Miss)</span><input id="paid_to" list="dl-payees" value="${esc(v.paid_to || '')}" autocomplete="off"></label><label class="field"><span>Category</span><select id="category">${CATS.map((c) => `<option ${v.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label></div>
+  <label class="field"><span>Paid to (Mr / Miss)</span><input id="paid_to" list="dl-payees" value="${esc(v.paid_to || '')}" autocomplete="off"></label><label class="field"><span>Category</span><select id="category">${CATS.map((c) => `<option ${v.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label><label class="field"><span>Paid from</span><select id="account"><option value="bank">Bank account</option><option value="cash" ${v.account === 'cash' ? 'selected' : ''}>Cash box</option></select></label></div>
   <h4 style="margin:16px 0 6px">Particulars</h4><table class="mini" id="lines"><thead><tr><th>Particulars</th><th style="width:130px">Amount (BD)</th><th></th></tr></thead><tbody></tbody></table>
   <button class="btn sm" id="addLine" style="margin-top:6px">+ Add line</button><p style="text-align:right;font-size:18px"><b>Total: <span id="total"></span></b></p>
   <label class="field check"><input type="checkbox" id="done" ${v.done ? 'checked' : ''}><span>Mark as done / settled</span></label>
@@ -52,7 +52,7 @@ async function form(el, pre) {
     const lines = v.lines.filter((l) => l.text || num(l.amount));
     if (!$('#paid_to', el).value.trim()) return toast('Enter who was paid', 'err');
     if (!total()) return toast('Enter an amount', 'err');
-    const d = { no: $('#no', el).value.trim(), date: $('#date', el).value, paid_to: $('#paid_to', el).value.trim(), category: $('#category', el).value, amount: total(), done: $('#done', el).checked ? 1 : 0, lines: lines.map((l) => ({ text: l.text, amount: num(l.amount) })) };
+    const d = { no: $('#no', el).value.trim(), date: $('#date', el).value, paid_to: $('#paid_to', el).value.trim(), category: $('#category', el).value, account: $('#account', el).value, employee_id: v.employee_id || null, amount: total(), done: $('#done', el).checked ? 1 : 0, lines: lines.map((l) => ({ text: l.text, amount: num(l.amount) })) };
     const r = await api.post('t/payments', d); await refresh(); toast(`Saved ${r.no}`);
     location.hash = print ? `#/payments/${r.id}/print` : '#/payments';
   });

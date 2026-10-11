@@ -33,14 +33,14 @@ export async function exportWorkbook() {
   ol.columns.forEach((col, i) => { col.width = [4, 5, 11, 30, 22, 12, 11, 11, 11, 11, 8, 4, 4, 12][i] || 10; });
 
   // ---- Rec.List
-  const rl = wb.addWorksheet('Rec.List'); head(rl, 11, [null, '#', 'Date', 'Rec#', 'Order', 'Client', 'Amount']);
+  const rl = wb.addWorksheet('Rec.List'); head(rl, 11, [null, '#', 'Date', 'Rec#', 'Order', 'Client', 'Amount', 'Account']);
   rl.getRow(12).values = [null, 0, D('2021-01-01'), '-', '-', '-', 0];
-  db.prepare('SELECT * FROM receipts ORDER BY date, id').all().forEach((r, i) => { rl.getRow(13 + i).values = [null, i + 1, D(r.date), r.no, r.order_inv, r.client, r.amount]; rl.getCell(13 + i, 3).numFmt = 'dd/mm/yyyy'; });
+  db.prepare('SELECT * FROM receipts ORDER BY date, id').all().forEach((r, i) => { rl.getRow(13 + i).values = [null, i + 1, D(r.date), r.no, r.order_inv, r.client, r.amount, r.account || '']; rl.getCell(13 + i, 3).numFmt = 'dd/mm/yyyy'; });
   rl.columns.forEach((col, i) => { col.width = [4, 5, 12, 10, 12, 30, 12][i]; });
 
   // ---- Pay.List
-  const pl = wb.addWorksheet('Pay.List'); head(pl, 11, [null, '#', 'Date', 'PAY-VOU', 'Paid to', 'Amount', 'Done']);
-  db.prepare('SELECT * FROM payments ORDER BY date, id').all().forEach((r, i) => { pl.getRow(12 + i).values = [null, i + 1, D(r.date), r.no, r.paid_to, r.amount, r.done ? 'Done' : '']; pl.getCell(12 + i, 3).numFmt = 'dd/mm/yyyy'; });
+  const pl = wb.addWorksheet('Pay.List'); head(pl, 11, [null, '#', 'Date', 'PAY-VOU', 'Paid to', 'Amount', 'Done', 'Account']);
+  db.prepare('SELECT * FROM payments ORDER BY date, id').all().forEach((r, i) => { pl.getRow(12 + i).values = [null, i + 1, D(r.date), r.no, r.paid_to, r.amount, r.done ? 'Done' : '', r.account || '']; pl.getCell(12 + i, 3).numFmt = 'dd/mm/yyyy'; });
   pl.columns.forEach((col, i) => { col.width = [4, 5, 12, 10, 34, 12, 8][i]; });
 
   // ---- Pur.List (data from row 13 like the original)
@@ -61,7 +61,7 @@ export async function exportWorkbook() {
     ws.getCell('B11').value = 'Client        :'; ws.getCell('D11').value = q.client;
     ws.getCell('I11').value = 'W/Site:'; ws.getCell('J11').value = q.site;
     ws.getRow(13).values = [null, '#', 'Size', null, 'Description', null, null, null, 'Qty', 'Unit']; ws.getRow(14).values = [null, null, 'Widh', 'Height'];
-    ws.getCell('B15').value = q.title;
+    ws.getCell('B15').value = q.title; ws.getCell('L9').value = 'Colour:'; ws.getCell('M9').value = q.colour || '';
     let r = 16, n = 0;
     for (const it of q.items) {
       if (it.kind === 'note') { ws.getCell(r, 5).value = it.desc; r++; continue; }
@@ -79,5 +79,19 @@ export async function exportWorkbook() {
     ws.getColumn(5).width = 60; ws.getColumn(4).width = 14; ws.getColumn(2).width = 14; ws.getColumn(10).width = 12;
     ws.getColumn(10).numFmt = money;
   }
+  // ---- stock, suppliers, catalogue, cash & bank, employee files
+  const pn = Object.fromEntries(listRows('profiles').map((x) => [x.id, `${x.series || ''} ${x.name}`.trim()]));
+  const gn = Object.fromEntries(listRows('glass_types').map((x) => [x.id, x.name]));
+  const st = wb.addWorksheet('Stock'); head(st, 1, ['Kind (new/leftover)', 'Type', 'Profile / glass', 'Name', 'Code', 'Colour', 'Length cm', 'Width cm', 'Qty', 'Unit', 'Unit cost', 'Location', 'Reserved for', 'From order', 'Date', 'Note']);
+  listRows('stock').forEach((r, i) => { st.getRow(2 + i).values = [r.kind, r.item_type, pn[r.profile_id] || gn[r.glass_id] || '', r.name, r.code, r.colour, r.length, r.width, r.qty, r.unit, r.unit_cost, r.location, r.reserved_for, r.order_inv, D(r.date), r.note]; });
+  st.columns.forEach((c) => { c.width = 16; });
+  const sp = wb.addWorksheet('Suppliers'); head(sp, 1, ['Name', 'Phone', 'Phone 2', 'Address', 'Email', 'Note']);
+  listRows('suppliers').forEach((r, i) => { sp.getRow(2 + i).values = [r.name, r.phone, r.phone2, r.address, r.email, r.note]; }); sp.columns.forEach((c) => { c.width = 24; });
+  const it = wb.addWorksheet('Items'); head(it, 1, ['Code', 'Item', 'Kind', 'Series', 'Supplier', 'Unit', 'Price', 'Note']);
+  listRows('items').forEach((r, i) => { it.getRow(2 + i).values = [r.code, r.name, r.kind, r.series, r.supplier, r.unit, r.price, r.note]; }); it.columns.forEach((c) => { c.width = 22; });
+  const cb = wb.addWorksheet('Cash & Bank'); head(cb, 1, ['Date', 'Account (cash/bank)', 'Direction (in/out)', 'Amount', 'Category', 'Party', 'Note']);
+  db.prepare('SELECT * FROM cash_entries ORDER BY date, id').all().forEach((r, i) => { cb.getRow(2 + i).values = [D(r.date), r.account, r.direction, r.amount, r.category, r.party, r.note]; cb.getCell(2 + i, 1).numFmt = 'dd/mm/yyyy'; }); cb.columns.forEach((c) => { c.width = 18; });
+  const em = wb.addWorksheet('Employees'); head(em, 1, ['Name', 'Salary', 'Active (yes/no)', 'Trade', 'Nationality', 'CPR / ID', 'Passport', 'Phone', 'Joined', 'Permit expires', 'Bank / IBAN', 'Emergency contact', 'Address', 'Note']);
+  listRows('employees').forEach((r, i) => { em.getRow(2 + i).values = [r.name, r.salary, r.active ? 'yes' : 'no', r.role, r.nationality, r.id_no, r.passport_no, r.phone, D(r.join_date), D(r.permit_expiry), r.iban, r.emergency, r.address, r.note]; }); em.columns.forEach((c) => { c.width = 18; });
   return wb.xlsx.writeBuffer();
 }

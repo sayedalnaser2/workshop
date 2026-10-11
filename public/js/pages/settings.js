@@ -12,10 +12,12 @@ export async function render(el) {
      <label class="field full"><span>Phones</span><input id="c_phones" value="${esc(c.phones)}"></label><label class="field full"><span>Address</span><input id="c_address" value="${esc(c.address)}"></label></div></div>
    <div class="card" style="margin-top:14px"><h3>Quotation defaults</h3><div class="form">
      <label class="field"><span>VAT rate %</span><input id="vat" type="number" step="any" value="${S.settings.vat_rate ?? 10}"></label><label class="field"><span>Saw kerf for cutting lists (cm)</span><input id="kerf" type="number" step="any" value="${S.settings.bar_kerf ?? 0.5}"></label>
+     <label class="field full"><span>Colours (comma separated)</span><input id="colours" value="${esc((S.settings.colours || []).join(', '))}"></label>
+     <label class="field"><span>Leftover value, % of new price</span><input id="lpct" type="number" step="any" value="${S.settings.leftover_pct ?? 60}"></label><label class="field"><span>Smallest offcut to keep (cm)</span><input id="minoff" type="number" step="any" value="${S.settings.min_offcut ?? 30}"></label>
      <label class="field full"><span>Default heading line</span><input id="intro" value="${esc(S.settings.intro_line)}"></label>
      <label class="field full"><span>Terms &amp; conditions (one per line)</span><textarea id="terms" rows="6">${esc((S.settings.terms || []).join('\n'))}</textarea></label>
      <label class="field full"><span>Receipt notes (one per line)</span><textarea id="rnotes" rows="3">${esc((S.settings.receipt_notes || []).join('\n'))}</textarea></label></div></div>
-   <div class="card" style="margin-top:14px"><h3>Next document numbers</h3><div class="form" style="grid-template-columns:repeat(4,1fr)">${[['quote', 'Quotation'], ['invoice', 'Invoice'], ['receipt', 'Receipt'], ['payment', 'Payment']].map(([key, l]) => `<label class="field"><span>${l}</span><input data-c="${key}" type="number" min="1" value="${k[key] || 1}"></label>`).join('')}</div><p class="muted">Quotes look like <b>${esc(S.next.quote)}</b>, invoices <b>${esc(S.next.invoice)}</b>.</p></div>
+   <div class="card" style="margin-top:14px"><h3>Next document numbers</h3><div class="form" style="grid-template-columns:repeat(5,1fr)">${[['quote', 'Quotation'], ['invoice', 'Invoice'], ['receipt', 'Receipt'], ['payment', 'Payment'], ['po', 'Purchase order']].map(([key, l]) => `<label class="field"><span>${l}</span><input data-c="${key}" type="number" min="1" value="${k[key] || 1}"></label>`).join('')}</div><p class="muted">Quotes look like <b>${esc(S.next.quote)}</b>, invoices <b>${esc(S.next.invoice)}</b>.</p></div>
    <div class="sticky-actions"><button class="btn primary" id="save">Save settings</button></div>
   </div>
   <div>
@@ -28,7 +30,7 @@ export async function render(el) {
     const lines = (v) => v.split('\n').map((x) => x.trim()).filter(Boolean);
     const counters = { ...S.settings.counters };
     for (const i of el.querySelectorAll('[data-c]')) counters[i.dataset.c] = Math.max(1, Math.floor(num(i.value)));
-    await api.put('settings', { company: { ...c, name: $('#c_name', el).value, name_ar: $('#c_name_ar', el).value, cr: $('#c_cr', el).value, email: $('#c_email', el).value, phones: $('#c_phones', el).value, address: $('#c_address', el).value }, vat_rate: num($('#vat', el).value), bar_kerf: num($('#kerf', el).value), intro_line: $('#intro', el).value, terms: lines($('#terms', el).value), receipt_notes: lines($('#rnotes', el).value), counters });
+    await api.put('settings', { company: { ...c, name: $('#c_name', el).value, name_ar: $('#c_name_ar', el).value, cr: $('#c_cr', el).value, email: $('#c_email', el).value, phones: $('#c_phones', el).value, address: $('#c_address', el).value }, vat_rate: num($('#vat', el).value), bar_kerf: num($('#kerf', el).value), colours: $('#colours', el).value.split(',').map((x) => x.trim()).filter(Boolean), leftover_pct: num($('#lpct', el).value), min_offcut: num($('#minoff', el).value), intro_line: $('#intro', el).value, terms: lines($('#terms', el).value), receipt_notes: lines($('#rnotes', el).value), counters });
     await refresh(); toast('Settings saved'); render(el);
   });
   $('#imp', el).onclick = guard(async () => {

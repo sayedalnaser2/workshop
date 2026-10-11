@@ -1,4 +1,5 @@
 import { S, refresh } from '../app.js';
+import { openPoDialog } from '../po-dialog.js';
 import { api, $, esc, money, dmy, today, dataTable, editRow, confirmBox, toast, guard, badge, modal } from '../ui.js';
 
 export async function render(el, [id]) {
@@ -43,7 +44,8 @@ async function detail(el, id) {
   <div class="cols2" style="margin-top:14px;align-items:start">
    <div class="card"><h3>Receipts (${rec.length})</h3><table class="grid"><thead><tr><th>Rec #</th><th>Date</th><th class="num">Amount</th><th></th></tr></thead><tbody>${rec.map((r) => `<tr><td>${esc(r.no)}</td><td>${dmy(r.date)}</td><td class="num">${money(r.amount, 2)}</td><td class="act"><a class="btn sm" href="#/receipts/${r.id}/print">Print</a></td></tr>`).join('') || '<tr><td colspan="4" class="empty">No receipts yet</td></tr>'}</tbody></table></div>
    <div class="card"><h3>Purchases charged to this order (${pur.length})</h3><table class="grid"><thead><tr><th>Date</th><th>Supplier</th><th class="num">Amount</th></tr></thead><tbody>${pur.map((p) => `<tr><td>${dmy(p.date)}</td><td>${esc(p.supplier)}</td><td class="num">${money(p.amount, 2)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">None</td></tr>'}</tbody></table></div></div>
-  <div class="sticky-actions"><a class="btn primary" href="#/receipts/new/${o.id}">+ Receive payment</a><a class="btn" href="#/statements/${encodeURIComponent(o.client)}">Customer statement</a><button class="btn" id="done">${o.done ? 'Re-open order' : 'Mark as done'}</button><button class="btn danger" id="del">Delete order</button></div>`;
+  <div class="sticky-actions"><a class="btn primary" href="#/receipts/new/${o.id}">+ Receive payment</a><a class="btn" href="#/statements/${encodeURIComponent(o.client)}">Customer statement</a><button class="btn" id="po">Purchase order</button><button class="btn" id="done">${o.done ? 'Re-open order' : 'Mark as done'}</button><button class="btn danger" id="del">Delete order</button></div>`;
+  $('#po', el).onclick = guard(async () => { const q = o.quote_no ? (await api.get('t/quotes')).find((x) => x.number === o.quote_no) : null; openPoDialog({ quote: q || null, orderInv: o.inv, onDone: () => (location.hash = '#/pos') }); });
   $('#done', el).onclick = guard(async () => { await api.put(`t/orders/${id}`, { done: o.done ? 0 : 1 }); toast('Updated'); detail(el, id); });
   $('#del', el).onclick = guard(async () => { if (await confirmBox(`Delete order ${o.inv}? Receipts keep their reference.`)) { await api.del(`t/orders/${id}`); location.hash = '#/orders'; } });
 }

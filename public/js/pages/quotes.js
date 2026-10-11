@@ -2,9 +2,12 @@ import { S, refresh } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, toast, guard, confirmBox, dataTable, badge, datalist } from '../ui.js';
 import { quoteTotals, priceFor, amountInWords, modelCost } from '../calc.js';
 import { printView, docHeader } from '../doc.js';
+import { quotePieces, allocateLeftovers } from '../stock.js';
+import { openPoDialog } from '../po-dialog.js';
+import { dot } from './stock.js';
 
 const STATUS = { draft: ['Draft', ''], sent: ['Sent', 'blue'], accepted: ['Accepted', 'ok'], rejected: ['Rejected', 'bad'] };
-const blankItem = () => ({ w: null, h: null, desc: '', note: '', qty: 1, price: 0, manual: false, model_id: null, glass_id: null });
+const blankItem = () => ({ w: null, h: null, desc: '', note: '', qty: 1, price: 0, manual: false, model_id: null, glass_id: null, colour: '' });
 
 export async function render(el, [a, b]) {
   if (a === 'new') return editor(el, null);
@@ -48,9 +51,10 @@ async function duplicate(id) {
 
 // ------------------------------------------------------------------ editor
 async function editor(el, id) {
-  const q = id ? await api.get(`t/quotes/${id}`) : { number: '', date: today(), client: '', mobile: '', site: '', title: S.settings.intro_line || '', items: [blankItem(), blankItem(), blankItem()], discount: 0, vat_rate: S.settings.vat_rate ?? 10, vat_waived: 0, status: 'draft', prepared_by: '', notes: '' };
+  const q = id ? await api.get(`t/quotes/${id}`) : { number: '', date: today(), client: '', mobile: '', site: '', title: S.settings.intro_line || '', items: [blankItem(), blankItem(), blankItem()], discount: 0, vat_rate: S.settings.vat_rate ?? 10, vat_waived: 0, status: 'draft', prepared_by: '', notes: '', colour: '' };
   if (!q.items?.length) q.items = [blankItem()];
   const all = await api.get('t/quotes');
+  let stockRows = await api.get('t/stock');
   const clients = [...new Set(all.map((x) => x.client))];
   const lib = { profiles: S.profiles, accessories: S.accessories };
   const pi = (d) => S.price_items.find((p) => p.name.trim().toLowerCase() === String(d).trim().toLowerCase());
@@ -65,11 +69,13 @@ async function editor(el, id) {
     <label class="field"><span>Mobile</span><input id="mobile" value="${esc(q.mobile)}"></label>
     <label class="field"><span>Site</span><input id="site" value="${esc(q.site)}"></label>
     <label class="field" style="grid-column: span 2"><span>Heading line (printed above the items)</span><input id="title" value="${esc(q.title)}"></label>
+    <label class="field"><span>Colour (whole quotation)</span><select id="colour"><option value="">— not set —</option>${(S.settings.colours || []).map((c) => `<option ${q.colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
     <label class="field"><span>Status</span><select id="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
   </div></div>
-  <div class="card" style="margin-top:14px"><div class="items-wrap"><table class="items"><thead><tr><th></th><th>Width cm</th><th>Height cm</th><th>Description (pick from price list or type)</th><th>Model</th><th>Glass</th><th>Qty</th><th>Unit price</th><th class="tot">Amount</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="card" style="margin-top:14px"><div class="items-wrap"><table class="items"><thead><tr><th></th><th>Width cm</th><th>Height cm</th><th>Description (pick from price list or type)</th><th>Model</th><th>Glass</th><th>Colour</th><th>Qty</th><th>Unit price</th><th class="tot">Amount</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="addItem">+ Add item</button><button class="btn" id="addNote">+ Add heading / note line</button></div>
   </div>
+  <div class="card" style="margin-top:14px" id="lo"></div>
   <div class="card" style="margin-top:14px"><div class="cols2">
     <div><label class="field"><span>Internal notes (not printed)</span><textarea id="notes" rows="3">${esc(q.notes || '')}</textarea></label><label class="field" style="margin-top:10px"><span>Prepared by</span><input id="prepared_by" value="${esc(q.prepared_by || '')}"></label><p class="words" id="words"></p><p class="muted" id="costline"></p></div>
     <div class="totals" id="totals"></div>
@@ -84,7 +90,7 @@ async function editor(el, id) {
   const drawRows = () => {
     tbody.innerHTML = q.items.map((it, i) => {
       const isNote = it.kind === 'note';
-      if (isNote) return `<tr data-i="${i}"><td class="n">${i + 1}</td><td colspan="8"><input data-k="desc" value="${esc(it.desc)}" placeholder="Heading or note line (e.g. MAINTENANCE:)" style="font-weight:600"></td><td>${rowBtns(i)}</td></tr>`;
+      if (isNote) return `<tr data-i="${i}"><td class="n">${i + 1}</td><td colspan="9"><input data-k="desc" value="${esc(it.desc)}" placeholder="Heading or note line (e.g. MAINTENANCE:)" style="font-weight:600"></td><td>${rowBtns(i)}</td></tr>`;
       return `<tr data-i="${i}" class="${it.manual ? 'manual' : ''}">
         <td class="n">${i + 1}</td>
         <td><input class="w-s" data-k="w" type="number" step="any" value="${it.w ?? ''}"></td>
@@ -92,9 +98,10 @@ async function editor(el, id) {
         <td style="min-width:300px"><input data-k="desc" list="dl-prices" value="${esc(it.desc)}" autocomplete="off"><div class="sub"><textarea data-k="note" rows="1" placeholder="Sub-description (e.g. W/1 – one side swing, other side fix)">${esc(it.note || '')}</textarea></div></td>
         <td><select data-k="model_id" style="width:120px">${modelOpts(it.model_id)}</select></td>
         <td><select data-k="glass_id" style="width:110px">${glassOpts(it.glass_id)}</select></td>
+        <td><select data-k="colour" style="width:92px"><option value="">(as quote)</option>${(S.settings.colours || []).map((c) => `<option ${it.colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></td>
         <td><input class="w-q" data-k="qty" type="number" step="any" value="${it.qty ?? 1}"></td>
         <td><input class="w-m price" data-k="price" type="number" step="any" value="${it.price ?? 0}" title="${it.manual ? 'Manual price' : 'Calculated from price list'}"></td>
-        <td class="tot"><span data-tot>${money(num(it.qty) * num(it.price))}</span><div class="cost" data-cost></div></td>
+        <td class="tot"><span data-tot>${money(num(it.qty) * num(it.price))}</span><div class="cost" data-cost></div><div class="cost" data-lo style="color:var(--ok)"></div></td>
         <td>${rowBtns(i)}</td></tr>`;
     }).join('');
     update();
@@ -123,6 +130,39 @@ async function editor(el, id) {
     $('#words', el).textContent = T.grand > 0 ? amountInWords(T.grand) : '';
     $('#costline', el).textContent = costTotal ? `Estimated material cost ≈ BD ${money(costTotal, 2)} → margin ≈ BD ${money(T.amount - costTotal, 2)} (before VAT)` : '';
     for (const [k] of [['discount'], ['vat_rate'], ['vat_waived']]) $('#' + k, el).oninput = (e) => { q[k] = num(e.target.value); update2(); };
+    renderLO();
+  }
+  $('#colour', el).onchange = (e) => { q.colour = e.target.value; renderLO(); };
+  let loTimer = 0;
+  function renderLO() { clearTimeout(loTimer); loTimer = setTimeout(doLO, 120); }
+  let lastRes = null;
+  function doLO() {
+    const box = $('#lo', el); if (!box) return;
+    const common = { profiles: S.profiles, glassTypes: S.glass_types, kerf: S.settings.bar_kerf || 0, quoteNo: q.number || '' };
+    const pieces = quotePieces(q, S.models, { profiles: S.profiles, accessories: S.accessories });
+    const res = allocateLeftovers(pieces, stockRows, common); lastRes = res;
+    const anyCol = allocateLeftovers(pieces.map((p) => ({ ...p, colour: '' })), stockRows, common);
+    const nLeft = stockRows.filter((r) => r.kind === 'leftover' && r.qty > 0).reduce((s, r) => s + r.qty, 0);
+    $$('tr[data-i]', tbody).forEach((tr) => { const i = Number(tr.dataset.i); const a = res.allocs.filter((x) => x.piece.item === i); const lo = $('[data-lo]', tr); if (lo) lo.textContent = a.length ? `♻ ${a.length} leftover · save ${money(a.reduce((s, x) => s + x.saving, 0), 2)}` : ''; });
+    const profName = (id) => { const p = S.profiles.find((x) => x.id === id); return p ? `${p.series || ''} ${p.name}`.trim() : ''; };
+    const reservedHere = q.number && stockRows.some((r) => r.reserved_for === q.number);
+    let h = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0">♻ Leftovers that fit this quotation</h3><span class="muted">${nLeft} leftover piece(s) in stock</span></div>`;
+    if (!pieces.length) h += '<p class="muted">Pick a <b>Model</b> and enter a width and height on the items. The pieces each window or door needs are then matched against your leftovers.</p>';
+    else if (!res.allocs.length) h += `<p class="muted">No leftover fits yet${nLeft ? '' : ' — nothing in leftovers'}.${anyCol.allocs.length ? ` <b>${anyCol.allocs.length}</b> piece(s) would fit leftovers in a different colour.` : ''}</p>`;
+    else {
+      h += `<div class="cards" style="margin:10px 0"><div class="card stat"><div class="k">Pieces from leftovers</div><div class="v">${res.allocs.length} <small class="muted">of ${pieces.filter((p) => p.kind !== 'accessory').length}</small></div></div><div class="card stat"><div class="k">If bought new</div><div class="v">${money(res.newCost, 2)}</div></div><div class="card stat"><div class="k">Using leftovers</div><div class="v">${money(res.leftCost, 2)}</div></div><div class="card stat"><div class="k">Price difference</div><div class="v pos">− ${money(res.saving, 2)}</div></div></div>`;
+      h += `<div class="items-wrap"><table class="grid"><thead><tr><th>Item</th><th>Piece</th><th class="num">Needs</th><th>Suggested leftover</th><th class="num">New cost</th><th class="num">Leftover cost</th><th class="num">Saves</th></tr></thead><tbody>${res.allocs.slice(0, 60).map((a) => { const p = a.piece, u = a.unit; return `<tr><td>#${p.item + 1} ${esc(p.model)}</td><td>${esc(p.label)}</td><td class="num">${p.kind === 'glass' ? `${p.w}×${p.h}` : p.length + ' cm'}</td><td>${p.kind === 'glass' ? esc(S.glass_types.find((g) => g.id === u.glass_id)?.name || 'Glass') + ` ${u.length}×${u.width}` : `${esc(profName(u.profile_id))} · ${dot(u.colour)} · <b>${u.length} cm</b>`}${u.location ? ` <span class="muted">(${esc(u.location)})</span>` : ''}${u.row.reserved_for ? ' ' + badge('reserved', 'warn') : ''}</td><td class="num">${money(a.newCost, 2)}</td><td class="num">${money(a.leftCost, 2)}</td><td class="num pos">${money(a.saving, 2)}</td></tr>`; }).join('')}${res.allocs.length > 60 ? `<tr><td colspan="7" class="muted">…and ${res.allocs.length - 60} more</td></tr>` : ''}</tbody></table></div>`;
+      if (anyCol.allocs.length > res.allocs.length) h += `<p class="muted" style="margin-top:8px">${anyCol.allocs.length - res.allocs.length} more piece(s) would fit leftovers in another colour.</p>`;
+      h += `<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${id ? '<button class="btn primary" id="reserve">Reserve these leftovers for this quotation</button>' : '<span class="muted">Save the quotation to reserve them.</span>'}${reservedHere ? '<button class="btn" id="release">Release reservations</button>' : ''}</div>`;
+    }
+    box.innerHTML = h;
+    $('#reserve', box)?.addEventListener('click', guard(async () => {
+      if (!q.number) return toast('Save the quotation first', 'err');
+      const used = {}; res.allocs.forEach((a) => { if (!a.unit.row.reserved_for) used[a.unit.id] = (used[a.unit.id] || 0) + 1; });
+      for (const [rid, n] of Object.entries(used)) { const row = stockRows.find((r) => r.id === Number(rid)); if (!row) continue; if (n >= row.qty) await api.put(`t/stock/${row.id}`, { reserved_for: q.number }); else { const { id: _i, created_at, ...copy } = row; await api.put(`t/stock/${row.id}`, { qty: row.qty - n }); await api.post('t/stock', { ...copy, qty: n, reserved_for: q.number }); } }
+      stockRows = await api.get('t/stock'); toast('Leftovers reserved'); doLO();
+    }));
+    $('#release', box)?.addEventListener('click', guard(async () => { for (const r of stockRows.filter((x) => x.reserved_for === q.number)) await api.put(`t/stock/${r.id}`, { reserved_for: '' }); stockRows = await api.get('t/stock'); toast('Released'); doLO(); }));
   }
   const update2 = () => { // totals only, keep focus in the inputs
     const T = quoteTotals(q);
@@ -152,7 +192,7 @@ async function editor(el, id) {
     }
     update();
   });
-  tbody.addEventListener('change', (e) => { if (e.target.dataset.k === 'model_id' || e.target.dataset.k === 'glass_id') { const it = q.items[Number(e.target.closest('tr').dataset.i)]; it[e.target.dataset.k] = e.target.value ? Number(e.target.value) : null; update(); } });
+  tbody.addEventListener('change', (e) => { if (['model_id', 'glass_id'].includes(e.target.dataset.k)) { const it = q.items[Number(e.target.closest('tr').dataset.i)]; it[e.target.dataset.k] = e.target.value ? Number(e.target.value) : null; update(); } else if (e.target.dataset.k === 'colour') { q.items[Number(e.target.closest('tr').dataset.i)].colour = e.target.value; update(); } });
   tbody.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-a]'); if (!btn) return;
     const i = Number(btn.closest('tr').dataset.i);
@@ -169,7 +209,7 @@ async function editor(el, id) {
 
   const collect = () => ({
     number: $('#number', el).value.trim(), date: $('#date', el).value, client: $('#client', el).value.trim(), mobile: $('#mobile', el).value.trim(), site: $('#site', el).value.trim(),
-    title: $('#title', el).value.trim(), status: $('#status', el).value, notes: $('#notes', el).value, prepared_by: $('#prepared_by', el).value.trim(),
+    title: $('#title', el).value.trim(), colour: $('#colour', el).value, status: $('#status', el).value, notes: $('#notes', el).value, prepared_by: $('#prepared_by', el).value.trim(),
     items: q.items.filter((it) => it.kind === 'note' ? it.desc.trim() : (it.desc.trim() || it.price)), discount: q.discount || 0, vat_rate: q.vat_rate ?? 0, vat_waived: q.vat_waived || 0,
   });
   const save = async () => {
@@ -184,6 +224,8 @@ async function editor(el, id) {
       if (!(await save())) return;
       if (!await confirmBox(`Create an order/invoice from ${q.number} for BD ${money(quoteTotals(collect()).grand)}?`, 'Create order', 'primary')) return;
       const o = await api.post(`quotes/${id}/to-order`, {}); await refresh(); toast(`Created ${o.inv}`); location.hash = '#/orders';
+      const fresh = await api.get(`t/quotes/${id}`);
+      openPoDialog({ quote: fresh, orderInv: o.inv, onDone: () => (location.hash = '#/pos') });
     });
     $('#dup', el).onclick = guard(async () => { const c = await duplicate(id); location.hash = `#/quotes/${c.id}`; });
     $('#del', el).onclick = guard(async () => { if (await confirmBox(`Delete quotation ${q.number}?`)) { await api.del(`t/quotes/${id}`); location.hash = '#/quotes'; } });

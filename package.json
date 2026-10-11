@@ -4,10 +4,15 @@
   "description": "Workshop management for an aluminium & glass fabrication shop: quotations, models, cutting lists, orders, receipts, payments, purchases, statements.",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "node server.js",
     "import": "node tools/import-xlsm.js"
   },
-  "dependencies": { "exceljs": "^4.4.0" }
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "jszip": "^3.10.2"
+  }
 }

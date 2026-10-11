@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { readFile, writeFile, unlink, stat } from 'node:fs/promises';
+import { readFile, writeFile, unlink, stat, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
@@ -77,10 +77,10 @@ const bootstrap = () => ({
   settings: Object.fromEntries(db.prepare('SELECT key FROM settings').all().filter((r) => !['auth', 'session_secret'].includes(r.key)).map((r) => [r.key, getSetting(r.key)])),
   price_items: listRows('price_items'), profiles: listRows('profiles'), accessories: listRows('accessories'),
   glass_types: listRows('glass_types'), models: listRows('models'), employees: listRows('employees'),
-  next: { quote: nextNumber('quote'), invoice: nextNumber('invoice'), receipt: nextNumber('receipt'), payment: nextNumber('payment') },
+  next: { quote: nextNumber('quote'), invoice: nextNumber('invoice'), receipt: nextNumber('receipt'), payment: nextNumber('payment'), po: nextNumber('po') },
 });
 
-const AUTO = { quotes: ['number', 'quote'], orders: ['inv', 'invoice'], receipts: ['no', 'receipt'], payments: ['no', 'payment'] };
+const AUTO = { quotes: ['number', 'quote'], orders: ['inv', 'invoice'], receipts: ['no', 'receipt'], payments: ['no', 'payment'], purchase_orders: ['po', 'po'] };
 
 // ------------------------------------------------------------------ router
 async function api(req, res, url) {
@@ -129,6 +129,29 @@ async function api(req, res, url) {
     try { return send(res, 200, { ok: true, imported: await importWorkbook(tmp) }); }
     catch (e) { return send(res, 400, { error: 'Could not read that workbook: ' + e.message }); }
     finally { unlink(tmp).catch(() => {}); }
+  }
+  if (p[0] === 'assign-accounts' && m === 'POST') {
+    const { account } = await readJson(req);
+    if (!['cash', 'bank'].includes(account)) return send(res, 400, { error: 'account must be cash or bank' });
+    const a = db.prepare("UPDATE receipts SET account=? WHERE account IS NULL OR account=''").run(account).changes;
+    const b = db.prepare("UPDATE payments SET account=? WHERE account IS NULL OR account=''").run(account).changes;
+    return send(res, 200, { receipts: Number(a), payments: Number(b) });
+  }
+  // employee documents: raw upload / download, stored under DATA_DIR/files
+  if (p[0] === 'employee-docs' && p[2] === 'file') {
+    const id = Number(p[1]); const d = getRow('employee_docs', id);
+    if (!d) return send(res, 404, { error: 'Not found' });
+    if (m === 'POST') {
+      const name = (url.searchParams.get('name') || 'file').replace(/[^\w.\- ]+/g, '_').slice(0, 80);
+      const buf = await readBody(req, 15e6);
+      const dir = path.join(process.env.DATA_DIR || path.resolve('data'), 'files'); await mkdir(dir, { recursive: true });
+      const file = `${id}-${Date.now()}-${name}`; await writeFile(path.join(dir, file), buf);
+      return send(res, 200, updateRow('employee_docs', id, { file_name: name, file_path: file }));
+    }
+    if (!d.file_path) return send(res, 404, { error: 'No file attached' });
+    const buf = await readFile(path.join(process.env.DATA_DIR || path.resolve('data'), 'files', path.basename(d.file_path))).catch(() => null);
+    if (!buf) return send(res, 404, { error: 'File missing' });
+    return send(res, 200, buf, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${encodeURIComponent(d.file_name || 'file')}"` });
   }
   if (p[0] === 'quotes' && p[2] === 'to-order' && m === 'POST') {
     const q = getRow('quotes', Number(p[1]));

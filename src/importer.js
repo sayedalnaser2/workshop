@@ -1,7 +1,31 @@
 import ExcelJS from 'exceljs';
-import { db, tx, insertRow, getSetting, setSetting } from './db.js';
+import { db, tx, insertRow, updateRow, getSetting, setSetting } from './db.js';
 import { priceFor, guessPriceType } from '../public/js/calc.js';
 import { linkModelsToPriceItems } from './seed.js';
+import JSZip from 'jszip';
+import { readFile } from 'node:fs/promises';
+
+const unx = (v) => String(v).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+/** The old workbook kept its supplier list and item prices in a linked file; Excel caches a copy of those cells inside this one. */
+async function cachedCatalogue(file) {
+  try {
+    const zip = await JSZip.loadAsync(await readFile(file));
+    const vendors = []; const items = [];
+    for (const name of Object.keys(zip.files).filter((n) => /^xl\/externalLinks\/externalLink\d+\.xml$/.test(n))) {
+      const xml = await zip.file(name).async('string');
+      const names = [...xml.matchAll(/<sheetName val="([^"]*)"/g)].map((m) => unx(m[1]));
+      for (const m of xml.matchAll(/<sheetData sheetId="(\d+)"[^>]*>([\s\S]*?)<\/sheetData>/g)) {
+        const rows = {};
+        for (const c of m[2].matchAll(/<cell r="([A-Z]+)(\d+)"[^>]*><v>([^<]*)<\/v>/g)) (rows[c[2]] ||= {})[c[1]] = unx(c[3]);
+        const list = Object.values(rows);
+        if (names[Number(m[1])] === 'DB.Vender' && list.length > vendors.length) { vendors.length = 0; list.filter((r) => r.D).forEach((r) => vendors.push({ name: r.D, phone: r.F || '', phone2: r.G || '', address: [r.H, r.I, r.J].filter(Boolean).join(', '), email: r.K || '' })); }
+        if (list.filter((r) => r.L && r.P).length > 40 && list.filter((r) => r.L && r.P).length > items.length) { items.length = 0; list.filter((r) => r.L && r.P && !isNaN(parseFloat(r.P))).forEach((r) => items.push({ code: r.L, series: r.M || '', name: `${r.N || ''} ${r.L}`.trim(), supplier: r.O || '', price: parseFloat(r.P) })); }
+      }
+    }
+    return { vendors, items };
+  } catch { return { vendors: [], items: [] }; }
+}
+const kindOf = (n = '') => (/glass/i.test(n) ? 'glass' : /hinge|handle|lock|acces|screw|roller|brush|rubber|silicone|button/i.test(n) ? 'accessory' : 'profile');
 
 const raw = (c) => {
   let v = c?.value;
@@ -48,18 +72,19 @@ function parseQuote(ws) {
   return {
     number: str(ws.getCell('D7')), date: date(ws.getCell('D9')) ?? null,
     client: str(ws.getCell('D11')), mobile: str(ws.getCell('J9')), site: str(ws.getCell('J11')),
-    title: str(ws.getCell('B15')), items, discount, vat_rate: vatCell ?? 10, vat_waived: waived, prepared_by: prepared,
+    title: str(ws.getCell('B15')), colour: str(ws.getCell('M9')), items, discount, vat_rate: vatCell ?? 10, vat_waived: waived, prepared_by: prepared,
   };
 }
 
 export async function importWorkbook(file, { log = () => {} } = {}) {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(file);
+  const cat = await cachedCatalogue(file);
   const out = {};
   const sheet = (n) => wb.getWorksheet(n);
 
   tx(() => {
-    for (const t of ['price_items', 'quotes', 'orders', 'receipts', 'payments', 'purchases', 'employees']) db.exec(`DELETE FROM ${t}`);
+    for (const t of ['price_items', 'quotes', 'orders', 'receipts', 'payments', 'purchases']) db.exec(`DELETE FROM ${t}`);
 
     // ---- Setup: price list, counters, employees -------------------------------------
     const su = sheet('Setup');
@@ -86,7 +111,9 @@ export async function importWorkbook(file, { log = () => {} } = {}) {
     let ne = 0;
     for (let r = 20; r <= 40; r++) {
       const name = str(su.getCell(r, 2)); if (!name) continue;
-      insertRow('employees', { name, salary: num(su.getCell(r, 3)) ?? 0, active: 1 });
+      // keep existing employee files: update by name, add only new people
+      const have = db.prepare('SELECT id FROM employees WHERE lower(name)=lower(?)').get(name);
+      if (have) updateRow('employees', have.id, { salary: num(su.getCell(r, 3)) ?? 0 }); else insertRow('employees', { name, salary: num(su.getCell(r, 3)) ?? 0, active: 1 });
       ne++;
     }
     out.employees = ne;
@@ -105,7 +132,7 @@ export async function importWorkbook(file, { log = () => {} } = {}) {
     for (let r = 12; r <= rl.rowCount; r++) {
       const no = str(rl.getCell(r, 4)); const amt = num(rl.getCell(r, 7));
       if (!no || no === '-' || amt == null) continue;
-      insertRow('receipts', { no, date: date(rl.getCell(r, 3)), order_inv: str(rl.getCell(r, 5)), client: str(rl.getCell(r, 6)), amount: amt, method: '' });
+      insertRow('receipts', { no, date: date(rl.getCell(r, 3)), order_inv: str(rl.getCell(r, 5)), client: str(rl.getCell(r, 6)), amount: amt, method: '', account: str(rl.getCell(r, 8)).toLowerCase() });
       c++;
     }
     out.receipts = c;
@@ -115,7 +142,7 @@ export async function importWorkbook(file, { log = () => {} } = {}) {
     for (let r = 12; r <= pl.rowCount; r++) {
       const no = str(pl.getCell(r, 4)); const amt = num(pl.getCell(r, 6));
       if (!no || no === '-' || amt == null) continue;
-      insertRow('payments', { no, date: date(pl.getCell(r, 3)), paid_to: str(pl.getCell(r, 5)), amount: amt, done: isDone(pl.getCell(r, 7)), category: '', lines: [] });
+      insertRow('payments', { no, date: date(pl.getCell(r, 3)), paid_to: str(pl.getCell(r, 5)), amount: amt, done: isDone(pl.getCell(r, 7)), category: '', lines: [], account: str(pl.getCell(r, 8)).toLowerCase() });
       c++;
     }
     out.payments = c;
@@ -150,6 +177,47 @@ export async function importWorkbook(file, { log = () => {} } = {}) {
     }
     out.quotes = c;
     linkModelsToPriceItems();
+
+    // ---- suppliers & item prices (cached copy of the linked ALUMINUM workbook) ----------
+    let ns = 0, ni = 0;
+    for (const v of cat.vendors) if (!db.prepare('SELECT id FROM suppliers WHERE lower(name)=lower(?)').get(v.name)) { insertRow('suppliers', v); ns++; }
+    for (const it of cat.items) {
+      if (it.supplier && !db.prepare('SELECT id FROM suppliers WHERE lower(name)=lower(?)').get(it.supplier)) { insertRow('suppliers', { name: it.supplier }); ns++; }
+      if (!db.prepare('SELECT id FROM items WHERE code=? AND supplier=?').get(it.code, it.supplier)) { insertRow('items', { ...it, kind: kindOf(it.name), unit: 'bar' }); ni++; }
+    }
+    if (ns || ni) { out.suppliers = ns; out.catalogue_items = ni; }
+
+    // ---- sheets written by this app's own export (stock, cash & bank, employee files) --
+    const sheetRows = (n, from = 2) => { const w = sheet(n); const rows = []; if (w) for (let r = from; r <= w.rowCount; r++) rows.push(w.getRow(r)); return rows; };
+    const profMap = Object.fromEntries(db.prepare('SELECT * FROM profiles').all().map((p) => [`${p.series || ''} ${p.name}`.trim().toLowerCase(), p.id]));
+    const glassMap = Object.fromEntries(db.prepare('SELECT * FROM glass_types').all().map((g) => [g.name.toLowerCase(), g.id]));
+    if (sheet('Stock')) {
+      db.exec('DELETE FROM stock'); let k = 0;
+      for (const r of sheetRows('Stock')) {
+        const g = (i) => str(r.getCell(i)); if (!g(1)) continue;
+        insertRow('stock', { kind: g(1), item_type: g(2), profile_id: profMap[g(3).toLowerCase()] ?? null, glass_id: glassMap[g(3).toLowerCase()] ?? null, name: g(4), code: g(5), colour: g(6), length: num(r.getCell(7)), width: num(r.getCell(8)), qty: num(r.getCell(9)) ?? 0, unit: g(10), unit_cost: num(r.getCell(11)) ?? 0, location: g(12), reserved_for: g(13), order_inv: g(14), date: date(r.getCell(15)), note: g(16) }); k++;
+      }
+      out.stock = k;
+    }
+    if (sheet('Suppliers')) { for (const r of sheetRows('Suppliers')) { const g = (i) => str(r.getCell(i)); if (g(1) && !db.prepare('SELECT id FROM suppliers WHERE lower(name)=lower(?)').get(g(1))) insertRow('suppliers', { name: g(1), phone: g(2), phone2: g(3), address: g(4), email: g(5), note: g(6) }); } }
+    if (sheet('Items')) {
+      db.exec('DELETE FROM items'); let k = 0;
+      for (const r of sheetRows('Items')) { const g = (i) => str(r.getCell(i)); if (!g(2)) continue; insertRow('items', { code: g(1), name: g(2), kind: g(3), series: g(4), supplier: g(5), unit: g(6), price: num(r.getCell(7)) ?? 0, note: g(8) }); k++; }
+      out.catalogue_items = k;
+    }
+    if (sheet('Cash & Bank')) {
+      db.exec('DELETE FROM cash_entries'); let k = 0;
+      for (const r of sheetRows('Cash & Bank')) { const g = (i) => str(r.getCell(i)); if (!g(2)) continue; insertRow('cash_entries', { date: date(r.getCell(1)), account: g(2).toLowerCase(), direction: g(3).toLowerCase(), amount: num(r.getCell(4)) ?? 0, category: g(5), party: g(6), note: g(7) }); k++; }
+      out.cash_entries = k;
+    }
+    if (sheet('Employees')) {
+      for (const r of sheetRows('Employees')) {
+        const g = (i) => str(r.getCell(i)); if (!g(1)) continue;
+        const d = { name: g(1), salary: num(r.getCell(2)) ?? 0, active: g(3).toLowerCase() === 'no' ? 0 : 1, role: g(4), nationality: g(5), id_no: g(6), passport_no: g(7), phone: g(8), join_date: date(r.getCell(9)), permit_expiry: date(r.getCell(10)), iban: g(11), emergency: g(12), address: g(13), note: g(14) };
+        const have = db.prepare('SELECT id FROM employees WHERE lower(name)=lower(?)').get(d.name);
+        if (have) updateRow('employees', have.id, d); else insertRow('employees', d);
+      }
+    }
   });
   log(out);
   return out;

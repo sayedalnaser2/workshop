@@ -29,7 +29,7 @@ async function list(el) {
 const fields = (orders) => [
   { key: 'no', label: 'Receipt #', hint: 'Leave blank for the next number: ' + S.next.receipt }, { key: 'date', label: 'Date', type: 'date' },
   { key: 'order_inv', label: 'Order / invoice #', list: 'dl-orders' }, { key: 'client', label: 'Client' },
-  { key: 'amount', label: 'Amount (BD)', type: 'number', required: true }, { key: 'method', label: 'Method', type: 'select', options: ['', 'Cash', 'Benefit', 'Cheque', 'Bank transfer'] }, { key: 'note', label: 'Note', full: true },
+  { key: 'amount', label: 'Amount (BD)', type: 'number', required: true }, { key: 'method', label: 'Method', type: 'select', options: ['', 'Cash', 'Benefit', 'Cheque', 'Bank transfer'] }, { key: 'account', label: 'Paid into', type: 'select', options: [['', 'Automatic (cash → cash box, others → bank)'], ['cash', 'Cash box'], ['bank', 'Bank account']] }, { key: 'note', label: 'Note', full: true },
 ];
 
 async function form(el, orderId) {
@@ -44,6 +44,7 @@ async function form(el, orderId) {
   const save = (print) => guard(async () => {
     const d = readForm($('#f', el), fields());
     if (!d.amount) return toast('Enter the amount', 'err');
+    if (!d.account) d.account = d.method === 'Cash' ? 'cash' : 'bank';
     const r = await api.post('t/receipts', d); await refresh(); toast(`Saved ${r.no}`);
     location.hash = print ? `#/receipts/${r.id}/print` : '#/receipts';
   });
