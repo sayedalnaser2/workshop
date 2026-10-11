@@ -19,7 +19,7 @@ export async function render(el, [id]) {
   $('#new', el).onclick = () => open(null);
   const t = $('#t', el);
   dataTable(t, {
-    rows, search: ['inv', 'client', 'site', 'mobile'], page: 60,
+    rows, search: ['inv', 'client', 'site', 'mobile'], page: 60, filterKey: 'orders',
     cols: [
       { key: 'inv', label: 'Inv', render: (r) => `<b>${esc(r.inv)}</b>` }, { key: 'date', label: 'Date', render: (r) => dmy(r.date) },
       { key: 'client', label: 'Client' }, { key: 'site', label: 'Site' }, { key: 'mobile', label: 'Mobile' },

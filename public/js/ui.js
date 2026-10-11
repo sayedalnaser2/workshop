@@ -110,9 +110,11 @@ export function editRow({ table, title, fields, row = null, extra = '', defaults
  * cols: [{key,label,render?(row)->html, num?:bool, sort?:fn(row)->value, class?}]
  * opts: {rows, search:[keys], page:100, onRow(row), actions(row)->html, foot(rowsFiltered)->html, filters:[{label,fn}]}
  */
-export function dataTable(el, { cols, rows, search = [], page = 100, onRow, actions, foot, filters = [], empty = 'Nothing here yet.', toolbar = '' }) {
+export function dataTable(el, { cols, rows, search = [], page = 100, onRow, actions, foot, filters = [], empty = 'Nothing here yet.', toolbar = '', filterKey = '' }) {
   let q = ''; let sortKey = null; let dir = 1; let pg = 0; let fi = 0;
-  el.innerHTML = `<div class="tbar"><input type="search" class="search" placeholder="Search…" aria-label="Search">${filters.length ? `<div class="seg">${filters.map((f, i) => `<button data-f="${i}" class="${i === 0 ? 'on' : ''}">${esc(f.label)}</button>`).join('')}</div>` : ''}<span class="count"></span><span class="grow"></span>${toolbar}</div><div class="twrap"><table class="grid"><thead></thead><tbody></tbody><tfoot></tfoot></table></div><div class="pager"></div>`;
+  // a dashboard card can ask for a filter once, e.g. sessionStorage 'flt:orders' = 'Unpaid'
+  if (filterKey) { try { const want = sessionStorage.getItem(`flt:${filterKey}`); sessionStorage.removeItem(`flt:${filterKey}`); const i = filters.findIndex((f) => f.label === want); if (i > 0) fi = i; } catch {} }
+  el.innerHTML = `<div class="tbar"><input type="search" class="search" placeholder="Search…" aria-label="Search">${filters.length ? `<div class="seg">${filters.map((f, i) => `<button data-f="${i}" class="${i === fi ? 'on' : ''}">${esc(f.label)}</button>`).join('')}</div>` : ''}<span class="count"></span><span class="grow"></span>${toolbar}</div><div class="twrap"><table class="grid"><thead></thead><tbody></tbody><tfoot></tfoot></table></div><div class="pager"></div>`;
   const body = $('tbody', el); const head = $('thead', el); const tf = $('tfoot', el); const pager = $('.pager', el);
   const view = () => {
     let list = rows;

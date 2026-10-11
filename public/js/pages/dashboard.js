@@ -29,11 +29,11 @@ export async function render(el) {
   const c = S.settings.company || {};
   el.innerHTML = `<div class="ph"><h1>${esc(c.name || 'Workshop')}</h1><span class="sub">${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span><span class="grow"></span><a class="btn primary" href="#/quotes/new">+ New quotation</a><a class="btn" href="#/receipts/new">+ Receipt</a><a class="btn" href="#/payments/new">+ Payment voucher</a></div>
   <div class="cards">
-    <div class="card stat"><div class="k">Total invoiced</div><div class="v">${money(s.invoiced, 0)}</div></div>
-    <div class="card stat"><div class="k">Collected</div><div class="v pos">${money(s.received, 0)}</div></div>
-    <div class="card stat"><div class="k">Outstanding from customers</div><div class="v ${s.balance > 0 ? 'neg' : ''}">${money(s.balance, 0)}</div></div>
-    <div class="card stat"><div class="k">Open orders</div><div class="v">${s.openOrders}</div></div>
-    <div class="card stat"><div class="k">Open quotations</div><div class="v">${s.quotesOpen}</div></div>
+    <a class="card stat link" href="#/orders"><div class="k">Total invoiced</div><div class="v">${money(s.invoiced, 0)}</div></a>
+    <a class="card stat link" href="#/receipts"><div class="k">Collected</div><div class="v pos">${money(s.received, 0)}</div></a>
+    <a class="card stat link" href="#/orders" data-flt="orders:Unpaid"><div class="k">Outstanding from customers</div><div class="v ${s.balance > 0 ? 'neg' : ''}">${money(s.balance, 0)}</div></a>
+    <a class="card stat link" href="#/orders" data-flt="orders:Open"><div class="k">Open orders</div><div class="v">${s.openOrders}</div></a>
+    <a class="card stat link" href="#/quotes" data-flt="quotes:Open"><div class="k">Open quotations</div><div class="v">${s.quotesOpen}</div></a>
   </div>
   <div class="cols2" style="align-items:start">
     <div class="card"><h3>Last 12 months — invoiced vs collected (BD)</h3>${barChart(s.monthly.map((m) => ({ label: m.m.slice(2), a: m.invoiced, b: m.received })))}</div>
@@ -41,5 +41,7 @@ export async function render(el) {
   </div>
   <div class="card" style="margin-top:14px"><div style="display:flex;gap:8px;align-items:center"><h3 style="margin:0">On the floor right now</h3><span class="muted">${openTasks.length} open task(s) · ${tasks.filter((t) => t.status === 'blocked').length} blocked · ○ = on it, outside working hours</span><span class="grow"></span><a class="btn sm" href="#/activity">Worker activity</a><a class="btn sm" href="#/tasks">All tasks</a></div><table class="grid" style="margin-top:8px"><tbody>${running.map((t) => `<tr class="click" onclick="location.hash='#/tasks/${t.id}'"><td>${t.ticking ? '<span class="pos">●</span>' : '<span class="muted">○</span>'} <b>${esc(t.running_by)}</b></td><td>${esc(t.title)} <span class="muted">${esc([t.order_inv, t.client].filter(Boolean).join(' · '))}</span></td><td class="num" ${t.ticking ? `data-live data-base="${t.actual_min}"` : ''}>${t.ticking ? '' : fmtMin(t.actual_min)}</td><td class="num muted">est ${t.estimate_min ? fmtMin(t.estimate_min) : '—'}</td></tr>`).join('') || '<tr><td class="empty">Nobody is on a task right now.</td></tr>'}</tbody></table></div>
   <div class="card" style="margin-top:14px"><h3>Latest quotations</h3><table class="grid"><thead><tr><th>Quote</th><th>Date</th><th>Client</th><th class="num">Total</th><th>Status</th></tr></thead><tbody>${quotes.slice(0, 8).map((q) => `<tr class="click" onclick="location.hash='#/quotes/${q.id}'"><td><b>${esc(q.number)}</b></td><td>${dmy(q.date)}</td><td>${esc(q.client)}</td><td class="num">${money(quoteTotals(q).grand, 2)}</td><td>${badge(q.status, q.status === 'accepted' ? 'ok' : q.status === 'sent' ? 'blue' : '')}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">No quotations yet</td></tr>'}</tbody></table></div>`;
+  // a card may ask the next page to open with a filter already chosen
+  el.querySelectorAll('[data-flt]').forEach((a) => a.addEventListener('click', () => { const [k, v] = a.dataset.flt.split(':'); try { sessionStorage.setItem(`flt:${k}`, v); } catch {} }));
   startTicker(el);
 }
