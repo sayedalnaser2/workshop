@@ -1,5 +1,6 @@
 import { S, refresh, logout } from '../app.js';
 import { api, $, esc, toast, guard, num, modal } from '../ui.js';
+import { cfgOf, parseBreaks } from '../shift.js';
 
 export async function render(el) {
   const c = S.settings.company || {}; const k = S.settings.counters || {};
@@ -19,6 +20,11 @@ export async function render(el) {
      <label class="field full"><span>Default heading line</span><input id="intro" value="${esc(S.settings.intro_line)}"></label>
      <label class="field full"><span>Terms &amp; conditions (one per line)</span><textarea id="terms" rows="6">${esc((S.settings.terms || []).join('\n'))}</textarea></label>
      <label class="field full"><span>Receipt notes (one per line)</span><textarea id="rnotes" rows="3">${esc((S.settings.receipt_notes || []).join('\n'))}</textarea></label></div></div>
+   <div class="card" style="margin-top:14px"><h3>Working hours (shift)</h3><p class="muted" style="margin-top:0">Workers' time on tasks is counted automatically during these hours, on the days they are at work. Nothing to start or stop.</p>
+     <div class="form"><label class="field"><span>Shift starts</span><input id="sh_start" type="time" value="${esc(cfgOf(S.settings.shift).start)}"></label><label class="field"><span>Shift ends</span><input id="sh_end" type="time" value="${esc(cfgOf(S.settings.shift).end)}"></label>
+     <label class="field full"><span>Breaks (not counted) — e.g. 12:00-12:30, 15:00-15:15</span><input id="sh_breaks" value="${esc((cfgOf(S.settings.shift).breaks || []).map((b) => b.from + '-' + b.to).join(', '))}"></label>
+     <div class="field full"><span>Working days</span><div style="display:flex;gap:12px;flex-wrap:wrap">${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => `<label style="display:flex;gap:4px;align-items:center"><input type="checkbox" data-day="${i}" ${cfgOf(S.settings.shift).days.includes(i) ? 'checked' : ''} style="width:auto">${d}</label>`).join('')}</div></div>
+     <label class="field"><span>Time zone (hours from UTC)</span><input id="sh_tz" type="number" step="0.5" value="${cfgOf(S.settings.shift).tz / 60}"></label></div></div>
    <div class="card" style="margin-top:14px"><h3>Next document numbers</h3><div class="form" style="grid-template-columns:repeat(5,1fr)">${[['quote', 'Quotation'], ['invoice', 'Invoice'], ['receipt', 'Receipt'], ['payment', 'Payment'], ['po', 'Purchase order']].map(([key, l]) => `<label class="field"><span>${l}</span><input data-c="${key}" type="number" min="1" value="${k[key] || 1}"></label>`).join('')}</div><p class="muted">Quotes look like <b>${esc(S.next.quote)}</b>, invoices <b>${esc(S.next.invoice)}</b>.</p></div>
    <div class="sticky-actions"><button class="btn primary" id="save">Save settings</button></div>
   </div>
@@ -32,7 +38,7 @@ export async function render(el) {
     const lines = (v) => v.split('\n').map((x) => x.trim()).filter(Boolean);
     const counters = { ...S.settings.counters };
     for (const i of el.querySelectorAll('[data-c]')) counters[i.dataset.c] = Math.max(1, Math.floor(num(i.value)));
-    await api.put('settings', { company: { ...c, name: $('#c_name', el).value, name_ar: $('#c_name_ar', el).value, cr: $('#c_cr', el).value, email: $('#c_email', el).value, phones: $('#c_phones', el).value, address: $('#c_address', el).value }, vat_rate: num($('#vat', el).value), bar_kerf: num($('#kerf', el).value), task_stages: $('#stages', el).value.split(',').map((x) => x.trim()).filter(Boolean), task_templates: lines($('#tpl', el).value).map((l) => { const [stage, title, minutes] = l.split('|').map((x) => x.trim()); return { stage, title: title || stage, minutes: Number(minutes) || 60 }; }).filter((t) => t.stage), colours: $('#colours', el).value.split(',').map((x) => x.trim()).filter(Boolean), leftover_pct: num($('#lpct', el).value), min_offcut: num($('#minoff', el).value), intro_line: $('#intro', el).value, terms: lines($('#terms', el).value), receipt_notes: lines($('#rnotes', el).value), counters });
+    await api.put('settings', { company: { ...c, name: $('#c_name', el).value, name_ar: $('#c_name_ar', el).value, cr: $('#c_cr', el).value, email: $('#c_email', el).value, phones: $('#c_phones', el).value, address: $('#c_address', el).value }, vat_rate: num($('#vat', el).value), bar_kerf: num($('#kerf', el).value), shift: { start: $('#sh_start', el).value || '07:00', end: $('#sh_end', el).value || '16:00', breaks: parseBreaks($('#sh_breaks', el).value), days: [...el.querySelectorAll('[data-day]')].filter((x) => x.checked).map((x) => Number(x.dataset.day)), tz: Math.round(num($('#sh_tz', el).value) * 60) }, task_stages: $('#stages', el).value.split(',').map((x) => x.trim()).filter(Boolean), task_templates: lines($('#tpl', el).value).map((l) => { const [stage, title, minutes] = l.split('|').map((x) => x.trim()); return { stage, title: title || stage, minutes: Number(minutes) || 60 }; }).filter((t) => t.stage), colours: $('#colours', el).value.split(',').map((x) => x.trim()).filter(Boolean), leftover_pct: num($('#lpct', el).value), min_offcut: num($('#minoff', el).value), intro_line: $('#intro', el).value, terms: lines($('#terms', el).value), receipt_notes: lines($('#rnotes', el).value), counters });
     await refresh(); toast('Settings saved'); render(el);
   });
   $('#imp', el).onclick = guard(async () => {

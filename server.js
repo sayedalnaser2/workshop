@@ -10,7 +10,7 @@ import { needsSetup, authenticate, createUser, updateUser, deleteUser, listUsers
 import { tableAccess } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
 import { seedLibrary } from './src/seed.js';
-import { taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated } from './src/tasks.js';
+import { taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated, markPresent, shiftStatus } from './src/tasks.js';
 import { exportWorkbook } from './src/exporter.js';
 import { quoteTotals } from './public/js/calc.js';
 
@@ -126,6 +126,7 @@ async function api(req, res, url) {
   if (p[0] === 'logout') return send(res, 200, { ok: true }, { 'Set-Cookie': 'ws=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
   const user = userFromToken(cookieOf(req, 'ws'));
   if (!user) return send(res, 401, { error: 'Not signed in.' });
+  markPresent(user.id);
   const role = user.role; const isAA = role === 'admin' || role === 'account';
   const need = (ok) => { if (!ok) throw forbid(); };
 
@@ -135,6 +136,7 @@ async function api(req, res, url) {
 
   // --- tasks: workers use these endpoints (never the raw tables) so they only ever touch their own work
   if (p[0] === 'staff') { need(isAA); return send(res, 200, listUsers().filter((u) => u.active).map((u) => ({ id: u.id, name: u.name, role: u.role }))); }
+  if (p[0] === 'shift') return send(res, 200, shiftStatus(user));
   if (p[0] === 'my-tasks') return send(res, 200, myTasks(user));
   if (p[0] === 'tasks-view') { need(isAA); return send(res, 200, taskViews()); }
   if (p[0] === 'activity') {

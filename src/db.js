@@ -32,7 +32,7 @@ export const SCHEMA = {
   attendance: { cols: { employee_id: 'INTEGER', date: 'TEXT', status: 'TEXT', hours: 'REAL', site: 'TEXT', note: 'TEXT' }, order: 'date' },
   tasks: { cols: { order_inv: 'TEXT', quote_no: 'TEXT', title: 'TEXT', description: 'TEXT', stage: 'TEXT', assignee_id: 'INTEGER', status: 'TEXT', progress: 'REAL', estimate_min: 'REAL', due: 'TEXT', priority: 'TEXT', created_by: 'INTEGER', started_at: 'TEXT', done_at: 'TEXT', note: 'TEXT' }, order: 'id DESC' },
   task_logs: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', ts: 'TEXT', kind: 'TEXT', text: 'TEXT', progress: 'REAL', minutes: 'REAL' }, order: 'ts DESC' },
-  task_sessions: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', started: 'TEXT', ended: 'TEXT' }, order: 'started DESC' },
+  task_sessions: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', started: 'TEXT', ended: 'TEXT', kind: 'TEXT' }, order: 'started DESC' },
   employee_docs: { cols: { employee_id: 'INTEGER', type: 'TEXT', number: 'TEXT', expiry: 'TEXT', file_name: 'TEXT', file_path: 'TEXT', note: 'TEXT' }, order: 'expiry' },
 };
 
@@ -43,6 +43,7 @@ for (const [t, s] of Object.entries(SCHEMA)) {
 }
 ddl.push('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);');
 ddl.push('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE COLLATE NOCASE, name TEXT, role TEXT, salt TEXT, hash TEXT, active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);');
+ddl.push('CREATE TABLE IF NOT EXISTS work_days (user_id INTEGER, day TEXT, first_seen TEXT, PRIMARY KEY (user_id, day));');
 ddl.push('CREATE INDEX IF NOT EXISTS ix_receipts_order ON receipts(order_inv);');
 ddl.push('CREATE INDEX IF NOT EXISTS ix_purchases_order ON purchases(order_inv);');
 ddl.push('CREATE INDEX IF NOT EXISTS ix_orders_inv ON orders(inv);');
@@ -78,6 +79,7 @@ export const DEFAULT_SETTINGS = {
   opening: { cash: 0, bank: 0 },
   leftover_pct: 60,
   min_offcut: 30,
+  shift: { start: '07:00', end: '16:00', breaks: [{ from: '12:00', to: '12:30' }], days: [0, 1, 2, 3, 4, 6], tz: 180 },
   task_templates: [{ stage: 'Cutting', title: 'Cut profiles & glass', minutes: 120 }, { stage: 'Assembly', title: 'Assemble frames & fit glass', minutes: 240 }, { stage: 'Delivery', title: 'Deliver to site', minutes: 60 }, { stage: 'Installation', title: 'Install on site', minutes: 300 }],
   task_stages: ['Cutting', 'Assembly', 'Glazing', 'Painting', 'Delivery', 'Installation', 'Maintenance', 'Other'],
   terms: [
