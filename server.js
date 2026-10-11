@@ -9,6 +9,7 @@ import {
 import { hasPassword, setPassword, checkPassword, makeToken, validToken, cookieOf } from './src/auth.js';
 import { importWorkbook } from './src/importer.js';
 import { seedLibrary } from './src/seed.js';
+import { exportWorkbook } from './src/exporter.js';
 import { quoteTotals } from './public/js/calc.js';
 
 seedLibrary();
@@ -116,6 +117,10 @@ async function api(req, res, url) {
     const out = { exported: new Date().toISOString(), settings: bootstrap().settings };
     for (const t of Object.keys(SCHEMA)) out[t] = listRows(t);
     return send(res, 200, out, { 'Content-Disposition': `attachment; filename="workshop-backup-${new Date().toISOString().slice(0, 10)}.json"` });
+  }
+  if (p[0] === 'export.xlsx') {
+    const buf = Buffer.from(await exportWorkbook());
+    return send(res, 200, buf, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="TALENTS-export-${new Date().toISOString().slice(0, 10)}.xlsx"` });
   }
   if (p[0] === 'import' && m === 'POST') {
     const buf = await readBody(req, 60e6);
