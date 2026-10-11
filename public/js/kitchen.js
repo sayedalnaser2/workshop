@@ -12,7 +12,7 @@ export const CAB_TYPES = {
   gap:     { label: 'Appliance gap', w: 60, h: 85,  d: 60, doors: 0, drawers: 0, shelves: 0, gap: true },
 };
 export const DEFAULT_STYLE = {
-  carcass: '', door: '', back: '', handle: '', hinge: '', drawer: '', glass: '', profile_in: '', profile_out: '',
+  carcass: '', door: '', back: '', door_colour: '', handle: '', hinge: '', drawer: '', glass: '', profile_in: '', profile_out: '',
   t: 1.8, back_t: 0.6, plinth: 10, wall_height: 140, sheet_w: 244, sheet_h: 122, kerf: 0.3, gap: 0.4,
 };
 export const DEFAULT_COUNTER = { material: '', thickness: 2, front: 2, side: 0, splash_h: 0, slab_w: 300, slab_h: 140, waste: 15, extra_sinks: 0, extra_hobs: 0 };

@@ -7,6 +7,7 @@ import { kitchenModel } from '../kitchen.js';
 import { quotePieces, allocateLeftovers } from '../stock.js';
 import { openPoDialog } from '../po-dialog.js';
 import { dot } from './stock.js';
+import { drawModel } from '../drawings.js';
 
 const STATUS = { draft: ['Draft', ''], sent: ['Sent', 'blue'], accepted: ['Accepted', 'ok'], rejected: ['Rejected', 'bad'] };
 const blankItem = () => ({ w: null, h: null, desc: '', note: '', qty: 1, price: 0, manual: false, model_id: null, glass_id: null, colour: '' });
@@ -101,7 +102,7 @@ async function editor(el, id) {
         <td><input class="w-s" data-k="w" type="number" step="any" value="${it.w ?? ''}"></td>
         <td><input class="w-s" data-k="h" type="number" step="any" value="${it.h ?? ''}"></td>
         <td style="min-width:300px"><input data-k="desc" list="dl-prices" value="${esc(it.desc)}" autocomplete="off">${it.kitchen_id ? `<a href="#/kitchens/${it.kitchen_id}" style="font-size:12px">🍳 open the kitchen design</a>` : ''}<div class="sub"><textarea data-k="note" rows="1" placeholder="Sub-description (e.g. W/1 – one side swing, other side fix)">${esc(it.note || '')}</textarea></div></td>
-        <td><select data-k="model_id" style="width:120px">${modelOpts(it.model_id)}</select></td>
+        <td><select data-k="model_id" style="width:120px">${modelOpts(it.model_id)}</select><div class="mini-draw" data-draw></div></td>
         <td><select data-k="glass_id" style="width:110px">${glassOpts(it.glass_id)}</select></td>
         <td><select data-k="colour" style="width:92px"><option value="">(as quote)</option>${(S.settings.colours || []).map((c) => `<option ${it.colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></td>
         <td><input class="w-q" data-k="qty" type="number" step="any" value="${it.qty ?? 1}"></td>
@@ -132,6 +133,7 @@ async function editor(el, id) {
       if (m && it.w && it.h) c = modelCost(m, it.w, it.h, lib, S.glass_types.find((g) => g.id === Number(it.glass_id))).total * num(it.qty);
       costTotal += c; $('[data-cost]', tr).textContent = c ? `cost ≈ ${money(c, 2)}` : '';
       tr.classList.toggle('manual', !!it.manual);
+      const dr = $('[data-draw]', tr); if (dr) { const key = [it.model_id, it.w, it.h, it.glass_id, it.colour || q.colour].join('|'); if (dr.dataset.k !== key) { dr.dataset.k = key; dr.innerHTML = m ? drawModel(m.kind, it.w || m.def_w, it.h || m.def_h, { dims: false, colour: it.colour || q.colour, glass: S.glass_types.find((g) => g.id === Number(it.glass_id))?.name }) : ''; } }
     });
     $('#totals', el).innerHTML = `
       <div class="row"><span>Items total</span><b>${money(T.subtotal)}</b></div>
@@ -146,7 +148,7 @@ async function editor(el, id) {
     for (const [k] of [['discount'], ['vat_rate'], ['vat_waived']]) $('#' + k, el).oninput = (e) => { q[k] = num(e.target.value); update2(); };
     renderLO();
   }
-  $('#colour', el).onchange = (e) => { q.colour = e.target.value; renderLO(); };
+  $('#colour', el).onchange = (e) => { q.colour = e.target.value; update(); };
   let loTimer = 0;
   function renderLO() { clearTimeout(loTimer); loTimer = setTimeout(doLO, 120); }
   let lastRes = null;

@@ -256,3 +256,4 @@ table.mini { width: 100%; border-collapse: collapse; } .mini th { font-size: 11p
   @page { size: A4; margin: 12mm; }
   .doc .items-print tr { break-inside: avoid; }
 }
+.mini-draw { margin-top: 4px; text-align: center; } .mini-draw svg { width: 64px; height: 56px; }

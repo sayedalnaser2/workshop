@@ -1,14 +1,16 @@
 // SVG drawings for kitchens: front elevation, plan view with countertop, and sheet cut layouts.
 import { CAB_TYPES, DEFAULT_STYLE } from './kitchen.js';
+import { colourHex, glassHex, stoneHex, lighten } from './drawings.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const INK = '#26435f'; const FILL = '#e9eef4'; const FILL2 = '#cfd8e2'; const GLASS = '#cfe6f7'; const TOP = '#6b6f78';
+const INK = '#26435f'; const FILL_ = '#e9eef4'; const FILL2_ = '#cfd8e2'; const GLASS_ = '#cfe6f7'; const TOP_ = '#6b6f78'; const FILL = FILL_; const FILL2 = FILL2_; const GLASS = GLASS_; const TOP = TOP_;
 
 /** Front elevations: every run on its own strip. Base units stand on the plinth, wall units hang at wall_height, tall units reach the floor. */
 export function elevationSVG(spec, { maxW = 760 } = {}) {
   const style = { ...DEFAULT_STYLE, ...(spec.style || {}) }; const ct = Math.max(0, +spec.counter?.thickness || 2);
   const runs = (spec.runs || []).filter((r) => (r.cabinets || []).length);
   if (!runs.length) return '<p class="muted">Add cabinets to see the drawing.</p>';
+  const dh = colourHex(style.door_colour); const FILL2 = dh || FILL2_; const FILL = dh ? lighten(dh, .35) : FILL_; const GLASS = style.glass ? glassHex(style.glass) : GLASS_; const TOP = stoneHex(spec.counter?.material);
   const widest = Math.max(...runs.map((r) => r.cabinets.reduce((a, c) => a + (+c.w || 0), 0)), 100);
   const k = Math.min(2.4, (maxW - 60) / widest); const padL = 34;
   const floorOf = (t) => (t.wall ? style.wall_height : t.tall || t.gap ? 0 : style.plinth); // cm from the floor to the carcass bottom
@@ -52,7 +54,7 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
 export function planSVG(spec, model, { maxW = 760 } = {}) {
   const runs = (spec.runs || []).filter((r) => (r.cabinets || []).length); if (!runs.length) return '';
   const c = model.counter; const widest = Math.max(...runs.map((r) => r.cabinets.reduce((a, x) => a + (+x.w || 0), 0)), 100);
-  const k = Math.min(2.2, (maxW - 50) / widest); const padL = 24; let y0 = 0; let out = '';
+  const k = Math.min(2.2, (maxW - 50) / widest); const padL = 24; let y0 = 0; let out = ''; const TOP = stoneHex(c.material); const dh = colourHex((model.style || {}).door_colour); const FILL = dh ? lighten(dh, .45) : FILL_;
   runs.forEach((run, ri) => {
     const over = run.island ? (+run.overhang || 0) : 0;
     const depth = Math.max(...run.cabinets.map((x) => +x.d || 0), 60) + (+c.front || 0); const rowH = (depth + over) * k + 40; const yb = y0 + 22 + over * k;

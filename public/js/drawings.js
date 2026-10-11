@@ -8,18 +8,31 @@ export const KINDS = {
   railing: 'Glass railing', railing_bar: 'Railing – posts & balusters', curtain: 'Curtain wall', mirror: 'Mirror', folding: 'Folding door',
 };
 
-export function drawModel(kind, w = 100, h = 100, { dims = true } = {}) {
+
+/** Finish colours → screen colour, glass types → tint, stone names → colour. Used so drawings follow the choices made. */
+const COLOUR_HEX = { white: '#f2f2ee', brown: '#6b4a2f', black: '#2a2c30', bronze: '#8c6a3d', silver: '#c4cad1', wood: '#a5733b', grey: '#8a8f98', gray: '#8a8f98', gold: '#c9a227', champagne: '#d9c7a1', 'dark grey': '#555a63', natural: '#d8dadd', beige: '#d8c9a8', cream: '#ece3cf', blue: '#3f6fa8', green: '#4f7a5c', red: '#b5483c' };
+export const colourHex = (name) => { const n = String(name || '').toLowerCase().trim(); if (!n) return ''; return COLOUR_HEX[n] || Object.entries(COLOUR_HEX).find(([k]) => n.includes(k))?.[1] || ''; };
+export const GLASS_HEX = [[/mirror/, '#e6eef3'], [/reflect/, '#8fb7bf'], [/tint|dark/, '#7f9bad'], [/bronze/, '#b79a7c'], [/grey|gray/, '#97a3ab'], [/sandblast|frost|obscure|satin|acid/, '#eef2f4'], [/lamin/, '#c4dfec'], [/double|insul/, '#bddcee'], [/tempered/, '#cde6f4']];
+export const glassHex = (name) => { const n = String(name || '').toLowerCase(); return (GLASS_HEX.find(([re]) => re.test(n)) || [0, '#cfe6f7'])[1]; };
+const STONE_HEX = [[/black|galaxy|nero|marquina/, '#2b2d33'], [/white|carrara|calacatta|statuario|snow/, '#e9e7e2'], [/grey|gray|ash|concrete/, '#8a8d93'], [/beige|cream|crema|travertine|sand/, '#d8c9a8'], [/brown|emperador|coffee|chocolate/, '#6b4a3a'], [/green|verde/, '#4f6b58'], [/red|rosso/, '#8c3b34'], [/blue|azul/, '#3f5f86']];
+export const stoneHex = (name) => { const n = String(name || '').toLowerCase(); return (STONE_HEX.find(([re]) => re.test(n)) || [0, '#6b6f78'])[1]; };
+const mix = (hex, to, a) => { const f = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); const [r, g, b] = f(hex); const [r2, g2, b2] = f(to); return '#' + [r + (r2 - r) * a, g + (g2 - g) * a, b + (b2 - b) * a].map((v) => Math.round(v).toString(16).padStart(2, '0')).join(''); };
+export const lighten = (hex, a) => mix(hex, '#ffffff', a);
+
+/** colour = finish name (frame), glass = glass type name (pane tint). Both optional. */
+export function drawModel(kind, w = 100, h = 100, { dims = true, colour = '', glass: glassName = '' } = {}) {
+  const FR = colourHex(colour) || '#9aa7b5'; const FR2 = colourHex(colour) ? lighten(FR, .55) : '#e9eef4'; const FR3 = colourHex(colour) ? lighten(FR, .3) : '#cfd8e2'; const GL = glassName ? glassHex(glassName) : '#cfe6f7';
   w = Number(w) || 100; h = Number(h) || 100;
   const M = 150; const k = M / Math.max(w, h);
   const W = Math.max(40, w * k), H = Math.max(40, h * k);
   const pad = dims ? 26 : 8; const ox = pad, oy = 8;
   const vw = W + pad + 14, vh = H + oy + (dims ? 26 : 8);
   const ft = 5; // frame thickness
-  const glass = 'fill="#cfe6f7" stroke="#26435f" stroke-width="1"';
+  const glass = `fill="${GL}" stroke="#26435f" stroke-width="1"`;
   const line = 'stroke="#26435f" stroke-width="1" fill="none"';
   const dash = 'stroke="#26435f" stroke-width="1" fill="none" stroke-dasharray="4 3"';
   const x0 = ox, y0 = oy, x1 = ox + W, y1 = oy + H;
-  let s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="#9aa7b5" stroke="#26435f" stroke-width="1.5"/>`;
+  let s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="${FR}" stroke="#26435f" stroke-width="1.5"/>`;
   const pane = (x, y, ww, hh) => `<rect x="${x}" y="${y}" width="${ww}" height="${hh}" ${glass}/>`;
   const ix = x0 + ft, iy = y0 + ft, iw = W - 2 * ft, ih = H - 2 * ft;
   const tri = (x, y, ww, hh, hinge) => { // dashed opening symbol, apex on the hinge side
@@ -50,11 +63,11 @@ export function drawModel(kind, w = 100, h = 100, { dims = true } = {}) {
       break;
     }
     case 'door1':
-      s += `<rect x="${ix}" y="${iy}" width="${iw}" height="${ih}" fill="#e9eef4" stroke="#26435f"/>` + pane(ix + iw * .18, iy + ih * .08, iw * .64, ih * .5) + `<rect x="${ix + iw * .18}" y="${iy + ih * .64}" width="${iw * .64}" height="${ih * .26}" fill="#cfd8e2" stroke="#26435f"/>` + handle(ix + iw - 7, y0 + H * .55) + tri(ix + 4, iy + 4, iw - 8, ih - 8, 'L');
+      s += `<rect x="${ix}" y="${iy}" width="${iw}" height="${ih}" fill="${FR2}" stroke="#26435f"/>` + pane(ix + iw * .18, iy + ih * .08, iw * .64, ih * .5) + `<rect x="${ix + iw * .18}" y="${iy + ih * .64}" width="${iw * .64}" height="${ih * .26}" fill="${FR3}" stroke="#26435f"/>` + handle(ix + iw - 7, y0 + H * .55) + tri(ix + 4, iy + 4, iw - 8, ih - 8, 'L');
       break;
     case 'door2': {
       const m = ix + iw / 2;
-      for (const [x, ww] of [[ix, iw / 2 - 1], [m + 1, iw / 2 - 1]]) s += `<rect x="${x}" y="${iy}" width="${ww}" height="${ih}" fill="#e9eef4" stroke="#26435f"/>` + pane(x + ww * .16, iy + ih * .08, ww * .68, ih * .5) + `<rect x="${x + ww * .16}" y="${iy + ih * .64}" width="${ww * .68}" height="${ih * .26}" fill="#cfd8e2" stroke="#26435f"/>`;
+      for (const [x, ww] of [[ix, iw / 2 - 1], [m + 1, iw / 2 - 1]]) s += `<rect x="${x}" y="${iy}" width="${ww}" height="${ih}" fill="${FR2}" stroke="#26435f"/>` + pane(x + ww * .16, iy + ih * .08, ww * .68, ih * .5) + `<rect x="${x + ww * .16}" y="${iy + ih * .64}" width="${ww * .68}" height="${ih * .26}" fill="${FR3}" stroke="#26435f"/>`;
       s += handle(m - 5, y0 + H * .55) + handle(m + 5, y0 + H * .55) + tri(ix + 3, iy + 3, iw / 2 - 7, ih - 6, 'L') + tri(m + 4, iy + 3, iw / 2 - 7, ih - 6, 'R');
       break;
     }
@@ -74,28 +87,28 @@ export function drawModel(kind, w = 100, h = 100, { dims = true } = {}) {
       s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" ${glass} stroke-width="1.5"/>` + [0.12, 0.88].map((f) => `<rect x="${x0 - 1}" y="${y0 + H * f - 5}" width="9" height="10" fill="#26435f" rx="1"/>`).join('') + tri(x0 + 4, y0 + 4, W - 8, H - 8, 'L') + `<rect x="${x1 - 10}" y="${y0 + H / 2 - 14}" width="3.5" height="28" rx="1.7" fill="#26435f"/>`;
       break;
     case 'shower_slide': {
-      s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="none" stroke="#26435f" stroke-width="1.5"/><rect x="${x0}" y="${y0}" width="${W}" height="4" fill="#9aa7b5"/><rect x="${x0}" y="${y1 - 4}" width="${W}" height="4" fill="#9aa7b5"/>`;
+      s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="none" stroke="#26435f" stroke-width="1.5"/><rect x="${x0}" y="${y0}" width="${W}" height="4" fill="${FR}"/><rect x="${x0}" y="${y1 - 4}" width="${W}" height="4" fill="${FR}"/>`;
       const pw = (W - 2) / 2 + 3;
       s += `<rect x="${x0 + 1}" y="${y0 + 5}" width="${pw}" height="${H - 10}" ${glass} fill-opacity=".75"/><rect x="${x1 - pw - 1}" y="${y0 + 5}" width="${pw}" height="${H - 10}" ${glass}/>` + arrow(x0 + 10, y0 + H / 2, 1);
       break;
     }
     case 'railing': {
       const n = Math.max(1, Math.round(w / 120)); const pw = (W - 4) / n;
-      s = `<rect x="${x0}" y="${y0}" width="${W}" height="6" rx="3" fill="#7d8a9a" stroke="#26435f"/><rect x="${x0}" y="${y1 - 5}" width="${W}" height="5" fill="#9aa7b5" stroke="#26435f"/>`;
+      s = `<rect x="${x0}" y="${y0}" width="${W}" height="6" rx="3" fill="#7d8a9a" stroke="#26435f"/><rect x="${x0}" y="${y1 - 5}" width="${W}" height="5" fill="${FR}" stroke="#26435f"/>`;
       for (let i = 0; i < n; i++) s += `<rect x="${x0 + 2 + i * pw + 1}" y="${y0 + 8}" width="${pw - 2}" height="${H - 15}" ${glass}/>`;
       for (let i = 0; i <= n; i++) s += `<rect x="${x0 + i * pw + (i === n ? 0 : 0) - 1}" y="${y0 + 6}" width="4" height="${H - 11}" fill="#26435f"/>`;
       break;
     }
     case 'railing_bar': {
       const n = Math.max(2, Math.round(w / 11)); const np = Math.max(2, Math.round(w / 120) + 1);
-      s = `<rect x="${x0}" y="${y0}" width="${W}" height="6" rx="3" fill="#7d8a9a" stroke="#26435f"/><rect x="${x0}" y="${y1 - 8}" width="${W}" height="5" fill="#9aa7b5" stroke="#26435f"/>`;
+      s = `<rect x="${x0}" y="${y0}" width="${W}" height="6" rx="3" fill="#7d8a9a" stroke="#26435f"/><rect x="${x0}" y="${y1 - 8}" width="${W}" height="5" fill="${FR}" stroke="#26435f"/>`;
       for (let i = 1; i < n; i++) s += `<rect x="${x0 + (W * i) / n - 1}" y="${y0 + 6}" width="2" height="${H - 14}" fill="#55627a"/>`;
       for (let i = 0; i < np; i++) s += `<rect x="${x0 + ((W - 5) * i) / (np - 1)}" y="${y0 + 3}" width="5" height="${H - 3}" fill="#26435f"/>`;
       break;
     }
     case 'curtain': {
       const nc = Math.max(1, Math.ceil(w / 100)); const nr = Math.max(1, Math.ceil(h / 125));
-      s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="#9aa7b5" stroke="#26435f" stroke-width="1.5"/>`;
+      s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="${FR}" stroke="#26435f" stroke-width="1.5"/>`;
       for (let c = 0; c < nc; c++) for (let r = 0; r < nr; r++) s += `<rect x="${x0 + (W * c) / nc + 2}" y="${y0 + (H * r) / nr + 2}" width="${W / nc - 4}" height="${H / nr - 4}" ${glass}/>`;
       break;
     }
@@ -104,7 +117,7 @@ export function drawModel(kind, w = 100, h = 100, { dims = true } = {}) {
       break;
     case 'folding': {
       const n = 4; const pw = iw / n;
-      for (let i = 0; i < n; i++) s += `<rect x="${ix + i * pw}" y="${iy}" width="${pw}" height="${ih}" fill="#e9eef4" stroke="#26435f"/>` + pane(ix + i * pw + pw * .15, iy + ih * .08, pw * .7, ih * .6);
+      for (let i = 0; i < n; i++) s += `<rect x="${ix + i * pw}" y="${iy}" width="${pw}" height="${ih}" fill="${FR2}" stroke="#26435f"/>` + pane(ix + i * pw + pw * .15, iy + ih * .08, pw * .7, ih * .6);
       s += [1, 2, 3].map((i) => `<line x1="${ix + i * pw}" y1="${iy}" x2="${ix + i * pw}" y2="${iy + ih}" stroke="#26435f" stroke-width="2"/>`).join('') + arrow(ix + 8, y0 + H * .55, 1);
       break;
     }

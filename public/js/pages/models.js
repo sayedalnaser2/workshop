@@ -18,7 +18,7 @@ async function editor(el, id) {
   const m = id ? structuredClone(S.models.find((x) => x.id === id)) : BLANK();
   if (!m) { el.innerHTML = '<p class="err">Model not found.</p>'; return; }
   m.spec ||= {}; for (const k of ['vars', 'profiles', 'glass', 'accessories']) m.spec[k] ||= [];
-  const test = { w: m.def_w || 100, h: m.def_h || 100, glass: S.glass_types[0]?.id || '' };
+  const test = { w: m.def_w || 100, h: m.def_h || 100, glass: S.glass_types[0]?.id || '', colour: '' };
   const lib = () => ({ profiles: S.profiles, accessories: S.accessories });
 
   el.innerHTML = `<div class="ph"><h1>${id ? esc(m.name) : 'New model'}</h1><span class="grow"></span><a class="btn" href="#/models">← All models</a></div>
@@ -39,7 +39,7 @@ async function editor(el, id) {
    </div>
    <div style="position:sticky;top:12px">
     <div class="card"><h3>Live preview</h3>
-      <div class="form" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:10px"><label class="field"><span>Width cm</span><input id="tw" type="number" step="any" value="${test.w}"></label><label class="field"><span>Height cm</span><input id="th" type="number" step="any" value="${test.h}"></label><label class="field"><span>Glass</span><select id="tg">${S.glass_types.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select></label></div>
+      <div class="form" style="grid-template-columns:1fr 1fr;margin-bottom:10px"><label class="field"><span>Width cm</span><input id="tw" type="number" step="any" value="${test.w}"></label><label class="field"><span>Height cm</span><input id="th" type="number" step="any" value="${test.h}"></label><label class="field"><span>Colour</span><select id="tc"><option value="">— default —</option>${(S.settings.colours || []).map((c) => `<option>${esc(c)}</option>`).join('')}</select></label><label class="field"><span>Glass</span><select id="tg">${S.glass_types.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}</select></label></div>
       <div class="draw" id="draw" style="text-align:center"></div><div id="calc"></div></div>
    </div>
   </div>`;
@@ -57,8 +57,8 @@ async function editor(el, id) {
   };
   const preview = () => {
     const model = { ...m, spec: { ...m.spec, params: {} } };
-    $('#draw', el).innerHTML = drawModel($('#kind', el).value, test.w, test.h);
     const g = S.glass_types.find((x) => x.id === Number(test.glass));
+    $('#draw', el).innerHTML = drawModel($('#kind', el).value, test.w, test.h, { colour: test.colour, glass: g?.name || '' });
     const r = computeModel(model, test.w, test.h, lib());
     const cost = modelCost(model, test.w, test.h, lib(), g);
     const f = (v) => (Number.isFinite(v) ? fq(Math.round(v * 100) / 100) : '<span class="err">?</span>');
@@ -72,7 +72,7 @@ async function editor(el, id) {
   const readOnly = !canWrite(S.me?.role, 'models');
   if (readOnly) {
     el.insertAdjacentHTML('afterbegin', '<div class="card" style="margin-bottom:12px;border-color:var(--warn)">View only — your account cannot change models.</div>');
-    $$('input,select,textarea,#save,#dup,#del,[data-add],[data-rm]', el).filter((x) => !['tw', 'th', 'tg'].includes(x.id)).forEach((x) => (x.disabled = true));
+    $$('input,select,textarea,#save,#dup,#del,[data-add],[data-rm]', el).filter((x) => !['tw', 'th', 'tg', 'tc'].includes(x.id)).forEach((x) => (x.disabled = true));
   }
 
   const spec = $('#spec', el);
@@ -86,6 +86,7 @@ async function editor(el, id) {
   $('#tw', el).oninput = (e) => { test.w = num(e.target.value); preview(); };
   $('#th', el).oninput = (e) => { test.h = num(e.target.value); preview(); };
   $('#tg', el).onchange = (e) => { test.glass = e.target.value; preview(); };
+  $('#tc', el).onchange = (e) => { test.colour = e.target.value; preview(); };
   $('#kind', el).onchange = preview;
 
   const collect = () => ({
