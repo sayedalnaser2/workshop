@@ -6,7 +6,7 @@ import { quotePieces } from '../stock.js';
 import { computeModel } from '../calc.js';
 import { dot } from './stock.js';
 
-const KIND = { start: '▶ started', pause: '⏸ paused', update: '✎', blocked: '⛔ blocked', unblock: '✔ unblocked', done: '✔ finished', reopen: '↺ reopened', time: '⏱ added time', assigned: '👤', created: '＋', estimate: '⏲' };
+const KIND = { hidden: '🙈', start: '▶ started', pause: '⏸ paused', update: '✎', blocked: '⛔ blocked', unblock: '✔ unblocked', done: '✔ finished', reopen: '↺ reopened', time: '⏱ added time', assigned: '👤', created: '＋', estimate: '⏲' };
 export const logLine = (l) => `${KIND[l.kind] || ''} ${esc(l.text || '')}${l.progress != null && l.kind === 'update' ? ` <b>(${Math.round(l.progress)}%)</b>` : ''}${l.kind === 'done' && l.minutes != null ? ` <b>(took ${fmtMin(l.minutes)})</b>` : ''}${l.kind === 'time' && l.minutes ? ` <b>(+${fmtMin(l.minutes)})</b>` : ''}`;
 
 let TZ = 180; // workshop time zone (minutes from UTC), set from the shift settings

@@ -145,7 +145,7 @@ async function api(req, res, url) {
   }
   if (p[0] === 'tasks' && p[1]) {
     const tid = Number(p[1]); const t = taskView(tid); if (!t) return send(res, 404, { error: 'Task not found' });
-    if (!isAA && !isOnTask(t, user.id)) throw forbid();
+    if (!isAA && (t.hidden || !isOnTask(t, user.id))) throw forbid();
     if (m === 'GET' && !p[2]) return send(res, 200, { task: t, logs: logsFor(tid), sessions: sessionsFor(tid) });
     if (m === 'POST' && p[2] === 'action') return send(res, 200, taskAction(user, tid, await readJson(req)));
   }
@@ -248,6 +248,7 @@ async function api(req, res, url) {
       return send(res, 201, row);
     }
     if (id && m === 'PUT') { const cur = getRow(t, id); if (!cur) return send(res, 404, { error: 'Not found' }); const body = await readJson(req); checkRef(t, body, cur); if (worker) delete body.unit_cost;
+      if (t === 'tasks' && 'hidden' in body) { need(role === 'admin'); body.hidden = body.hidden ? 1 : 0; } // only an admin hides or shows tasks
       if (t === 'tasks') { if (body.status === 'done' && cur.status !== 'done') { body.done_at = new Date().toISOString(); body.progress = 100; } else if (body.status && body.status !== 'done' && cur.status === 'done') body.done_at = null; }
       const saved = updateRow(t, id, body); if (t === 'tasks') onTaskUpdated(cur, saved, user); return send(res, 200, saved); }
     if (id && m === 'DELETE') { if (t === 'tasks') { db.prepare('DELETE FROM task_logs WHERE task_id=?').run(id); db.prepare('DELETE FROM task_sessions WHERE task_id=?').run(id); } deleteRow(t, id); return send(res, 200, { ok: true }); }

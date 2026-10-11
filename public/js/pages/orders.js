@@ -39,7 +39,7 @@ export async function render(el, [id]) {
 async function detail(el, id) {
   const [ledger, receipts, purchases, allTasks] = await Promise.all([api.get('ledger'), api.get('t/receipts'), api.get('t/purchases'), api.get('tasks-view')]);
   const o = ledger.find((x) => x.id === id); if (!o) { el.innerHTML = '<p class="err">Order not found</p>'; return; }
-  const tasks = allTasks.filter((t) => t.order_inv === o.inv);
+  const tasks = allTasks.filter((t) => t.order_inv === o.inv && !t.hidden);
   const rec = receipts.filter((r) => r.order_inv === o.inv); const pur = purchases.filter((p) => p.order_inv === o.inv);
   el.innerHTML = `<div class="ph"><h1>${esc(o.inv)} — ${esc(o.client)}</h1>${o.done ? badge('Done', 'ok') : badge('Open', 'warn')}<span class="grow"></span><a class="btn" href="#/orders">← Orders</a></div>
   <div class="cards"><div class="card stat"><div class="k">Gross amount</div><div class="v">${money(o.amount, 2)}</div></div><div class="card stat"><div class="k">Paid</div><div class="v">${money(o.paid, 2)}</div></div><div class="card stat"><div class="k">Balance</div><div class="v ${o.balance > 0 ? 'neg' : 'pos'}">${money(o.balance, 2)}</div></div><div class="card stat"><div class="k">Purchases / Profit</div><div class="v">${money(o.cost, 2)} <small class="muted">/ ${money(o.profit, 2)}</small></div></div></div>

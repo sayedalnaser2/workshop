@@ -63,7 +63,7 @@ export function shiftStatus(user) {
 
 /** What a signed-in person sees on their own task list: their tasks, plus unassigned open ones they can pick up. */
 export function myTasks(user) {
-  const rows = taskViews("(t.assignee_id = ? OR EXISTS (SELECT 1 FROM json_each(IFNULL(t.team, '[]')) WHERE value = ?) OR (t.assignee_id IS NULL AND t.status <> 'done')) AND (t.status <> 'done' OR t.done_at >= ?)", [user.id, user.id, new Date(Date.now() - 3 * 864e5).toISOString()]);
+  const rows = taskViews("(t.assignee_id = ? OR EXISTS (SELECT 1 FROM json_each(IFNULL(t.team, '[]')) WHERE value = ?) OR (t.assignee_id IS NULL AND t.status <> 'done')) AND IFNULL(t.hidden, 0) = 0 AND (t.status <> 'done' OR t.done_at >= ?)", [user.id, user.id, new Date(Date.now() - 3 * 864e5).toISOString()]);
   return rows.map((t) => ({ ...t, recent: logsFor(t.id, 4) }));
 }
 
@@ -80,7 +80,7 @@ const log = (task, user, kind, text = '', progress = null, minutes = null) =>
 export function taskAction(user, id, body) {
   const t = getRow('tasks', id); if (!t) throw bad('Task not found', 404);
   const manager = user.role === 'admin' || user.role === 'account';
-  if (!manager && !isOnTask(t, user.id)) throw bad('This task is assigned to someone else.', 403);
+  if (!manager && (t.hidden || !isOnTask(t, user.id))) throw bad(t.hidden ? 'Task not found' : 'This task is assigned to someone else.', t.hidden ? 404 : 403);
   const a = body.action; const text = String(body.text || '').trim().slice(0, 1000); const at = nowIso();
   const open = db.prepare('SELECT * FROM task_sessions WHERE task_id=? AND user_id=? AND ended IS NULL').get(id, user.id);
   if (t.status === 'done' && !['reopen', 'update'].includes(a)) throw bad('This task is already done.');
@@ -131,6 +131,7 @@ export function onTaskCreated(task, user) {
 export function onTaskUpdated(before, after, user) {
   if (before.assignee_id !== after.assignee_id) log(after, user, 'assigned', after.assignee_id ? `Assigned to ${db.prepare('SELECT name FROM users WHERE id=?').get(after.assignee_id)?.name}` : 'Unassigned');
   if (JSON.stringify(before.team || null) !== JSON.stringify(after.team || null)) { const n = (a) => (a || []).map((id) => db.prepare('SELECT name FROM users WHERE id=?').get(id)?.name).filter(Boolean); log(after, user, 'assigned', (after.team || []).length ? `Team: ${n(after.team).join(', ')}` : 'Team cleared'); }
+  if ((before.hidden || 0) !== (after.hidden || 0)) log(after, user, 'hidden', after.hidden ? 'Task hidden from lists' : 'Task shown again');
   if (before.estimate_min !== after.estimate_min) log(after, user, 'estimate', `Estimate changed to ${after.estimate_min || 0} min`, null, after.estimate_min);
 }
 
