@@ -10,7 +10,7 @@ import {
 import { needsSetup, authenticate, createUser, updateUser, deleteUser, listUsers, setOwnPassword, makeToken, userFromToken, cookieOf } from './src/auth.js';
 import { tableAccess } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
-import { seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets } from './src/seed.js';
+import { seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets, seedBalexco } from './src/seed.js';
 import { isOnTask, taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated, markPresent, shiftStatus } from './src/tasks.js';
 import { exportWorkbook } from './src/exporter.js';
 import { quoteTotals, approvalFor, discountPct } from './public/js/calc.js';
@@ -18,7 +18,7 @@ import { vatReport, orderVat } from './public/js/vat.js';
 import { audit, diff, labelOf, listAudit, notable } from './src/audit.js';
 import { respond, staticServer, throttleCheck, throttleFail, throttleOk, runBackup, listBackups, backupDir } from './src/web.js';
 
-seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets();
+seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets(); seedBalexco();
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DEV = process.env.WORKSHOP_DEV === '1';

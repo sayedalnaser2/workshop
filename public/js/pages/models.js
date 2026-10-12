@@ -3,6 +3,7 @@ import { api, $, $$, esc, money, qty as fq, num, toast, guard, confirmBox } from
 import { canWrite } from '../perm.js';
 import { computeModel, modelCost } from '../calc.js';
 import { drawModel, KINDS } from '../drawings.js';
+import { TYPE_LABEL, glazingFits, glazingNote, thicknessRange, mmOf, BEADS } from '../glazing.js';
 
 export async function render(el, [id]) {
   if (id) return editor(el, id === 'new' ? null : Number(id));
@@ -32,6 +33,7 @@ async function editor(el, id) {
       <label class="field"><span>Default width (cm)</span><input id="def_w" type="number" step="any" value="${m.def_w ?? ''}"></label>
       <label class="field"><span>Default height (cm)</span><input id="def_h" type="number" step="any" value="${m.def_h ?? ''}"></label>
       <label class="field full"><span>Auto-link to price-list items containing…</span><input id="match" value="${esc(m.spec.match || '')}" placeholder="e.g. Single Hinged window 45"><small>When you pick a price-list item whose name contains this text in a quotation, this model is attached automatically.</small></label>
+      <label class="field full"><span>Glazing system (Balexco 45 chart)</span><select id="gtype"><option value="">— not used —</option>${Object.entries(TYPE_LABEL).map(([k, l]) => `<option value="${k}" ${m.spec.glazing?.type === k ? 'selected' : ''}>${l}</option>`).join('')}</select><small>With a type chosen, quotations and cutting lists pick the glazing bead and gasket pair for the glass thickness and add the gasket metres.</small></label>
       <label class="field full"><span>Notes</span><textarea id="note" rows="2">${esc(m.note || '')}</textarea></label>
     </div></div>
     <div class="card spec-sec" id="spec"></div>
@@ -66,9 +68,16 @@ async function editor(el, id) {
       ${r.profiles.length ? `<table class="grid" style="margin-top:8px"><thead><tr><th>Piece</th><th class="num">Length</th><th class="num">Qty</th></tr></thead><tbody>${r.profiles.map((p) => `<tr><td>${esc(p.label)}<div class="muted" style="font-size:11px">${esc(p.profile?.name || '—')}</div></td><td class="num">${f(p.length)}</td><td class="num">${f(p.qty)}</td></tr>`).join('')}</tbody></table>` : ''}
       ${r.glass.length ? `<table class="grid" style="margin-top:8px"><thead><tr><th>Glass</th><th class="num">W × H</th><th class="num">Qty</th></tr></thead><tbody>${r.glass.map((p) => `<tr><td>${esc(p.label)}</td><td class="num">${f(p.w)} × ${f(p.h)}</td><td class="num">${f(p.qty)}</td></tr>`).join('')}</tbody></table>` : ''}
       ${r.accessories.length ? `<table class="grid" style="margin-top:8px"><thead><tr><th>Accessory</th><th class="num">Qty</th></tr></thead><tbody>${r.accessories.map((p) => `<tr><td>${esc(p.accessory?.name || p.label)}</td><td class="num">${f(p.qty)}</td></tr>`).join('')}</tbody></table>` : ''}
+      <div id="fit"></div>
       <p class="muted" style="margin-top:8px">${cost.total ? `Material cost ≈ BD ${money(cost.total, 2)} (profiles ${money(cost.profiles, 2)} · glass ${money(cost.glass, 2)} · accessories ${money(cost.accessories, 2)})` : 'Enter prices in Profiles, Glass &amp; Accessories to see a material cost estimate.'}</p>`;
+    fitPanel();
   };
-  drawSpec(); preview();
+  const fitPanel = () => {
+    const box = $('#fit', el); if (!box) return; const type = m.spec.glazing?.type; if (!type) { box.innerHTML = ''; return; }
+    const g = S.glass_types.find((x) => x.id === Number(test.glass)); const gn = glazingNote(m, g); const r = thicknessRange(type);
+    box.innerHTML = `<div style="margin-top:10px;padding:8px 10px;background:var(--soft);border-radius:6px;font-size:13px"><b>Glazing</b> — holds glass ${r ? r[0] + '–' + r[1] : ''} mm<div style="margin-top:4px;${gn && !gn.best ? 'color:var(--bad)' : ''}">${gn ? esc(gn.text) : 'Choose a glass type with a thickness (for example “6mm”) to see the bead and gaskets.'}</div>${gn?.fits?.length > 1 ? `<table class="grid" style="margin-top:6px"><thead><tr><th>Bead</th><th>Gaskets (outer + inner)</th></tr></thead><tbody>${gn.fits.map((f) => `<tr><td>${f.bead} mm · ${f.codes.join(' / ')}</td><td>${f.outer} + ${f.inner} → ${f.outerCode} + ${f.innerCode}</td></tr>`).join('')}</tbody></table>` : ''}</div>`;
+  };
+  drawSpec(); preview(); fitPanel();
   const readOnly = !canWrite(S.me?.role, 'models');
   if (readOnly) {
     el.insertAdjacentHTML('afterbegin', '<div class="card" style="margin-bottom:12px;border-color:var(--warn)">View only — your account cannot change models.</div>');
@@ -85,7 +94,8 @@ async function editor(el, id) {
   const origDraw = drawSpec;
   $('#tw', el).oninput = (e) => { test.w = num(e.target.value); preview(); };
   $('#th', el).oninput = (e) => { test.h = num(e.target.value); preview(); };
-  $('#tg', el).onchange = (e) => { test.glass = e.target.value; preview(); };
+  $('#tg', el).onchange = (e) => { test.glass = e.target.value; preview(); fitPanel(); };
+  $('#gtype', el).onchange = (e) => { m.spec.glazing = e.target.value ? { type: e.target.value } : null; fitPanel(); };
   $('#tc', el).onchange = (e) => { test.colour = e.target.value; preview(); };
   $('#kind', el).onchange = preview;
 

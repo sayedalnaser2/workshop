@@ -193,3 +193,24 @@ export function seedKitchenPresets() {
   let n = 1000;
   for (const [name, c] of PRESETS) insertRow('kitchen_options', { kind: 'preset', name, price: 0, unit: '', meta: { label: '', glazed: 0, ...CT[c.type], ...c }, note: '', sort: n++ });
 }
+
+// ---------------------------------------------------------------------------- Balexco 45 series catalogue (gaskets, beads, glazing profiles)
+const BX_PROFILES = [
+  ['E1403', 'Glazing bead 26 mm', 'Balexco 45'], ['E1410', 'Glazing bead 26 mm (pair)', 'Balexco 45'], ['E1404', 'Glazing bead 21 mm', 'Balexco 45'], ['E1411', 'Glazing bead 21 mm (pair)', 'Balexco 45'],
+  ['E1405', 'Glazing bead 16 mm', 'Balexco 45'], ['E1412', 'Glazing bead 16 mm (pair)', 'Balexco 45'], ['E1406', 'Glazing bead 11 mm', 'Balexco 45'], ['E1413', 'Glazing bead 11 mm (pair)', 'Balexco 45'],
+  ['E1407', 'Glazing bead 6 mm', 'Balexco 45'], ['E1414', 'Glazing bead 6 mm (pair)', 'Balexco 45'],
+  ['E1220', 'Window profile, glass space 41.3', 'Balexco 45'], ['E1230', 'Window profile, glass space 41.3 (curved)', 'Balexco 45'], ['E1237', 'Door profile, glass space 36.3', 'Balexco 45'], ['E1224', 'Door profile, glass space 36.3', 'Balexco 45'],
+  ['E1337', 'Thermal-break door profile, glass space 41.3', 'Balexco 45i'], ['E1320', 'Thermal-break window profile, glass space 46.3', 'Balexco 45i'], ['E1331', 'Thermal-break window profile, glass space 46.3 (curved)', 'Balexco 45i'],
+];
+const BX_GASKETS = [['E2101', '2 mm', 'inner F'], ['E2102', '4 mm', 'inner D'], ['E2103', '6 mm', 'inner E'], ['E2104', '2 mm', 'outer C'], ['E2110', '', ''], ['E2111', '', ''], ['E2112', '3 mm', 'outer B'], ['E2113', '4 mm', 'outer A'], ['E2114', '', ''], ['E2115', '', '']];
+export function seedBalexco() {
+  const have = new Set(listRows('profiles').map((p) => p.code)); const haveA = new Set(listRows('accessories').map((a) => a.code));
+  for (const [code, name, series] of BX_PROFILES) if (!have.has(code)) insertRow('profiles', { code, name, series, bar_length: 600, price_bar: 0, weight_m: 0, color: '' });
+  for (const [code, mm, role] of BX_GASKETS) if (!haveA.has(code)) insertRow('accessories', { code, name: `Gasket ${code} EPDM${mm ? ' ' + mm : ''}${role ? ' (' + role + ')' : ''}`, unit: 'm', price: 0 });
+  // the starter 45-series windows and doors use this system: turn the glazing picker on for them (once)
+  for (const m of listRows('models')) {
+    if (m.spec?.glazing || m.series !== '45 Series') continue;
+    const type = m.category === 'Door' ? 'door' : m.category === 'Window' ? 'window' : '';
+    if (type) updateRow('models', m.id, { spec: { ...m.spec, glazing: { type } } });
+  }
+}

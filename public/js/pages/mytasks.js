@@ -8,6 +8,7 @@ import { elevationSVG } from '../kitchen-draw.js';
 import { computeModel } from '../calc.js';
 import { dot } from './stock.js';
 import { attachmentsPanel } from '../attachments.js';
+import { glazingNote } from '../glazing.js';
 
 const KIND = { hidden: '🙈', start: '▶ started', pause: '⏸ paused', update: '✎', blocked: '⛔ blocked', unblock: '✔ unblocked', done: '✔ finished', reopen: '↺ reopened', time: '⏱ added time', assigned: '👤', created: '＋', estimate: '⏲' };
 export const logLine = (l) => `${KIND[l.kind] || ''} ${esc(l.text || '')}${l.progress != null && l.kind === 'update' ? ` <b>(${Math.round(l.progress)}%)</b>` : ''}${l.kind === 'done' && l.minutes != null ? ` <b>(took ${fmtMin(l.minutes)})</b>` : ''}${l.kind === 'time' && l.minutes ? ` <b>(+${fmtMin(l.minutes)})</b>` : ''}`;
@@ -106,7 +107,7 @@ async function jobSheet(el, id) {
   const [{ task: t, logs }, sh, quotes, kitchens0] = await Promise.all([api.get(`tasks/${id}`), api.get('shift'), api.get('t/quotes'), api.get('t/kitchens')]);
   const q = t.quote_no ? quotes.find((x) => x.number === t.quote_no) : null;
   const here = sh.current && sh.current.task_id === t.id; const live = here && t.ticking; const pct = Math.round(t.progress || 0);
-  const lib = { profiles: S.profiles, accessories: S.accessories };
+  const lib = { profiles: S.profiles, accessories: S.accessories, glassTypes: S.glass_types };
   const glassName = (gid) => S.glass_types.find((g) => g.id === Number(gid))?.name || '';
   let n = 0;
   const items = (q?.items || []).map((it, i) => {
@@ -123,7 +124,7 @@ async function jobSheet(el, id) {
       <div><div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b style="font-size:16px">#${n} ${esc(it.desc)}</b><span class="badge blue">× ${fmtQty(it.qty)}</span></div>
         <div style="font-size:18px;margin:4px 0"><b>${it.w ? fmtQty(it.w) : '?'} × ${it.h ? fmtQty(it.h) : '?'} cm</b> <span class="muted" style="font-size:12px">width × height</span></div>
         <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px">${colour ? `<span>Colour: ${dot(colour)}</span>` : ''}${it.glass_id ? `<span>Glass: <b>${esc(glassName(it.glass_id))}</b></span>` : ''}${m ? `<span class="muted">Model: ${esc(m.name)}</span>` : ''}</div>
-        ${it.note ? `<div style="margin-top:6px;padding:6px 8px;background:var(--soft);border-radius:6px;font-size:13px;white-space:pre-line">${esc(it.note)}</div>` : ''}${cut}</div></div>`;
+        ${(() => { const gn = m && it.glass_id ? glazingNote(m, S.glass_types.find((g) => g.id === Number(it.glass_id))) : null; return gn ? `<div style="margin-top:6px;font-size:13px;${gn.best ? '' : 'color:var(--bad)'}">🔧 ${esc(gn.text)}</div>` : ''; })()}${it.note ? `<div style="margin-top:6px;padding:6px 8px;background:var(--soft);border-radius:6px;font-size:13px;white-space:pre-line">${esc(it.note)}</div>` : ''}${cut}</div></div>`;
   }).join('');
 
   // a kitchen designed for this order

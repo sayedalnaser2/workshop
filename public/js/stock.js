@@ -1,5 +1,6 @@
 // Stock, leftovers and purchase-order logic shared by the quotation editor, cutting list and PO dialog.
 import { computeModel, nestBars } from './calc.js';
+import { glazingFits, mmOf, GASKETS } from './glazing.js';
 
 const fin = Number.isFinite;
 const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
@@ -10,7 +11,7 @@ export const cpc = (p) => (p && p.bar_length > 0 ? (p.price_bar || 0) / p.bar_le
 export const leftoverValue = (profile, length, pct = 100) => Math.round(cpc(profile) * length * (pct / 100) * 1000) / 1000;
 
 /** Every profile piece and glass pane a quotation needs (items that have a model and a size). */
-export function quotePieces(q, models, lib) {
+export function quotePieces(q, models, lib, glassTypes = lib.glassTypes || []) {
   const out = [];
   (q.items || []).forEach((it, i) => {
     if (it.kind === 'note') return;
@@ -28,6 +29,12 @@ export function quotePieces(q, models, lib) {
       for (let k = 0; k < Math.round(g.qty) * n; k++) out.push({ kind: 'glass', item: i, label: g.label, glass_id: it.glass_id ? Number(it.glass_id) : null, w: Math.round(g.w * 10) / 10, h: Math.round(g.h * 10) / 10, model: m.name });
     }
     for (const a of r.accessories) if (fin(a.qty)) out.push({ kind: 'accessory', item: i, label: a.label, accessory_id: a.accessory_id ? Number(a.accessory_id) : null, qty: a.qty * n, model: m.name });
+    // gaskets for the glass thickness (Balexco chart): the chosen outer + inner gasket run round every pane
+    const gt = glassTypes.find((x) => x.id === Number(it.glass_id)); const fit = m.spec?.glazing?.type && gt ? glazingFits(mmOf(gt.thickness), m.spec.glazing.type)[0] : null;
+    if (fit) {
+      const metres = r.glass.reduce((s2, g) => s2 + (fin(g.w) && fin(g.h) && fin(g.qty) ? (2 * (g.w + g.h) / 100) * g.qty : 0), 0) * n;
+      for (const [letter] of [[fit.outer], [fit.inner]]) { const code = GASKETS[letter].code; const acc = (lib.accessories || []).find((x) => x.code === code); if (acc && metres > 0) out.push({ kind: 'accessory', item: i, label: `Gasket ${letter} (${code})`, accessory_id: acc.id, qty: Math.round(metres * 100) / 100, model: m.name }); }
+    }
   });
   return out;
 }
@@ -95,7 +102,7 @@ export function nestWithLeftovers(pieces, units, barLength, kerf = 0) {
 
 /** Lines for a purchase order: bars per profile+colour (after leftovers), glass area, accessories — minus what is already in new stock. */
 export function poSuggestions(q, { models, profiles, accessories, glassTypes, items, stock, kerf = 0 }) {
-  const lib = { profiles, accessories };
+  const lib = { profiles, accessories, glassTypes };
   const pieces = quotePieces(q, models, lib);
   const { unplaced } = allocateLeftovers(pieces, stock, { profiles, glassTypes, kerf, quoteNo: q.number });
   const lines = [];

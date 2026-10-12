@@ -99,3 +99,32 @@ test('Arabic screen text: known strings are translated, unknown ones left alone'
   assert.equal(tr('Hello Amina'), 'مرحباً Amina');
   assert.equal(tr('Some brand new sentence'), null);
 });
+
+test('Balexco glazing chart: bead and gasket pair for a glass thickness, per profile type', async () => {
+  const { glazingFits, thicknessRange, glazingNote, mmOf } = await import('../public/js/glazing.js');
+  const w6 = glazingFits(6, 'window'); assert.equal(w6.length, 1); assert.deepEqual([w6[0].bead, w6[0].combo, w6[0].outerCode, w6[0].innerCode], [26, 'B+E', 'E2112', 'E2103']);
+  const d12 = glazingFits(12, 'door'); assert.equal(d12[0].bead, 16); assert.equal(d12[0].combo, 'C+E'); // 36.3 column: bead 16 starts at 10
+  assert.equal(glazingFits(10, 'tb_window').length, 0); // thermal-break windows start at 15 mm
+  assert.equal(glazingFits(29, 'tb_window')[0].combo, 'C+F'); // the one C+F row on the chart
+  assert.deepEqual(thicknessRange('door'), [5, 24]);
+  assert.equal(mmOf('10.76mm'), 10.76); assert.equal(mmOf(''), 0);
+  assert.match(glazingNote({ spec: { glazing: { type: 'window' } } }, { thickness: '6mm' }).text, /E1403 \/ E1410/);
+  assert.equal(glazingNote({ spec: { glazing: { type: 'tb_window' } } }, { thickness: '6mm' }).best, undefined);
+  assert.equal(glazingNote({ spec: {} }, { thickness: '6mm' }), null);
+});
+
+test('cutting list: gaskets for the glass thickness are added to the quotation pieces', async () => {
+  process.env.DATA_DIR = tmpData;
+  const { seedLibrary, seedBalexco } = await import('../src/seed.js');
+  const { listRows } = await import('../src/db.js');
+  const { quotePieces } = await import('../public/js/stock.js');
+  seedLibrary(); seedBalexco(); seedBalexco();
+  const lib = { profiles: listRows('profiles'), accessories: listRows('accessories') }; const models = listRows('models');
+  assert.equal(lib.accessories.filter((a) => a.code === 'E2112').length, 1); // idempotent
+  const fix = models.find((m) => m.name === 'Fix window'); assert.equal(fix.spec.glazing.type, 'window');
+  const q = { items: [{ model_id: fix.id, w: 100, h: 100, qty: 2, glass_id: 1 }] };
+  const none = quotePieces(q, models, lib, [{ id: 1, thickness: '' }]).filter((p) => /^Gasket [A-F]/.test(p.label)); assert.equal(none.length, 0);
+  const g = quotePieces(q, models, lib, [{ id: 1, thickness: '6mm' }]).filter((p) => /^Gasket [A-F]/.test(p.label));
+  assert.deepEqual(g.map((p) => p.label), ['Gasket B (E2112)', 'Gasket E (E2103)']);
+  assert.equal(g[0].qty, 7.44); // pane 93×93 cm → 3.72 m round it, two windows
+});
