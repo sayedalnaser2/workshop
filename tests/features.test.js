@@ -159,7 +159,13 @@ test('kitchen: joining two cabinets makes one carcass; splitting reverses it; op
   const a = { type: 'base', w: 60, h: 72, d: 56, doors: 1, shelves: 1 }; const b = { type: 'sink', w: 90, h: 72, d: 56, doors: 2 };
   const m = mergeCabinets(a, b).cab; assert.equal(m.w, 150); assert.equal(m.doors, 3); assert.equal(m.type, 'sink');
   assert.ok(mergeSaving(a, b).panels > 0); assert.ok(mergeSaving(a, b).m2 > 0);
-  assert.ok(mergeCabinets(a, { type: 'wall', w: 60, h: 70, d: 32 }).error); assert.ok(mergeCabinets(a, { type: 'drawers', w: 60, h: 72, d: 56, drawers: 3 }).error);
+  assert.ok(mergeCabinets(a, { type: 'wall', w: 60, h: 70, d: 32 }).error);
+  const dr = { type: 'drawers', w: 60, h: 72, d: 56, drawers: 3 }; const mix = mergeCabinets(dr, a).cab; // drawers joined with a door cabinet
+  assert.equal(mix.w, 120); assert.equal(mix.drawers, 3); assert.equal(mix.doors, 1); assert.equal(mix.mixed.mode, 'side'); assert.equal(mix.mixed.left, true);
+  const { zonesOf, cabinetParts } = await import('../public/js/kitchen.js'); const z = zonesOf(mix); assert.equal(z.drawers.w, 60); assert.equal(z.doors.x, 60); assert.equal(z.doors.w, 60);
+  const parts = cabinetParts(mix); assert.equal(parts.panels.filter((p) => /Drawer front/.test(p.label)).length, 3); assert.ok(parts.hw.slides === 3 && parts.hw.hinges > 0);
+  const stack = zonesOf({ ...mix, mixed: { mode: 'stack', dh: 20 } }); assert.equal(stack.drawers.y, 52); assert.equal(stack.doors.h, 52);
+  assert.deepEqual(splitCabinet(mix).cabs.map((c) => [c.type, c.w]), [['drawers', 60], ['base', 60]]);
   const [h1, h2] = splitCabinet(b).cabs; assert.equal(h1.w + h2.w, 90); assert.equal(h1.doors + h2.doors, 2);
   const spec = { style: {}, counter: {}, runs: [{ cabinets: [a, { type: 'drawers', w: 60, h: 72, d: 56, drawers: 3 }] }] };
   const closed = scene(spec); const open = scene(spec, { '0|0': 1, '0|1': 1 });

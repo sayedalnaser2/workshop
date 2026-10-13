@@ -20,6 +20,18 @@ export const DEFAULT_COUNTER = { material: '', thickness: 2, front: 2, side: 0, 
 const r1 = (n) => Math.round(n * 10) / 10;
 const hingesFor = (h) => (h <= 90 ? 2 : h <= 160 ? 3 : h <= 220 ? 4 : 5);
 
+/** Where the doors and the drawers sit on a cabinet (cm, x from its left edge, y up from its bottom). A cabinet with both has them stacked (drawers on top) or side by side (cab.mixed). */
+export function zonesOf(cab) {
+  const W = +cab.w || 0; const H = +cab.h || 0; const doors = Math.max(0, Math.round(+cab.doors || 0)); const drawers = Math.max(0, Math.round(+cab.drawers || 0));
+  const z = { doors: doors ? { x: 0, y: 0, w: W, h: H } : null, drawers: drawers ? { x: 0, y: 0, w: W, h: H } : null };
+  if (doors && drawers) {
+    const m = cab.mixed || {};
+    if (m.mode === 'side') { const dw = Math.min(W - 20, Math.max(20, +m.dw || W * 0.4)); z.drawers = { x: m.left ? 0 : W - dw, y: 0, w: dw, h: H }; z.doors = { x: m.left ? dw : 0, y: 0, w: W - dw, h: H }; }
+    else { const dh = Math.min(H - 20, Math.max(10, +m.dh || Math.min(18 * drawers, H * 0.4))); z.drawers = { x: 0, y: H - dh, w: W, h: dh }; z.doors = { x: 0, y: 0, w: W, h: H - dh }; }
+  }
+  return z;
+}
+
 /** Panels, hardware and glass for one cabinet. mat: carcass | back | door. edge = banded edge length per piece (cm). */
 export function cabinetParts(cab, style = DEFAULT_STYLE) {
   const s = { ...DEFAULT_STYLE, ...style }; const t = s.t; const b = s.back_t; const g = s.gap;
@@ -47,14 +59,14 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   add(`${tag}Back`, W - 0.4, H - 0.4, 1, 'back', 0);
   add(`${tag}Shelf`, W - 2 * t - 0.2, dd - 2, shelves, 'carcass', W - 2 * t - 0.2);
   // drawers share the height with doors only on mixed cabinets; here a cabinet is either doors or drawers (or a stack above doors)
-  const avail = H - (type.wall || type.tall ? 0 : 0);
+  const zn = zonesOf(cab);
   if (drawers > 0) {
-    const dh = r1(avail / drawers);
-    for (let i = 0; i < drawers; i++) front(`${tag}Drawer front ${i + 1}`, W - g, dh - g, 1);
-    hw.slides += drawers; hw.handles += drawers; hw.handleLen += drawers * (W - g);
+    const dh = r1(zn.drawers.h / drawers);
+    for (let i = 0; i < drawers; i++) front(`${tag}Drawer front ${i + 1}`, zn.drawers.w - g, dh - g, 1);
+    hw.slides += drawers; hw.handles += drawers; hw.handleLen += drawers * (zn.drawers.w - g);
   }
   if (doors > 0) {
-    const dh = avail - g; const dw = W / doors - g;
+    const dh = zn.doors.h - g; const dw = zn.doors.w / doors - g;
     front(`${tag}Door`, dw, dh, doors, glazed);
     hw.hinges += doors * hingesFor(dh); hw.handles += doors; hw.handleLen += doors * dh;
     for (let i = 0; i < glazed; i++) glass.push({ w: r1(alu ? dw - 2 * fw + 1.2 : dw - 8), h: r1(alu ? dh - 2 * fw + 1.2 : dh - 8), qty: 1 });
@@ -196,17 +208,25 @@ export function mergeCabinets(a, b) {
   if (!a || !b) return { error: 'There is no cabinet next to this one.' };
   if (classOf(a) !== classOf(b) || classOf(a) === 'gap') return { error: 'Only two cabinets of the same kind (both base, both wall or both tall) can be joined.' };
   const da = Math.round(+a.doors || 0); const db = Math.round(+b.doors || 0); const ra = Math.round(+a.drawers || 0); const rb = Math.round(+b.drawers || 0);
-  if ((da + db > 0) && (ra + rb > 0)) return { error: 'One has doors and the other drawers — change one first.' };
   const special = [a, b].find((x) => (CAB_TYPES[x.type] || {}).sink || (CAB_TYPES[x.type] || {}).hob || (CAB_TYPES[x.type] || {}).corner);
-  const cab = { ...a, type: (special || a).type, label: a.label || b.label || '', w: (+a.w || 0) + (+b.w || 0), h: Math.max(+a.h || 0, +b.h || 0), d: Math.max(+a.d || 0, +b.d || 0), doors: da + db, drawers: Math.max(ra, rb), shelves: Math.max(+a.shelves || 0, +b.shelves || 0), glazed: (+a.glazed || 0) + (+b.glazed || 0) };
+  const cab = { ...a, type: (special || a).type, label: a.label || b.label || '', w: (+a.w || 0) + (+b.w || 0), h: Math.max(+a.h || 0, +b.h || 0), d: Math.max(+a.d || 0, +b.d || 0), doors: da + db, drawers: da + db > 0 && ra + rb > 0 ? ra + rb : Math.max(ra, rb), shelves: Math.max(+a.shelves || 0, +b.shelves || 0), glazed: (+a.glazed || 0) + (+b.glazed || 0) };
+  if (da + db > 0 && ra + rb > 0) { // doors next to drawers: keep them side by side, the drawer part as wide as the drawer cabinet was
+    const drawerFirst = ra > 0 && da === 0;
+    cab.mixed = { mode: 'side', dw: drawerFirst ? +a.w || 0 : +b.w || 0, left: drawerFirst };
+    cab.doors = da + db; cab.drawers = ra + rb;
+  } else delete cab.mixed;
   return { cab };
 }
 /** The reverse: one cabinet cut into two equal halves. */
 export function splitCabinet(c) {
   if (!c || classOf(c) === 'gap') return { error: 'This cannot be split.' };
   if ((+c.w || 0) < 60) return { error: 'It is too narrow to split (each half would be under 30 cm).' };
+  if (c.mixed?.mode === 'side' && (+c.doors || 0) > 0 && (+c.drawers || 0) > 0) { // undo a doors-beside-drawers join
+    const z = zonesOf(c); const dr = { ...c, label: c.label, type: c.type, w: z.drawers.w, doors: 0, glazed: 0 }; const dd = { ...c, label: '', type: (CAB_TYPES[c.type] || {}).sink || (CAB_TYPES[c.type] || {}).hob || (CAB_TYPES[c.type] || {}).corner ? c.type : 'base', w: z.doors.w, drawers: 0 }; delete dr.mixed; delete dd.mixed;
+    return { cabs: c.mixed.left ? [{ ...dr, type: 'drawers' }, dd] : [dd, { ...dr, type: 'drawers', label: '' }] };
+  }
   const half = (n, first) => (first ? Math.ceil(n / 2) : Math.floor(n / 2)); const type = (CAB_TYPES[c.type] || {}).sink || (CAB_TYPES[c.type] || {}).hob || (CAB_TYPES[c.type] || {}).corner ? 'base' : c.type;
-  const mk = (first) => ({ ...c, type: first ? c.type : type, label: first ? c.label : '', w: (+c.w || 0) / 2, doors: half(Math.round(+c.doors || 0), first), glazed: half(Math.round(+c.glazed || 0), first) });
+  const mk = (first) => ({ ...c, drawers: c.drawers, type: first ? c.type : type, label: first ? c.label : '', w: (+c.w || 0) / 2, doors: half(Math.round(+c.doors || 0), first), glazed: half(Math.round(+c.glazed || 0), first) });
   return { cabs: [mk(true), mk(false)] };
 }
 /** What joining saves: panels and board area of the carcass compared with two separate cabinets. */

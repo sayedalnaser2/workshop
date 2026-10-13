@@ -1,5 +1,5 @@
 // SVG drawings for kitchens: front elevation, plan view with countertop, and sheet cut layouts.
-import { CAB_TYPES, DEFAULT_STYLE } from './kitchen.js';
+import { CAB_TYPES, DEFAULT_STYLE, zonesOf } from './kitchen.js';
 import { colourHex, glassHex, stoneHex, lighten } from './drawings.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -29,12 +29,16 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
       if (t.gap) { out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="none" stroke="${INK}" stroke-dasharray="4 3" stroke-width="1"/><text x="${x + w / 2}" y="${yTop + h / 2}" font-size="10" text-anchor="middle" fill="currentColor">appliance</text>`; x += w; continue; }
       out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="${FILL}" stroke="${INK}" stroke-width="1.2"/>`;
       const doors = Math.max(0, Math.round(+c.doors || 0)); const drawers = Math.max(0, Math.round(+c.drawers || 0)); const glazed = Math.min(doors, Math.round(+c.glazed || 0));
-      for (let i = 0; i < drawers; i++) { const dh = h / drawers; out += `<rect x="${x + 2}" y="${yTop + i * dh + 2}" width="${w - 4}" height="${dh - 4}" fill="${FILL2}" stroke="${INK}" stroke-width=".8"/><line x1="${x + w * .35}" y1="${yTop + i * dh + dh * .3}" x2="${x + w * .65}" y2="${yTop + i * dh + dh * .3}" stroke="${INK}" stroke-width="2"/>`; }
-      for (let i = 0; i < doors; i++) {
-        const dw = w / doors; const gx = x + i * dw;
-        out += `<rect x="${gx + 2}" y="${yTop + 2}" width="${dw - 4}" height="${h - 4}" fill="${i < glazed ? GLASS : FILL2}" stroke="${INK}" stroke-width=".8"/>`;
-        const hx = doors === 1 ? gx + dw - 7 : i % 2 === 0 ? gx + dw - 6 : gx + 6; out += `<line x1="${hx}" y1="${yTop + h * (t.wall ? 0.75 : 0.25)}" x2="${hx}" y2="${yTop + h * (t.wall ? 0.9 : 0.4)}" stroke="${INK}" stroke-width="2"/>`;
-        out += doors === 1 ? `<path d="M${gx + 2} ${yTop + 2} L${gx + dw - 2} ${yTop + h / 2} L${gx + 2} ${yTop + h - 2}" fill="none" stroke="${INK}" stroke-width=".6" stroke-dasharray="3 3"/>` : '';
+      const zn = zonesOf(c); const f = h / (+c.h || 1);
+      if (drawers) { const z = zn.drawers; const zx = x + z.x * f; const zy = yTop + (+c.h - z.y - z.h) * f; const zw = z.w * f; const dh = (z.h * f) / drawers; for (let i = 0; i < drawers; i++) out += `<rect x="${zx + 2}" y="${zy + i * dh + 2}" width="${zw - 4}" height="${dh - 4}" fill="${FILL2}" stroke="${INK}" stroke-width=".8"/><line x1="${zx + zw * .35}" y1="${zy + i * dh + dh * .3}" x2="${zx + zw * .65}" y2="${zy + i * dh + dh * .3}" stroke="${INK}" stroke-width="2"/>`; }
+      if (doors) {
+        const z = zn.doors; const zx = x + z.x * f; const zy = yTop + (+c.h - z.y - z.h) * f; const zw = z.w * f; const zh = z.h * f;
+        for (let i = 0; i < doors; i++) {
+          const dw = zw / doors; const gx = zx + i * dw;
+          out += `<rect x="${gx + 2}" y="${zy + 2}" width="${dw - 4}" height="${zh - 4}" fill="${i < glazed ? GLASS : FILL2}" stroke="${INK}" stroke-width=".8"/>`;
+          const hx = doors === 1 ? gx + dw - 7 : i % 2 === 0 ? gx + dw - 6 : gx + 6; out += `<line x1="${hx}" y1="${zy + zh * (t.wall ? 0.75 : 0.25)}" x2="${hx}" y2="${zy + zh * (t.wall ? 0.9 : 0.4)}" stroke="${INK}" stroke-width="2"/>`;
+          out += doors === 1 ? `<path d="M${gx + 2} ${zy + 2} L${gx + dw - 2} ${zy + zh / 2} L${gx + 2} ${zy + zh - 2}" fill="none" stroke="${INK}" stroke-width=".6" stroke-dasharray="3 3"/>` : '';
+        }
       }
       if (t.sink) out += `<ellipse cx="${x + w / 2}" cy="${yTop - ct * k - 3}" rx="${w * .28}" ry="2.5" fill="none" stroke="${INK}" stroke-width="1"/>`;
       if (t.counter) out += `<rect x="${x - 1}" y="${yTop - ct * k}" width="${w + 2}" height="${ct * k}" fill="${TOP}"/>`;

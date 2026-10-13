@@ -1,6 +1,6 @@
 // 3D view of a kitchen: cabinets become boxes, a small painter's-algorithm renderer draws them on a canvas.
 // scene() is pure (tested); draw3D() needs a canvas. All sizes in cm; x = right, y = up, z = towards the viewer (the back wall is z = 0).
-import { CAB_TYPES, DEFAULT_STYLE } from './kitchen.js';
+import { CAB_TYPES, DEFAULT_STYLE, zonesOf } from './kitchen.js';
 import { colourHex, stoneHex } from './drawings.js';
 
 /** Where each run stands: { x, z, rot } with rot 0/90/180/270. Run 1 = back wall, 2 = left wall, 3 = right wall, islands in front. */
@@ -52,19 +52,26 @@ export function scene(spec, open = {}) {
       } else put(u, u + w, 0, d, y0, y0 + h, carcass, 'carcass');
       if (!t.wall && !t.tall) put(u + 1, u + w - 1, 4, d - 4, 0, style.plinth, '#6f7885', 'plinth');
       const doors = Math.round(+c.doors || 0); const drawers = Math.round(+c.drawers || 0); const glazed = Math.min(doors, Math.round(+c.glazed || 0));
-      for (let i = 0; i < drawers; i++) {
-        const dh = h / drawers; const o = op * Math.min(d * 0.7, 40); const ya = y0 + i * dh; const yb = y0 + (i + 1) * dh;
-        if (o > 0.5) { const L = d - 6; put(u + T + .3, u + w - T - .3, d + o - L, d + o, ya + 3, ya + dh * 0.62, '#d9d0bd', 'tray'); }
-        put(u + .2, u + w - .2, d + o, d + o + 1.8, ya + .2, yb - .2, alu ? frame : door, 'front');
-        put(u + w * .35, u + w * .65, d + o + 1.8, d + o + 3, y0 + (i + .55) * dh, y0 + (i + .62) * dh, '#b9bec6', 'handle');
+      const zn = zonesOf(c);
+      if (drawers) {
+        const z = zn.drawers; const dh = z.h / drawers; const zu = u + z.x; const o = op * Math.min(d * 0.7, 40);
+        for (let i = 0; i < drawers; i++) {
+          const ya = y0 + z.y + i * dh; const yb = ya + dh;
+          if (o > 0.5) { const L = d - 6; put(zu + T + .3, zu + z.w - T - .3, d + o - L, d + o, ya + 3, ya + dh * 0.62, '#d9d0bd', 'tray'); }
+          put(zu + .2, zu + z.w - .2, d + o, d + o + 1.8, ya + .2, yb - .2, alu ? frame : door, 'front');
+          put(zu + z.w * .35, zu + z.w * .65, d + o + 1.8, d + o + 3, ya + dh * .55, ya + dh * .62, '#b9bec6', 'handle');
+        }
       }
-      for (let i = 0; i < doors; i++) {
-        const dw = w / doors; const a = u + i * dw; const left = doors === 1 || i % 2 === 0; // handle side opposite the hinge: first door hinges on the left
-        const sw = op > 0 ? { hu: left ? a + .2 : a + dw - .2, hv: d, a: op * 1.75, side: left ? 1 : -1 } : null;
-        put(a + .2, a + dw - .2, d, d + 1.8, y0 + .2, y0 + h - .2, i < glazed ? '#bfe0f2' : alu ? frame : door, i < glazed ? 'glass' : 'front', sw);
-        if (alu && i >= glazed) { const fw = Math.min(style.frame_w || 4.5, dw / 3); put(a + .2 + fw, a + dw - .2 - fw, d + 1.8, d + 2.2, y0 + .2 + fw, y0 + h - .2 - fw, door, 'infill', sw); }
-        const hx = left ? a + dw - 4 : a + 3; const hy = y0 + h * (t.wall ? .2 : .75);
-        put(hx, hx + 1.2, d + 1.8, d + 3.2, hy - 6, hy + 6, '#b9bec6', 'handle', sw);
+      if (doors) {
+        const z = zn.doors; const zy = y0 + z.y;
+        for (let i = 0; i < doors; i++) {
+          const dw = z.w / doors; const a = u + z.x + i * dw; const left = doors === 1 || i % 2 === 0; // handle side opposite the hinge: first door hinges on the left
+          const sw = op > 0 ? { hu: left ? a + .2 : a + dw - .2, hv: d, a: op * 1.75, side: left ? 1 : -1 } : null;
+          put(a + .2, a + dw - .2, d, d + 1.8, zy + .2, zy + z.h - .2, i < glazed ? '#bfe0f2' : alu ? frame : door, i < glazed ? 'glass' : 'front', sw);
+          if (alu && i >= glazed) { const fw = Math.min(style.frame_w || 4.5, dw / 3); put(a + .2 + fw, a + dw - .2 - fw, d + 1.8, d + 2.2, zy + .2 + fw, zy + z.h - .2 - fw, door, 'infill', sw); }
+          const hx = left ? a + dw - 4 : a + 3; const hy = zy + z.h * (t.wall ? .2 : .75);
+          put(hx, hx + 1.2, d + 1.8, d + 3.2, hy - 6, hy + 6, '#b9bec6', 'handle', sw);
+        }
       }
       if (t.counter) put(u, u + w, 0, d + over, y0 + h, y0 + h + ct, top, 'top');
       u += w;
