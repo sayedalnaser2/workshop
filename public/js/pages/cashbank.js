@@ -18,7 +18,7 @@ export async function render(el) {
     const bal = (a) => (opening[a] || 0) + all.filter((x) => x.acct === a).reduce((s, x) => s + x.in - x.out, 0);
     const unassigned = all.filter((x) => !x.acct && x.type !== 'Transfer');
     if (tab === 'unassigned' && !unassigned.length) tab = 'bank';
-    el.innerHTML = `<div class="ph"><h1>Cash &amp; Bank</h1><span class="sub">Money in and out, kept separately for the bank account and the cash box</span><span class="grow"></span><button class="btn" id="tf">⇄ Transfer</button><button class="btn" id="out">− Money out</button><button class="btn primary" id="in">+ Money in</button></div>
+    el.innerHTML = `<div class="ph"><h1>Cash &amp; Bank</h1><span class="sub">Money in and out, kept separately for the bank account and the cash box</span><span class="grow"></span><button class="btn" id="tf">⇄ Transfer</button><button class="btn" id="out" title="Money out is a payment voucher to a supplier">− Money out</button><button class="btn primary" id="in" title="Money in is a receipt for an invoice">+ Money in</button></div>
     <div class="cards"><div class="card stat"><div class="k">Bank balance</div><div class="v ${bal('bank') < 0 ? 'neg' : ''}">${money(bal('bank'), 2)}</div></div><div class="card stat"><div class="k">Cash in hand</div><div class="v ${bal('cash') < 0 ? 'neg' : ''}">${money(bal('cash'), 2)}</div></div><div class="card stat"><div class="k">Total</div><div class="v">${money(bal('bank') + bal('cash'), 2)}</div></div></div>
     ${unassigned.length ? `<div class="card" style="margin-bottom:14px;border-color:var(--warn)"><b>${unassigned.length} older entries have no account yet</b> (imported receipts and vouchers). <span class="muted">Choose where they belong so the balances are right.</span><div style="margin-top:8px;display:flex;gap:8px"><button class="btn sm" data-assign="bank">Mark all as Bank</button><button class="btn sm" data-assign="cash">Mark all as Cash</button><button class="btn sm" data-tab="unassigned">Show them</button></div></div>` : ''}
     <div class="tbar"><div class="seg"><button data-t="bank" class="${tab === 'bank' ? 'on' : ''}">Bank</button><button data-t="cash" class="${tab === 'cash' ? 'on' : ''}">Cash</button>${unassigned.length ? `<button data-t="unassigned" class="${tab === 'unassigned' ? 'on' : ''}">Unassigned</button>` : ''}</div>
@@ -27,7 +27,7 @@ export async function render(el) {
     $$('[data-tab]', el).forEach((b) => (b.onclick = () => { tab = b.dataset.tab; draw(); }));
     $$('[data-assign]', el).forEach((b) => (b.onclick = guard(async () => { if (!await confirmBox(`Mark ${unassigned.length} entries as ${b.dataset.assign}?`, 'Yes, mark', 'primary')) return; await api.post('assign-accounts', { account: b.dataset.assign }); toast('Done'); draw(); })));
     $('#saveOpen', el)?.addEventListener('click', guard(async () => { await api.put('settings', { opening: { ...opening, [tab]: num($('#open', el).value) } }); await refresh(); toast('Opening balance saved'); draw(); }));
-    $('#in', el).onclick = () => entry('in', draw); $('#out', el).onclick = () => entry('out', draw); $('#tf', el).onclick = () => transfer(draw);
+    $('#in', el).onclick = () => (location.hash = '#/receipts/new'); $('#out', el).onclick = () => (location.hash = '#/payments/new'); $('#tf', el).onclick = () => transfer(draw);
 
     // statement for the chosen account: oldest first for the running balance, shown newest first
     const rows = all.filter((x) => (tab === 'unassigned' ? !x.acct : x.acct === tab)).sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key));
@@ -37,7 +37,7 @@ export async function render(el) {
     dataTable(t, {
       rows: view, search: ['ref', 'party', 'detail', 'type'], page: 100, empty: 'No entries in this account yet.',
       cols: [{ key: 'date', label: 'Date', render: (r) => dmy(r.date) }, { key: 'type', label: 'Type', render: (r) => badge(r.type, r.type === 'Receipt' ? 'ok' : r.type === 'Payment voucher' ? 'warn' : 'blue') }, { key: 'ref', label: 'Ref' }, { key: 'party', label: 'Party' }, { key: 'detail', label: 'Detail' }, { key: 'in', label: 'In', num: true, render: (r) => (r.in ? `<span class="pos">${money(r.in, 3)}</span>` : '') }, { key: 'out', label: 'Out', num: true, render: (r) => (r.out ? `<span class="neg">${money(r.out, 3)}</span>` : '') }, ...(tab === 'unassigned' ? [] : [{ key: 'bal', label: 'Balance', num: true, render: (r) => `<b>${money(r.bal, 3)}</b>` }])],
-      onRow: (r) => (r.link ? (location.hash = r.link) : entry(r.manual.direction, draw, r.manual)),
+      onRow: (r) => (r.link ? (location.hash = r.link) : toast('Older manual entries are kept for history. Money in is recorded as a receipt for an invoice, money out as a voucher to a supplier.')),
       actions: (r) => (r.manual ? '<button class="btn sm danger" data-act="del">Delete</button>' : `<button class="btn sm" data-act="move">${r.acct === 'cash' ? '→ Bank' : r.acct === 'bank' ? '→ Cash' : 'Set'}</button>`),
       foot: (l) => `<tr><td colspan="5">Total (${l.length})</td><td class="num">${money(l.reduce((s, r) => s + r.in, 0), 3)}</td><td class="num">${money(l.reduce((s, r) => s + r.out, 0), 3)}</td><td></td><td></td></tr>`,
     });

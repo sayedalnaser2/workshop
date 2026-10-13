@@ -43,7 +43,7 @@ const ordersLedger = () => db.prepare(`
   FROM orders o
   LEFT JOIN (SELECT order_inv, SUM(amount) AS paid FROM receipts GROUP BY order_inv) r ON r.order_inv = o.inv
   LEFT JOIN (SELECT order_inv, SUM(total) AS credit FROM credit_notes WHERE status = 'approved' GROUP BY order_inv) c ON c.order_inv = o.inv
-  LEFT JOIN (SELECT order_inv, SUM(amount) AS cost FROM purchases GROUP BY order_inv) p ON p.order_inv = o.inv
+  LEFT JOIN (SELECT order_inv, SUM(amount) AS cost FROM purchases WHERE IFNULL(hidden,0)=0 GROUP BY order_inv) p ON p.order_inv = o.inv
   ORDER BY o.date DESC, o.id DESC`).all().map((o) => ({
   ...o, paid: o.paid, balance: Math.round((o.amount - o.credit - o.paid) * 100) / 100, profit: Math.round((o.amount - o.credit - o.cost) * 100) / 100,
 }));
@@ -53,7 +53,7 @@ function summary() {
   const t = {
     invoiced: one('SELECT IFNULL(SUM(amount),0) v FROM orders').v,
     received: one('SELECT IFNULL(SUM(amount),0) v FROM receipts').v,
-    purchases: one('SELECT IFNULL(SUM(amount),0) v FROM purchases').v,
+    purchases: one('SELECT IFNULL(SUM(amount),0) v FROM purchases WHERE IFNULL(hidden,0)=0').v,
     payments: one('SELECT IFNULL(SUM(amount),0) v FROM payments').v,
     openOrders: one('SELECT COUNT(*) v FROM orders WHERE done IS NOT 1').v,
     quotesOpen: one("SELECT COUNT(*) v FROM quotes WHERE status IN ('draft','sent')").v,
@@ -67,7 +67,7 @@ function summary() {
     SELECT y, SUM(inv) invoiced, SUM(rec) received, SUM(pur) purchases, SUM(pay) payments FROM (
       SELECT substr(date,1,4) y, amount inv, 0 rec, 0 pur, 0 pay FROM orders
       UNION ALL SELECT substr(date,1,4), 0, amount, 0, 0 FROM receipts
-      UNION ALL SELECT substr(date,1,4), 0, 0, amount, 0 FROM purchases
+      UNION ALL SELECT substr(date,1,4), 0, 0, amount, 0 FROM purchases WHERE IFNULL(hidden,0)=0
       UNION ALL SELECT substr(date,1,4), 0, 0, 0, amount FROM payments)
     WHERE y IS NOT NULL GROUP BY y ORDER BY y`).all();
   const monthly = db.prepare(`
@@ -114,6 +114,26 @@ function checkRef(t, body, existing = {}) {
   const m = { ...existing, ...body };
   if (REF_LABEL[m.method] && !String(m.ref ?? '').trim()) throw Object.assign(new Error(`${REF_LABEL[m.method]} is required when paying by ${m.method}.`), { status: 400 });
 }
+
+/** Money in comes from an invoice; money out goes to a supplier (or is a salary to an employee). */
+function moneyRules(t, body, cur = {}) {
+  const m = { ...cur, ...body };
+  if (t === 'receipts' && (!cur.id || 'order_inv' in body)) {
+    const inv = String(m.order_inv || '').trim();
+    if (!inv) throw bad('Money in must come from an invoice — choose the invoice this receipt is for.');
+    if (!db.prepare('SELECT id FROM orders WHERE inv=?').get(inv)) throw bad(`There is no invoice ${inv}.`);
+  }
+  if (t === 'payments' && (!cur.id || 'paid_to' in body || 'employee_id' in body)) {
+    const who = String(m.paid_to || '').trim().toLowerCase();
+    if (!m.employee_id && !db.prepare('SELECT id FROM suppliers WHERE lower(name)=?').get(who)) throw bad('Money out must go to a supplier — choose one from the list (add the supplier first if it is new).');
+  }
+  if (t === 'cash_entries' && (!cur.id || 'direction' in body || 'party' in body || 'category' in body)) {
+    if (m.category === 'Transfer') return;
+    if (m.direction === 'in') throw bad('Money in must come from an invoice — record a receipt instead.');
+    if (m.direction === 'out' && !db.prepare('SELECT id FROM suppliers WHERE lower(name)=?').get(String(m.party || '').trim().toLowerCase())) throw bad('Money out must go to a supplier.');
+  }
+}
+
 const AUTO = { quotes: ['number', 'quote'], orders: ['inv', 'invoice'], receipts: ['no', 'receipt'], payments: ['no', 'payment'], purchase_orders: ['po', 'po'], credit_notes: ['no', 'credit'] };
 
 
@@ -224,7 +244,7 @@ async function api(req, res, url) {
   if (p[0] === 'vat-report' && m === 'GET') {
     need(isAA); const q = url.searchParams;
     const credits = listRows('credit_notes').filter((c) => c.status === 'approved');
-    return send(res, 200, vatReport({ orders: listRows('orders'), quotes: listRows('quotes'), credits, purchases: listRows('purchases'), payments: listRows('payments'), settings: { vat_rate: getSetting('vat_rate'), purchase_vat_default: getSetting('purchase_vat_default') } }, q.get('from') || '', q.get('to') || ''));
+    return send(res, 200, vatReport({ orders: listRows('orders'), quotes: listRows('quotes'), credits, purchases: listRows('purchases').filter((p) => !p.hidden), payments: listRows('payments'), settings: { vat_rate: getSetting('vat_rate'), purchase_vat_default: getSetting('purchase_vat_default') } }, q.get('from') || '', q.get('to') || ''));
   }
 
   // --- photos and files on orders, tasks and site surveys
@@ -365,7 +385,7 @@ async function api(req, res, url) {
     if (!id && m === 'POST') {
       const body = await readJson(req);
       const row = tx(() => {
-        checkRef(t, body);
+        checkRef(t, body); moneyRules(t, body);
         if (t === 'tasks') { body.status = body.status || 'todo'; body.progress = body.progress ?? 0; body.created_by = user.id; }
         if (worker && t === 'stock') { delete body.unit_cost; if (body.kind === 'leftover' && body.profile_id) { const pr = getRow('profiles', Number(body.profile_id)); body.unit_cost = pr && pr.bar_length > 0 ? Math.round((pr.price_bar / pr.bar_length) * (body.length || 0) * ((getSetting('leftover_pct') ?? 60) / 100) * 1000) / 1000 : 0; } }
         if (t === 'quotes') quoteApproval(body, null, user);
@@ -385,7 +405,7 @@ async function api(req, res, url) {
     }
     if (id && m === 'PUT') {
       const cur = getRow(t, id); if (!cur || !visible(cur)) return send(res, 404, { error: 'Not found' });
-      const body = await readJson(req); checkRef(t, body, cur); if (worker) delete body.unit_cost;
+      const body = await readJson(req); checkRef(t, body, cur); moneyRules(t, body, cur); if (worker) delete body.unit_cost;
       if (t === 'tasks' && 'hidden' in body) { need(role === 'admin'); body.hidden = body.hidden ? 1 : 0; } // only an admin hides or shows tasks
       if (t === 'tasks') { if (body.status === 'done' && cur.status !== 'done') { body.done_at = new Date().toISOString(); body.progress = 100; } else if (body.status && body.status !== 'done' && cur.status === 'done') body.done_at = null; }
       if (t === 'quotes') {

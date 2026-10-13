@@ -23,12 +23,12 @@ async function list(el) {
   t.addEventListener('act', guard(async (e) => {
     const { act, row } = e.detail;
     if (act === 'del' && await confirmBox(`Delete receipt ${row.no}?`)) { await api.del(`t/receipts/${row.id}`); await refresh(); list(el); }
-    if (act === 'edit') editRow({ table: 'receipts', title: `Edit ${row.no}`, row, fields: fields([]), before: (d, w) => requireRef(d, w), setup: (w) => wireRef(w), onSaved: async () => list(el) });
+    if (act === 'edit') editRow({ table: 'receipts', title: `Edit ${row.no}`, row, fields: fields(await api.get('ledger')), before: (d, w) => requireRef(d, w), setup: (w) => wireRef(w), onSaved: async () => list(el) });
   }));
 }
 const fields = (orders) => [
   { key: 'no', label: 'Receipt #', hint: 'Leave blank for the next number: ' + S.next.receipt }, { key: 'date', label: 'Date', type: 'date' },
-  { key: 'order_inv', label: 'Order / invoice #', list: 'dl-orders' }, { key: 'client', label: 'Client' },
+  { key: 'order_inv', label: 'Invoice (money in must come from an invoice)', type: 'select', required: true, options: [['', '— choose the invoice —'], ...[...orders].sort((a, b) => (b.balance > 0.0005) - (a.balance > 0.0005) || (b.date || '').localeCompare(a.date || '')).map((o) => [o.inv, `${o.inv} — ${o.client || ''}${o.balance > 0.0005 ? ` (due ${money(o.balance, 2)})` : ' (paid)'}`])] }, { key: 'client', label: 'Client' },
   { key: 'amount', label: 'Amount (BD)', type: 'number', required: true }, { key: 'method', label: 'Paid by', type: 'select', options: ['', 'Cash', 'Benefit', 'Cheque', 'Bank transfer'] }, { key: 'ref', label: 'Reference number' }, { key: 'account', label: 'Paid into', type: 'select', options: [['', 'Automatic (cash → cash box, others → bank)'], ['cash', 'Cash box'], ['bank', 'Bank account']] }, { key: 'note', label: 'Note', full: true },
 ];
 
@@ -38,12 +38,13 @@ async function form(el, orderId) {
   el.innerHTML = `<div class="ph"><h1>New receipt</h1><span class="grow"></span><a class="btn" href="#/receipts">← Receipts</a></div>${datalist('dl-orders', ledger.filter((x) => x.balance > 0.0005 || x.id === orderId).map((x) => x.inv))}<div class="card" style="max-width:720px"><div id="f"></div><p class="muted" id="info"></p></div>`;
   const { formHTML, readForm } = await import('../ui.js');
   const defaults = { date: today(), order_inv: o?.inv || '', client: o?.client || '', amount: o && o.balance > 0 ? o.balance : '' };
-  $('#f', el).innerHTML = formHTML(fields(), defaults) + '<div style="margin-top:14px;display:flex;gap:8px"><button class="btn primary" id="save">Save &amp; print</button><button class="btn" id="saveOnly">Save</button></div>';
+  $('#f', el).innerHTML = formHTML(fields(ledger), defaults) + '<div style="margin-top:14px;display:flex;gap:8px"><button class="btn primary" id="save">Save &amp; print</button><button class="btn" id="saveOnly">Save</button></div>';
   wireRef($('#f', el));
   const info = () => { const x = ledger.find((l) => l.inv === $('[name=order_inv]', el).value.trim()); if (x) { if (!$('[name=client]', el).value) $('[name=client]', el).value = x.client; $('#info', el).innerHTML = `${esc(x.client)} — order ${money(x.amount, 2)}, paid ${money(x.paid, 2)}, <b class="${x.balance > 0 ? 'neg' : 'pos'}">balance ${money(x.balance, 2)}</b>`; } else $('#info', el).textContent = ''; };
   $('[name=order_inv]', el).oninput = info; info();
   const save = (print) => guard(async () => {
-    const d = readForm($('#f', el), fields());
+    const d = readForm($('#f', el), fields(ledger));
+    if (!d.order_inv) return toast('Choose the invoice this money is for', 'err');
     if (!d.amount) return toast('Enter the amount', 'err');
     requireRef(d, $('#f', el));
     if (!d.account) d.account = d.method === 'Cash' ? 'cash' : 'bank';

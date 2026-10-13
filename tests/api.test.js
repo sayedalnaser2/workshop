@@ -9,6 +9,7 @@ const port = 4100 + Math.floor(Math.random() * 400); const base = `http://127.0.
 const dir = mkdtempSync(path.join(tmpdir(), 'workshop-test-'));
 let proc;
 const jar = {}; // username → cookie
+let invNo = ''; // an invoice made by the first order test
 async function call(user, method, url, body, extra = {}) {
   const r = await fetch(base + url, { method, headers: { 'Content-Type': 'application/json', ...(jar[user] ? { Cookie: jar[user] } : {}), ...extra }, body: body ? JSON.stringify(body) : undefined });
   const data = await r.json().catch(() => null);
@@ -46,7 +47,7 @@ test('quotation → order → receipt → balance, with automatic numbers', asyn
   const q = (await call('amina', 'POST', '/api/t/quotes', { client: 'Test Co', date: '2026-10-11', vat_rate: 10, vat_waived: 0, discount: 0, items: [{ w: 100, h: 150, desc: 'Window', qty: 2, price: 100 }] })).data;
   assert.match(q.number, /^Q2610\d{3}$/);
   const o = (await call('amina', 'POST', `/api/quotes/${q.id}/to-order`, {})).data;
-  assert.match(o.inv, /^I2610\d{3}$/); assert.equal(o.amount, 220);
+  assert.match(o.inv, /^I2610\d{3}$/); assert.equal(o.amount, 220); invNo = o.inv;
   assert.equal((await call('amina', 'POST', `/api/quotes/${q.id}/to-order`, {})).status, 400); // only once
   const r = await call('amina', 'POST', '/api/t/receipts', { order_inv: o.inv, client: 'Test Co', amount: 100, method: 'Cash', date: '2026-10-11' });
   assert.equal(r.status, 201); assert.match(r.data.no, /^R \d{3}$/);
@@ -55,11 +56,12 @@ test('quotation → order → receipt → balance, with automatic numbers', asyn
 });
 test('Benefit and cheque payments need their number', async () => {
   for (const method of ['Benefit', 'Cheque']) {
-    const bad = await call('amina', 'POST', '/api/t/receipts', { amount: 5, method, ref: '  ' });
+    const bad = await call('amina', 'POST', '/api/t/receipts', { order_inv: invNo, amount: 5, method, ref: '  ' });
     assert.equal(bad.status, 400); assert.match(bad.data.error, /number is required/);
-    assert.equal((await call('amina', 'POST', '/api/t/receipts', { amount: 5, method, ref: '12345' })).status, 201);
+    assert.equal((await call('amina', 'POST', '/api/t/receipts', { order_inv: invNo, amount: 5, method, ref: '12345' })).status, 201);
   }
-  assert.equal((await call('amina', 'POST', '/api/t/payments', { paid_to: 'X', amount: 5, method: 'Cheque' })).status, 400);
+  await call('amina', 'POST', '/api/t/suppliers', { name: 'Gulf Glass' });
+  assert.equal((await call('amina', 'POST', '/api/t/payments', { paid_to: 'Gulf Glass', amount: 5, method: 'Cheque' })).status, 400); // cheque number missing
 });
 test('tasks: worker actions, hiding, and no prices for workers', async () => {
   const staff = (await call('boss', 'GET', '/api/staff')).data; const wid = staff.find((s) => s.name === 'Wasim').id;
@@ -180,4 +182,30 @@ test('quotations cannot be deleted; accepted → draft needs the admin and their
   assert.equal((await call('boss', 'PUT', `/api/t/quotes/${q.id}`, { status: 'draft', password: 'nope' })).status, 403);
   const ok = await call('boss', 'PUT', `/api/t/quotes/${q.id}`, { status: 'draft', password: 'secret1' });
   assert.equal(ok.status, 200); assert.equal(ok.data.status, 'draft'); assert.equal(ok.data.password, undefined);
+});
+
+test('money in needs an invoice, money out needs a supplier', async () => {
+  const r = (b) => call('amina', 'POST', '/api/t/receipts', { amount: 10, method: 'Cash', ...b });
+  assert.match((await r({})).data.error, /must come from an invoice/);
+  assert.match((await r({ order_inv: 'I-NOPE' })).data.error, /no invoice/);
+  assert.equal((await r({ order_inv: invNo })).status, 201);
+  const p = (b) => call('amina', 'POST', '/api/t/payments', { amount: 10, method: 'Cash', ...b });
+  assert.match((await p({ paid_to: 'Some Stranger' })).data.error, /must go to a supplier/);
+  assert.equal((await p({ paid_to: 'gulf glass' })).status, 201); // names match without case
+  assert.equal((await p({ paid_to: 'Wasim Worker', employee_id: 1 })).status, 201); // a salary keeps its employee link
+  const c = (b) => call('amina', 'POST', '/api/t/cash_entries', { date: '2026-10-13', account: 'bank', amount: 5, ...b });
+  assert.equal((await c({ direction: 'in', category: 'Other income' })).status, 400);
+  assert.equal((await c({ direction: 'out', category: 'Other expense', party: 'Nobody' })).status, 400);
+  assert.equal((await c({ direction: 'out', category: 'Other expense', party: 'Gulf Glass' })).status, 201);
+  assert.equal((await c({ direction: 'in', category: 'Transfer' })).status, 201); // transfers between cash and bank are fine
+});
+test('hidden purchases are ignored in every total', async () => {
+  const o = (await call('boss', 'GET', '/api/ledger')).data.find((x) => x.inv === invNo);
+  const pu = (await call('amina', 'POST', '/api/t/purchases', { supplier: 'Gulf Glass', amount: 40, order_inv: invNo, date: '2026-10-13' })).data;
+  const cost = async () => (await call('amina', 'GET', '/api/ledger')).data.find((x) => x.inv === invNo).cost;
+  assert.equal(await cost(), o.cost + 40);
+  const before = (await call('amina', 'GET', '/api/summary')).data.purchases;
+  await call('amina', 'PUT', `/api/t/purchases/${pu.id}`, { hidden: 1 });
+  assert.equal(await cost(), o.cost); assert.equal((await call('amina', 'GET', '/api/summary')).data.purchases, before - 40);
+  assert.ok(!(await call('amina', 'GET', '/api/vat-report?from=2026-10-01&to=2026-10-31')).data.purchases.some((x) => x.supplier === 'Gulf Glass' && x.total === 40));
 });

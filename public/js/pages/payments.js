@@ -3,7 +3,7 @@ import { api, $, $$, esc, money, dmy, today, num, dataTable, editRow, confirmBox
 import { amountInWords } from '../calc.js';
 import { printView, docHeader, L, wordsBlock, AR } from '../doc.js';
 
-const CATS = ['', 'Salary', 'Rent', 'Workshop expense', 'Supplier payment', 'Other'];
+const CATS = ['Supplier payment', 'Salary', 'Rent', 'Workshop expense', 'Other'];
 
 export async function render(el, [a, b, c]) {
   if (a === 'new') return form(el, c ? JSON.parse(decodeURIComponent(c)) : {});
@@ -30,13 +30,12 @@ async function list(el) {
 }
 
 async function form(el, pre) {
-  const payments = await api.get('t/payments');
-  const payees = [...S.employees.map((e) => e.name), ...payments.map((p) => p.paid_to)];
-  const v = { date: today(), category: '', done: 0, lines: [{ text: '', amount: '' }], ...pre };
+  const suppliers = await api.get('t/suppliers');
+  const v = { date: today(), category: 'Supplier payment', done: 0, lines: [{ text: '', amount: '' }], ...pre };
   if (!v.lines?.length) v.lines = [{ text: '', amount: '' }];
-  el.innerHTML = `<div class="ph"><h1>New payment voucher</h1><span class="grow"></span><a class="btn" href="#/payments">← Vouchers</a></div>${datalist('dl-payees', payees)}
+  el.innerHTML = `<div class="ph"><h1>New payment voucher</h1><span class="grow"></span><a class="btn" href="#/payments">← Vouchers</a></div>
   <div class="card" style="max-width:820px"><div class="form"><label class="field"><span>Voucher # (blank = ${esc(S.next.payment)})</span><input id="no"></label><label class="field"><span>Date</span><input id="date" type="date" value="${esc(v.date)}"></label>
-  <label class="field"><span>Paid to (Mr / Miss)</span><input id="paid_to" list="dl-payees" value="${esc(v.paid_to || '')}" autocomplete="off"></label><label class="field"><span>Category</span><select id="category">${CATS.map((c) => `<option ${v.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label><label class="field"><span>Paid by</span><select id="method"><option value="">—</option>${['Cash', 'Benefit', 'Cheque', 'Bank transfer'].map((c) => `<option ${v.method === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label><label class="field" id="refWrap" hidden><span id="refLab"></span><input id="ref" name="ref" value="${esc(v.ref || '')}" autocomplete="off"></label><label class="field"><span>Paid from</span><select id="account"><option value="bank">Bank account</option><option value="cash" ${v.account === 'cash' ? 'selected' : ''}>Cash box</option></select></label></div>
+  <label class="field"><span>Paid to (supplier)</span><select id="paid_to"><option value="">— choose a supplier —</option>${v.employee_id ? `<option selected>${esc(v.paid_to)}</option>` : ''}${suppliers.map((x) => `<option ${v.paid_to === x.name ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>${suppliers.length ? '' : '<small class="neg">No suppliers yet — add one under Suppliers &amp; Catalogue first.</small>'}</label><label class="field"><span>Category</span><select id="category">${CATS.map((c) => `<option ${v.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label><label class="field"><span>Paid by</span><select id="method"><option value="">—</option>${['Cash', 'Benefit', 'Cheque', 'Bank transfer'].map((c) => `<option ${v.method === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label><label class="field" id="refWrap" hidden><span id="refLab"></span><input id="ref" name="ref" value="${esc(v.ref || '')}" autocomplete="off"></label><label class="field"><span>Paid from</span><select id="account"><option value="bank">Bank account</option><option value="cash" ${v.account === 'cash' ? 'selected' : ''}>Cash box</option></select></label></div>
   <h4 style="margin:16px 0 6px">Particulars</h4><table class="mini" id="lines"><thead><tr><th>Particulars</th><th style="width:130px">Amount (BD)</th><th></th></tr></thead><tbody></tbody></table>
   <button class="btn sm" id="addLine" style="margin-top:6px">+ Add line</button><p style="text-align:right;font-size:18px"><b>Total: <span id="total"></span></b></p>
   <label class="field check"><input type="checkbox" id="done" ${v.done ? 'checked' : ''}><span>Mark as done / settled</span></label>
@@ -53,7 +52,7 @@ async function form(el, pre) {
   draw();
   const save = (print) => guard(async () => {
     const lines = v.lines.filter((l) => l.text || num(l.amount));
-    if (!$('#paid_to', el).value.trim()) return toast('Enter who was paid', 'err');
+    if (!$('#paid_to', el).value.trim()) return toast('Choose the supplier this money goes to', 'err');
     { const l = REF_LABEL[$('#method', el).value]; if (l && !$('#ref', el).value.trim()) { $('#ref', el).focus(); return toast(`${l} is required when paying by ${$('#method', el).value}.`, 'err'); } }
     if (!total()) return toast('Enter an amount', 'err');
     const d = { no: $('#no', el).value.trim(), date: $('#date', el).value, paid_to: $('#paid_to', el).value.trim(), category: $('#category', el).value, account: $('#account', el).value, method: $('#method', el).value, ref: REF_LABEL[$('#method', el).value] ? $('#ref', el).value.trim() : '', employee_id: v.employee_id || null, amount: total(), done: $('#done', el).checked ? 1 : 0, lines: lines.map((l) => ({ text: l.text, amount: num(l.amount) })) };
