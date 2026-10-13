@@ -70,6 +70,11 @@ This loads the price list, all `Q…` quotation sheets, orders, receipts, paymen
 | **Arabic interface** *(new)* | Button at the bottom of the menu: right-to-left layout and Arabic screen text. Printouts are always bilingual. Text not yet in the dictionary (`public/js/i18n-ar.js`) stays English. |
 | **Audit trail** *(new)* | Admin: who created, changed or deleted what and when, with old → new values (also approvals, users, settings, imports). |
 | **Approvals** *(new)* | A quotation discount above the limit (Settings, default 10%) and credit notes made by Accounts wait for the admin; blocked from sending / invoicing until decided. |
+| **Quotations, cut lists & drawings** *(new)* | Discount after VAT, auto "prepared by", accessories and rubber with cost/price, no deleting quotations, accepted → draft needs the admin's password. Cut list prints, colours equal pieces alike, has a glass list with leftovers/scrap and a back-to-quotation button. Drawings mark fixed panes **F**, show left/right hand and opens-in/out arrows, and the **Custom design** model lets you draw new designs with dividers. |
+| **Purchasing & money** *(new)* | PO "paid" separate from "received", hide purchases, suppliers filtered to those offering the product, a store page per supplier; money in must reference an invoice, money out goes to a supplier (or a salary linked to an employee). |
+| **Workers** *(new)* | Per-user shifts, overtime (start/stop/add, admin approves), attendance from tasks, helpers on tasks, worker-activity charts + Excel export, targets & prizes, dashboard notes. |
+| **Kitchens** *(new)* | 3D view (drag/zoom), wood or **aluminium** kitchens (framed doors, infill, profile bar cutting and pricing). |
+| **Settings** *(new)* | Change the logo, delete workshop photos after 3/6 months, About Us page. |
 
 The starter models/profiles use generic deductions and zero prices — edit them under **Models** and **Profiles, Glass & Accessories** to match your profile system.
 
