@@ -22,11 +22,15 @@ export function quoteTotals(q) {
   const items = q.items || [];
   const subtotal = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.price) || 0), 0);
   const discount = Number(q.discount) || 0;
+  const waived = Number(q.vat_waived) || 0;
+  const discPct = subtotal ? (discount / subtotal) * 100 : 0;
+  if (q.disc_mode === 'after') { // VAT on the full items total, then the discount comes off the VAT-inclusive total
+    const vat = (subtotal * (Number(q.vat_rate) || 0)) / 100; const total = subtotal + vat;
+    return { subtotal, discount, amount: subtotal, vat, waived, total, grand: total - discount - waived, discPct, after: true };
+  }
   const amount = subtotal - discount;
   const vat = (amount * (Number(q.vat_rate) || 0)) / 100;
-  const waived = Number(q.vat_waived) || 0;
-  const grand = amount + vat - waived;
-  return { subtotal, discount, amount, vat, waived, grand, discPct: subtotal ? (discount / subtotal) * 100 : 0 };
+  return { subtotal, discount, amount, vat, waived, total: amount + vat, grand: amount + vat - waived, discPct, after: false };
 }
 
 /** Discount as a percentage of the items total. */

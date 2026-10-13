@@ -4,10 +4,11 @@ import { quoteTotals, priceFor, modelCost, amountInWords } from '../calc.js';
 import { printView, docHeader, L, wordsBlock, termsBlock, AR } from '../doc.js';
 import { elevationSVG, planSVG } from '../kitchen-draw.js';
 import { kitchenModel } from '../kitchen.js';
-import { quotePieces, allocateLeftovers } from '../stock.js';
+import { quotePieces, allocateLeftovers, accessoriesFor } from '../stock.js';
 import { openPoDialog } from '../po-dialog.js';
 import { dot } from './stock.js';
-import { drawModel } from '../drawings.js';
+import { drawModel, HAND_KINDS, SWING_KINDS } from '../drawings.js';
+import { modal, formHTML, readForm } from '../ui.js';
 import { glazingNote } from '../glazing.js';
 
 const STATUS = { draft: ['Draft', ''], sent: ['Sent', 'blue'], accepted: ['Accepted', 'ok'], rejected: ['Rejected', 'bad'] };
@@ -38,14 +39,13 @@ async function list(el) {
     filterKey: 'quotes',
     filters: [{ label: 'All' }, { label: 'Open', fn: (r) => r.status === 'draft' || r.status === 'sent' }, { label: 'Draft', fn: (r) => r.status === 'draft' }, { label: 'Sent', fn: (r) => r.status === 'sent' }, { label: 'Accepted', fn: (r) => r.status === 'accepted' }],
     onRow: (r) => (location.hash = `#/quotes/${r.id}`),
-    actions: () => `<button class="btn sm" data-act="print">Print</button> <button class="btn sm" data-act="dup">Duplicate</button> <button class="btn sm danger" data-act="del">Delete</button>`,
+    actions: () => `<button class="btn sm" data-act="print">Print</button> <button class="btn sm" data-act="dup">Duplicate</button>`,
     foot: (l) => `<tr><td colspan="5">Total</td><td class="num">${money(l.reduce((s, r) => s + r.total, 0))}</td><td colspan="2"></td></tr>`,
   });
   t.addEventListener('act', guard(async (e) => {
     const { act, row } = e.detail;
     if (act === 'print') location.hash = `#/quotes/${row.id}/print`;
     if (act === 'dup') { const c = await duplicate(row.id); location.hash = `#/quotes/${c.id}`; }
-    if (act === 'del' && await confirmBox(`Delete quotation ${row.number}?`)) { await api.del(`t/quotes/${row.id}`); toast('Deleted'); list(el); }
   }));
 }
 async function duplicate(id) {
@@ -56,8 +56,11 @@ async function duplicate(id) {
 
 // ------------------------------------------------------------------ editor
 async function editor(el, id) {
-  const q = id ? await api.get(`t/quotes/${id}`) : { number: '', date: today(), client: '', mobile: '', site: '', title: S.settings.intro_line || '', items: [blankItem(), blankItem(), blankItem()], discount: 0, vat_rate: S.settings.vat_rate ?? 10, vat_waived: 0, status: 'draft', prepared_by: '', notes: '', colour: '' };
+  const q = id ? await api.get(`t/quotes/${id}`) : { number: '', date: today(), client: '', mobile: '', site: '', title: S.settings.intro_line || '', items: [blankItem(), blankItem(), blankItem()], discount: 0, vat_rate: S.settings.vat_rate ?? 10, vat_waived: 0, status: 'draft', prepared_by: S.me?.name || '', notes: '', colour: '', disc_mode: S.settings.discount_mode || 'after' };
+  if (!q.disc_mode) q.disc_mode = 'before'; // older quotations keep the way they were worked out
+  if (!q.prepared_by) q.prepared_by = S.me?.name || '';
   if (!q.items?.length) q.items = [blankItem()];
+  const origStatus = q.status; let pw = '';
   const all = await api.get('t/quotes');
   let stockRows = await api.get('t/stock');
   const clients = [...new Set(all.map((x) => x.client))];
@@ -79,31 +82,40 @@ async function editor(el, id) {
     <label class="field"><span>Status</span><select id="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label class="field" style="grid-column: 1 / -1"><span>Heading line (printed above the items)</span><input id="title" value="${esc(q.title)}"></label>
   </div></div>
-  <div class="card" style="margin-top:14px"><div class="items-wrap"><table class="items"><thead><tr><th></th><th>Width cm</th><th>Height cm</th><th>Description (pick from price list or type)</th><th>Model</th><th>Glass</th><th>Colour</th><th>Qty</th><th>Unit price</th><th class="tot">Amount</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="card" style="margin-top:14px"><div class="items-wrap"><table class="items"><thead><tr><th></th><th>Description (pick from the price list first)</th><th>Model</th><th>Width cm</th><th>Height cm</th><th>Hand / opens</th><th>Glass</th><th>Colour</th><th>Qty</th><th>Unit price</th><th class="tot">Amount</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="addItem">+ Add item</button><button class="btn" id="addNote">+ Add heading / note line</button></div>
   </div>
   <div class="card" style="margin-top:14px" id="lo"></div>
+  <div class="card" style="margin-top:14px" id="acc"></div>
   <div class="card" style="margin-top:14px"><div class="cols2">
     <div><label class="field"><span>Internal notes (not printed)</span><textarea id="notes" rows="3">${esc(q.notes || '')}</textarea></label><label class="field" style="margin-top:10px"><span>Prepared by</span><input id="prepared_by" value="${esc(q.prepared_by || '')}"></label><p class="words" id="words"></p><p class="muted" id="costline"></p></div>
     <div class="totals" id="totals"></div>
   </div></div>
   <div class="sticky-actions"><button class="btn primary" id="save">Save quotation</button>
-    ${id ? `<a class="btn" href="#/quotes/${id}/print">Print preview</a><a class="btn" href="#/cutting/${id}">Cutting list</a><button class="btn" id="toOrder" ${q.order_inv || q.approval === 'pending' || q.approval === 'rejected' ? 'disabled' : ''} ${q.approval === 'pending' || q.approval === 'rejected' ? 'title="Waiting for the admin to approve the discount"' : ''}>${q.order_inv ? 'Order ' + esc(q.order_inv) : 'Convert to order / invoice'}</button><button class="btn" id="dup">Duplicate</button><button class="btn danger" id="del">Delete</button>` : ''}</div>`;
+    ${id ? `<a class="btn" href="#/quotes/${id}/print">Print preview</a><a class="btn" href="#/cutting/${id}">Cutting list</a><button class="btn" id="toOrder" ${q.order_inv || q.approval === 'pending' || q.approval === 'rejected' ? 'disabled' : ''} ${q.approval === 'pending' || q.approval === 'rejected' ? 'title="Waiting for the admin to approve the discount"' : ''}>${q.order_inv ? 'Order ' + esc(q.order_inv) : 'Convert to order / invoice'}</button><button class="btn" id="dup">Duplicate</button>` : ''}</div>`;
 
   const tbody = $('#rows', el);
-  const modelOpts = (sel) => `<option value="">—</option>` + S.models.map((m) => `<option value="${m.id}" ${Number(sel) === m.id ? 'selected' : ''}>${esc(m.name)} (${esc(m.series || '')})</option>`).join('');
+  // the description decides which models make sense: only models of the same kind of product (window / door / …) are offered
+  const modelOf = (it) => S.models.find((m) => m.id === Number(it.model_id));
+  const piOf = (it) => S.price_items.find((p) => p.id === it.pi_id);
+  const modelOpts = (it) => { const base = S.models.find((m) => m.id === piOf(it)?.model_id); const list = base ? S.models.filter((m) => m.category === base.category) : S.models; return `<option value="">—</option>` + list.map((m) => `<option value="${m.id}" ${Number(it.model_id) === m.id ? 'selected' : ''}>${esc(m.name)} (${esc(m.series || '')})</option>`).join(''); };
+  const handCell = (it) => { const k = modelOf(it)?.kind; return `${HAND_KINDS.includes(k) ? `<select data-k="hand" title="Hinge side, seen from outside"><option value="L" ${it.hand !== 'R' ? 'selected' : ''}>Left hand</option><option value="R" ${it.hand === 'R' ? 'selected' : ''}>Right hand</option></select>` : ''}${SWING_KINDS.includes(k) ? `<select data-k="swing" title="Which way it opens"><option value="out" ${it.swing !== 'in' ? 'selected' : ''}>Opens outside</option><option value="in" ${it.swing === 'in' ? 'selected' : ''}>Opens inside</option></select>` : ''}${!HAND_KINDS.includes(k) && !SWING_KINDS.includes(k) ? '<span class="muted">—</span>' : ''}`; };
+  /** Drop what no longer applies to the chosen model (hand, opening direction, glass on a model without glass). */
+  const normalise = (it) => { const m = modelOf(it); const k = m?.kind; if (HAND_KINDS.includes(k)) it.hand ||= 'L'; else delete it.hand; if (SWING_KINDS.includes(k)) it.swing ||= 'out'; else delete it.swing; if (m && !(m.spec?.glass || []).length) it.glass_id = null; };
+  for (const it of q.items) if (it.kind !== 'note') { it.pi_id = pi(it.desc)?.id || null; normalise(it); }
   const glassOpts = (sel) => `<option value="">—</option>` + S.glass_types.map((g) => `<option value="${g.id}" ${Number(sel) === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
 
   const drawRows = () => {
     tbody.innerHTML = q.items.map((it, i) => {
       const isNote = it.kind === 'note';
-      if (isNote) return `<tr data-i="${i}"><td class="n">${i + 1}</td><td colspan="9"><input data-k="desc" value="${esc(it.desc)}" placeholder="Heading or note line (e.g. MAINTENANCE:)" style="font-weight:600"></td><td>${rowBtns(i)}</td></tr>`;
+      if (isNote) return `<tr data-i="${i}"><td class="n">${i + 1}</td><td colspan="11"><input data-k="desc" value="${esc(it.desc)}" placeholder="Heading or note line (e.g. MAINTENANCE:)" style="font-weight:600"></td><td>${rowBtns(i)}</td></tr>`;
       return `<tr data-i="${i}" class="${it.manual ? 'manual' : ''}">
         <td class="n">${i + 1}</td>
+        <td style="min-width:300px"><input data-k="desc" list="dl-prices" value="${esc(it.desc)}" autocomplete="off">${it.kitchen_id ? `<a href="#/kitchens/${it.kitchen_id}" style="font-size:12px">🍳 open the kitchen design</a>` : ''}<div class="sub"><textarea data-k="note" rows="1" placeholder="Sub-description (e.g. W/1 – one side swing, other side fix)">${esc(it.note || '')}</textarea></div></td>
+        <td><select data-k="model_id" style="width:130px">${modelOpts(it)}</select><div class="mini-draw" data-draw></div></td>
         <td><input class="w-s" data-k="w" type="number" step="any" value="${it.w ?? ''}"></td>
         <td><input class="w-s" data-k="h" type="number" step="any" value="${it.h ?? ''}"></td>
-        <td style="min-width:300px"><input data-k="desc" list="dl-prices" value="${esc(it.desc)}" autocomplete="off">${it.kitchen_id ? `<a href="#/kitchens/${it.kitchen_id}" style="font-size:12px">🍳 open the kitchen design</a>` : ''}<div class="sub"><textarea data-k="note" rows="1" placeholder="Sub-description (e.g. W/1 – one side swing, other side fix)">${esc(it.note || '')}</textarea></div></td>
-        <td><select data-k="model_id" style="width:120px">${modelOpts(it.model_id)}</select><div class="mini-draw" data-draw></div></td>
+        <td style="min-width:104px">${handCell(it)}</td>
         <td><select data-k="glass_id" style="width:110px">${glassOpts(it.glass_id)}</select><div class="cost" data-fit style="text-align:left;max-width:150px"></div></td>
         <td><select data-k="colour" style="width:92px"><option value="">(as quote)</option>${(S.settings.colours || []).map((c) => `<option ${it.colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></td>
         <td><input class="w-q" data-k="qty" type="number" step="any" value="${it.qty ?? 1}"></td>
@@ -135,29 +147,44 @@ async function editor(el, id) {
       costTotal += c; $('[data-cost]', tr).textContent = c ? `cost ≈ ${money(c, 2)}` : '';
       tr.classList.toggle('manual', !!it.manual);
       const fitEl = $('[data-fit]', tr); if (fitEl) { const gn = glazingNote(m, S.glass_types.find((g) => g.id === Number(it.glass_id))); fitEl.textContent = gn?.best ? `bead ${gn.best.codes[0]} · ${gn.best.outerCode}+${gn.best.innerCode}` : gn ? '⚠ glass does not fit' : ''; fitEl.title = gn?.text || ''; fitEl.style.color = gn && !gn.best ? 'var(--bad)' : ''; }
-      const dr = $('[data-draw]', tr); if (dr) { const key = [it.model_id, it.w, it.h, it.glass_id, it.colour || q.colour].join('|'); if (dr.dataset.k !== key) { dr.dataset.k = key; dr.innerHTML = m ? drawModel(m.kind, it.w || m.def_w, it.h || m.def_h, { dims: false, colour: it.colour || q.colour, glass: S.glass_types.find((g) => g.id === Number(it.glass_id))?.name }) : ''; } }
+      const dr = $('[data-draw]', tr); if (dr) { const key = [it.model_id, it.w, it.h, it.glass_id, it.colour || q.colour, it.hand, it.swing].join('|'); if (dr.dataset.k !== key) { dr.dataset.k = key; dr.innerHTML = m ? drawModel(m.kind, it.w || m.def_w, it.h || m.def_h, { dims: false, colour: it.colour || q.colour, glass: S.glass_types.find((g) => g.id === Number(it.glass_id))?.name, hand: it.hand, swing: it.swing }) : ''; } }
     });
     $('#totals', el).innerHTML = `
-      <div class="row"><span>Items total</span><b>${money(T.subtotal)}</b></div>
-      <div class="row"><span>Discount <small class="muted">${T.subtotal ? '(' + T.discPct.toFixed(2) + '%)' : ''}</small></span><input id="discount" type="number" step="any" value="${q.discount || 0}"></div>
-      <div class="row"><span>Amount</span><b>${money(T.amount)}</b></div>
-      <div class="row"><span>VAT <input id="vat_rate" type="number" step="any" value="${q.vat_rate ?? 0}" style="width:60px"> %</span><b>${money(T.vat)}</b></div>
+      <div class="row"><span>Items total</span><b id="t_sub">${money(T.subtotal)}</b></div>
+      ${T.after ? '' : `<div class="row"><span>Discount <small class="muted" id="t_pct">${T.subtotal ? '(' + T.discPct.toFixed(2) + '%)' : ''}</small></span><input id="discount" type="number" step="any" value="${q.discount || 0}"></div>
+      <div class="row"><span>Amount</span><b id="t_amount">${money(T.amount)}</b></div>`}
+      <div class="row"><span>VAT <input id="vat_rate" type="number" step="any" value="${q.vat_rate ?? 0}" style="width:60px"> %</span><b id="t_vat">${money(T.vat)}</b></div>
       <div class="row"><span>VAT adjustment <small class="muted">(enter VAT to waive)</small></span><input id="vat_waived" type="number" step="any" value="${q.vat_waived || 0}"></div>
-      <div class="row grand"><span>Grand amount (BD)</span><span>${money(T.grand)}</span></div>
+      ${T.after ? `<div class="row"><span>Total with VAT</span><b id="t_total">${money(T.total)}</b></div>
+      <div class="row"><span>Discount <small class="muted" id="t_pct">${T.subtotal ? '(' + T.discPct.toFixed(2) + '%)' : ''}</small></span><input id="discount" type="number" step="any" value="${q.discount || 0}"></div>` : ''}
+      <div class="row grand"><span>Grand amount (BD)</span><span id="t_grand">${money(T.grand)}</span></div>
+      <div class="row"><span class="muted">Discount is taken</span><select id="disc_mode" style="width:130px"><option value="after" ${T.after ? 'selected' : ''}>after VAT</option><option value="before" ${T.after ? '' : 'selected'}>before VAT</option></select></div>
       <p class="neg" id="dwarn" style="margin:6px 0 0;text-align:right" ${limit > 0 && T.discPct > limit + 1e-9 && !isAdmin ? '' : 'hidden'}>Discount above ${limit}% — the admin will have to approve it.</p>`;
+    $('#disc_mode', el).onchange = (e) => { q.disc_mode = e.target.value; update(); };
     $('#words', el).textContent = T.grand > 0 ? amountInWords(T.grand) : '';
-    $('#costline', el).textContent = costTotal ? `Estimated material cost ≈ BD ${money(costTotal, 2)} → margin ≈ BD ${money(T.amount - costTotal, 2)} (before VAT)` : '';
+    $('#costline', el).textContent = costTotal ? `Estimated material cost ≈ BD ${money(costTotal, 2)} → margin ≈ BD ${money(T.amount - costTotal - (T.after ? 0 : 0), 2)} (before VAT and discount)` : '';
     for (const [k] of [['discount'], ['vat_rate'], ['vat_waived']]) $('#' + k, el).oninput = (e) => { q[k] = num(e.target.value); update2(); };
     renderLO();
   }
   $('#colour', el).onchange = (e) => { q.colour = e.target.value; update(); };
   let loTimer = 0;
   function renderLO() { clearTimeout(loTimer); loTimer = setTimeout(doLO, 120); }
-  let lastRes = null;
+  let lastRes = null; let accMarkup = Number(S.settings.accessory_markup ?? 25);
+  /** Accessories and rubber the quoted models need, with what they cost and a selling price. */
+  function drawAcc(pieces) {
+    const box = $('#acc', el); if (!box) return; const list = accessoriesFor(pieces, S.accessories);
+    if (!list.length) { box.innerHTML = '<h3 style="margin:0">Accessories &amp; rubber</h3><p class="muted" style="margin:6px 0 0">Pick a model and a size on the items to see the hardware and rubber they need.</p>'; return; }
+    const cost = list.reduce((a, e) => a + e.cost, 0); const rub = list.filter((e) => e.rubber); const rubCost = rub.reduce((a, e) => a + e.cost, 0);
+    const f = (v) => money(v, 2);
+    box.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Accessories &amp; rubber needed</h3><span class="grow"></span><label class="muted">Mark-up <input id="accmk" type="number" step="any" value="${accMarkup}" style="width:64px"> %</label></div>
+      <div class="items-wrap"><table class="grid" style="margin-top:8px"><thead><tr><th>Item</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit cost</th><th class="num">Cost</th><th class="num">Price</th><th>Used in</th></tr></thead><tbody>${list.map((e) => `<tr><td>${e.rubber ? '〰 ' : ''}${esc(e.name)} <span class="muted">${esc(e.code)}</span></td><td class="num">${fq(e.qty)}</td><td>${esc(e.unit)}</td><td class="num">${e.price ? money(e.price, 3) : '<span class="muted">—</span>'}</td><td class="num">${f(e.cost)}</td><td class="num" data-p="${e.cost}">${f(e.cost * (1 + accMarkup / 100))}</td><td class="muted" style="font-size:11px">${esc(e.models.join(', '))}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="4">Total accessories <span class="muted">(rubber ${f(rubCost)})</span></td><td class="num">${f(cost)}</td><td class="num" id="accTot">${f(cost * (1 + accMarkup / 100))}</td><td></td></tr></tfoot></table></div>${list.some((e) => !e.price) ? '<p class="muted" style="margin:6px 0 0">Items showing — have no price in Profiles, Glass &amp; Accessories yet.</p>' : ''}`;
+    $('#accmk', box).oninput = (e) => { accMarkup = num(e.target.value); $$('[data-p]', box).forEach((td) => (td.textContent = f(Number(td.dataset.p) * (1 + accMarkup / 100)))); $('#accTot', box).textContent = f(cost * (1 + accMarkup / 100)); };
+  }
   function doLO() {
     const box = $('#lo', el); if (!box) return;
     const common = { profiles: S.profiles, glassTypes: S.glass_types, kerf: S.settings.bar_kerf || 0, quoteNo: q.number || '' };
     const pieces = quotePieces(q, S.models, { profiles: S.profiles, accessories: S.accessories, glassTypes: S.glass_types });
+    drawAcc(pieces);
     const res = allocateLeftovers(pieces, stockRows, common); lastRes = res;
     const anyCol = allocateLeftovers(pieces.map((p) => ({ ...p, colour: '' })), stockRows, common);
     const nLeft = stockRows.filter((r) => r.kind === 'leftover' && r.qty > 0).reduce((s, r) => s + r.qty, 0);
@@ -183,20 +210,16 @@ async function editor(el, id) {
     $('#release', box)?.addEventListener('click', guard(async () => { for (const r of stockRows.filter((x) => x.reserved_for === q.number)) await api.put(`t/stock/${r.id}`, { reserved_for: '' }); stockRows = await api.get('t/stock'); toast('Released'); doLO(); }));
   }
   const update2 = () => { // totals only, keep focus in the inputs
-    const T = quoteTotals(q);
-    const rows = $$('#totals .row', el);
-    rows[0].lastElementChild.textContent = money(T.subtotal);
-    rows[1].firstElementChild.querySelector('small').textContent = T.subtotal ? `(${T.discPct.toFixed(2)}%)` : '';
-    rows[2].lastElementChild.textContent = money(T.amount);
-    rows[3].lastElementChild.textContent = money(T.vat);
-    $('.grand span:last-child', el).textContent = money(T.grand);
+    const T = quoteTotals(q); const set = (id2, v) => { const e = $('#' + id2, el); if (e) e.textContent = v; };
+    set('t_sub', money(T.subtotal)); set('t_amount', money(T.amount)); set('t_vat', money(T.vat)); set('t_total', money(T.total)); set('t_grand', money(T.grand));
+    set('t_pct', T.subtotal ? `(${T.discPct.toFixed(2)}%)` : '');
     $('#dwarn', el).hidden = !(limit > 0 && T.discPct > limit + 1e-9 && !isAdmin);
     $('#words', el).textContent = T.grand > 0 ? amountInWords(T.grand) : '';
   };
 
   const reprice = (it) => {
     const p = pi(it.desc);
-    if (p) { if (!it.manual) it.price = priceFor(p, num(it.w), num(it.h)); if (p.model_id && !it.model_id) it.model_id = p.model_id; }
+    if (p) { if (!it.manual) it.price = priceFor(p, num(it.w), num(it.h)); }
   };
   tbody.addEventListener('input', (e) => {
     const tr = e.target.closest('tr[data-i]'); if (!tr) return;
@@ -205,13 +228,23 @@ async function editor(el, id) {
     if (['w', 'h', 'qty', 'price'].includes(k)) it[k] = v === '' ? null : num(v); else it[k] = v;
     if (k === 'price') it.manual = true;
     if (['w', 'h', 'desc'].includes(k)) {
-      const before = it.price; const hadModel = it.model_id; reprice(it);
+      const before = it.price; reprice(it);
       const pr = $('[data-k=price]', tr); if (pr && it.price !== before) pr.value = it.price;
-      const ms = $('[data-k=model_id]', tr); if (ms && it.model_id !== hadModel) ms.value = it.model_id || '';
     }
     update();
   });
-  tbody.addEventListener('change', (e) => { if (['model_id', 'glass_id'].includes(e.target.dataset.k)) { const it = q.items[Number(e.target.closest('tr').dataset.i)]; it[e.target.dataset.k] = e.target.value ? Number(e.target.value) : null; update(); } else if (e.target.dataset.k === 'colour') { q.items[Number(e.target.closest('tr').dataset.i)].colour = e.target.value; update(); } });
+  tbody.addEventListener('change', (e) => {
+    const tr = e.target.closest('tr[data-i]'); if (!tr) return; const it = q.items[Number(tr.dataset.i)]; const k = e.target.dataset.k;
+    if (k === 'desc' && it.kind !== 'note') {
+      // choosing a different description replaces what no longer matches it: the model (and so hand / opening / glass) follows the new item
+      const p = pi(it.desc);
+      if (p && it.pi_id !== p.id) { it.pi_id = p.id; it.model_id = p.model_id || null; it.manual = false; it.price = priceFor(p, num(it.w), num(it.h)); delete it.hand; delete it.swing; normalise(it); drawRows(); }
+      else if (!p && it.pi_id) { it.pi_id = null; it.model_id = null; delete it.hand; delete it.swing; drawRows(); toast('The description no longer matches the price list, so the model was cleared'); }
+      return;
+    }
+    if (k === 'model_id') { it.model_id = e.target.value ? Number(e.target.value) : null; delete it.hand; delete it.swing; normalise(it); drawRows(); return; }
+    if (k === 'glass_id') { it.glass_id = e.target.value ? Number(e.target.value) : null; update(); } else if (k === 'colour') { it.colour = e.target.value; update(); } else if (k === 'hand' || k === 'swing') { it[k] = e.target.value; update(); }
+  });
   tbody.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-a]'); if (!btn) return;
     const i = Number(btn.closest('tr').dataset.i);
@@ -229,16 +262,25 @@ async function editor(el, id) {
   const collect = () => ({
     client_vat: $('#client_vat', el).value.trim(), number: $('#number', el).value.trim(), date: $('#date', el).value, client: $('#client', el).value.trim(), mobile: $('#mobile', el).value.trim(), site: $('#site', el).value.trim(),
     title: $('#title', el).value.trim(), colour: $('#colour', el).value, status: $('#status', el).value, notes: $('#notes', el).value, prepared_by: $('#prepared_by', el).value.trim(),
-    items: q.items.filter((it) => it.kind === 'note' ? it.desc.trim() : (it.desc.trim() || it.price)), discount: q.discount || 0, vat_rate: q.vat_rate ?? 0, vat_waived: q.vat_waived || 0,
+    items: q.items.filter((it) => it.kind === 'note' ? it.desc.trim() : (it.desc.trim() || it.price)), discount: q.discount || 0, vat_rate: q.vat_rate ?? 0, vat_waived: q.vat_waived || 0, disc_mode: q.disc_mode || 'before',
+    ...(pw ? { password: pw } : {}),
   });
   const save = async () => {
     const data = collect();
     if (!data.client) { toast('Enter the client name', 'err'); return null; }
     const saved = id ? await api.put(`t/quotes/${id}`, data) : await api.post('t/quotes', data);
-    await refresh();
+    pw = ''; await refresh();
     if (saved.approval === 'pending') { toast(`Saved ${saved.number} — the discount is waiting for the admin`, 'err'); $('#status', el).value = saved.status; }
     else toast(`Saved ${saved.number}`);
     aprBanner(saved); $('#toOrder', el)?.toggleAttribute('disabled', !!q.order_inv || saved.approval === 'pending' || saved.approval === 'rejected'); q.approval = saved.approval; q.approval_note = saved.approval_note; return saved;
+  };
+  // an accepted quotation goes back to draft only for the admin, who confirms with their password
+  $('#status', el).onchange = (e) => {
+    if (origStatus !== 'accepted' || e.target.value === 'accepted') { pw = ''; return; }
+    const back = () => { e.target.value = 'accepted'; pw = ''; };
+    if (!isAdmin) { toast('Only the admin can change an accepted quotation', 'err'); return back(); }
+    const f = [{ key: 'password', label: 'Your admin password', type: 'password' }]; const w = document.createElement('div'); w.innerHTML = `<p>${esc(q.number)} was accepted. Enter your password to change it back.</p>` + formHTML(f, {});
+    modal({ title: 'Confirm with your password', body: w, onClose: () => { if (!pw) back(); }, buttons: [{ label: 'Cancel' }, { label: 'Confirm', kind: 'primary', onClick: () => { const v = readForm(w, f).password; if (!v) { toast('Enter your password', 'err'); return false; } pw = v; } }] });
   };
   $('#save', el).onclick = guard(async () => { const s = await save(); if (s && !id) location.hash = `#/quotes/${s.id}`; });
   if (id) {
@@ -251,7 +293,6 @@ async function editor(el, id) {
       openPoDialog({ quote: fresh, orderInv: o.inv, onDone: () => (location.hash = '#/pos') });
     });
     $('#dup', el).onclick = guard(async () => { const c = await duplicate(id); location.hash = `#/quotes/${c.id}`; });
-    $('#del', el).onclick = guard(async () => { if (await confirmBox(`Delete quotation ${q.number}?`)) { await api.del(`t/quotes/${id}`); location.hash = '#/quotes'; } });
   }
   drawRows();
 }
@@ -264,7 +305,8 @@ async function printQuote(el, id) {
   const rows = (q.items || []).map((it) => {
     if (it.kind === 'note') return `<tr><td></td><td colspan="5"><b>${esc(it.desc)}</b></td></tr>`;
     n++;
-    return `<tr><td>${n}</td><td class="n">${it.w ? fq(it.w) : ''}${it.w && it.h ? ' × ' + fq(it.h) : ''}</td><td>${esc(it.desc)}${it.note ? `<div class="note">${esc(it.note).replace(/\n/g, '<br>')}</div>` : ''}</td><td class="n">${fq(it.qty)}</td><td class="n">${money(it.price, 2)}</td><td class="n">${money(num(it.qty) * num(it.price), 2)}</td></tr>`;
+    const opt = [it.hand && (it.hand === 'R' ? 'Right hand' : 'Left hand'), it.swing && (it.swing === 'in' ? 'opens inside' : 'opens outside')].filter(Boolean).join(' · '); const optAr = [it.hand && (it.hand === 'R' ? 'يمين' : 'يسار'), it.swing && (it.swing === 'in' ? 'يفتح للداخل' : 'يفتح للخارج')].filter(Boolean).join(' · ');
+    return `<tr><td>${n}</td><td class="n">${it.w ? fq(it.w) : ''}${it.w && it.h ? ' × ' + fq(it.h) : ''}</td><td>${esc(it.desc)}${opt ? `<div class="note">${opt} <span class="ar">${optAr}</span></div>` : ''}${it.note ? `<div class="note">${esc(it.note).replace(/\n/g, '<br>')}</div>` : ''}</td><td class="n">${fq(it.qty)}</td><td class="n">${money(it.price, 2)}</td><td class="n">${money(num(it.qty) * num(it.price), 2)}</td></tr>`;
   }).join('');
   // kitchens on this quotation come with their drawings
   const kids = [...new Set((q.items || []).map((i) => i.kitchen_id).filter(Boolean))];
@@ -275,7 +317,7 @@ async function printQuote(el, id) {
     <div class="meta"><div><b>${L('quote', 'QUOTE')}:</b> ${esc(q.number)}</div><div><b>${L('mobile', 'Mob')}:</b> ${esc(q.mobile)}</div><div><b>${L('date', 'DATE')}:</b> ${dmy(q.date)}</div><div><b>${L('site', 'W/Site')}:</b> ${esc(q.site)}</div><div style="grid-column:1/-1"><b>${L('client', 'Client')}:</b> ${esc(q.client)}${q.client_vat ? ` &nbsp; <b>${L('vatNo', 'VAT No.')}:</b> ${esc(q.client_vat)}` : ''}</div></div>
     ${q.title ? `<div class="banner">${esc(q.title)}</div>` : ''}
     <table class="items-print"><thead><tr><th>#</th><th class="n">${L('size', 'Size (W × H cm)')}</th><th>${L('description', 'Description')}</th><th class="n">${L('qty', 'Qty')}</th><th class="n">${L('unit', 'Unit')}</th><th class="n">${L('amount', 'Amount')}</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="tot"><div><span>${L('total', 'Total')}</span><span>${money(T.subtotal, 2)}</span></div>${T.discount ? `<div><span>${L('disc', 'Disc')} ${T.discPct.toFixed(2)}%</span><span>- ${money(T.discount, 2)}</span></div><div><span>${L('amount', 'Amount')}</span><span>${money(T.amount, 2)}</span></div>` : ''}${q.vat_rate ? `<div><span>${L('vat', 'VAT')} ${fq(q.vat_rate)}%</span><span>${money(T.vat, 2)}</span></div>` : ''}${T.waived ? `<div><span>${L('vatAdj', 'VAT adjustment')}</span><span>- ${money(T.waived, 2)}</span></div>` : ''}<div class="g"><span>${L('grand', 'Grand Amount BD')}</span><span>${money(T.grand, 2)}</span></div></div>
+    <div class="tot"><div><span>${L('total', 'Total')}</span><span>${money(T.subtotal, 2)}</span></div>${T.after ? `${q.vat_rate ? `<div><span>${L('vat', 'VAT')} ${fq(q.vat_rate)}%</span><span>${money(T.vat, 2)}</span></div>` : ''}${T.waived ? `<div><span>${L('vatAdj', 'VAT adjustment')}</span><span>- ${money(T.waived, 2)}</span></div>` : ''}${T.discount ? `<div><span>${L('total', 'Total with VAT')}</span><span>${money(T.total, 2)}</span></div><div><span>${L('disc', 'Disc')} ${T.discPct.toFixed(2)}%</span><span>- ${money(T.discount, 2)}</span></div>` : ''}` : `${T.discount ? `<div><span>${L('disc', 'Disc')} ${T.discPct.toFixed(2)}%</span><span>- ${money(T.discount, 2)}</span></div><div><span>${L('amount', 'Amount')}</span><span>${money(T.amount, 2)}</span></div>` : ''}${q.vat_rate ? `<div><span>${L('vat', 'VAT')} ${fq(q.vat_rate)}%</span><span>${money(T.vat, 2)}</span></div>` : ''}${T.waived ? `<div><span>${L('vatAdj', 'VAT adjustment')}</span><span>- ${money(T.waived, 2)}</span></div>` : ''}`}<div class="g"><span>${L('grand', 'Grand Amount BD')}</span><span>${money(T.grand, 2)}</span></div></div>
     ${wordsBlock(T.grand)}
     <div class="sign"><div>${L('prepared', 'Prepared')} ${esc(q.prepared_by || '')}</div><div>${L('custSign', 'Cust. Sign')}</div></div>
     ${termsBlock()}${drawings}`;

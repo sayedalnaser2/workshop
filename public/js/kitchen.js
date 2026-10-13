@@ -85,7 +85,9 @@ export function packSheets(pieces, sheetW, sheetH, kerf = 0.3) {
     }
   }
   const total = sheetW * sheetH;
-  return { sheets: sheets.map((s) => ({ items: s.items, used: s.items.reduce((a, i) => a + i.w * i.h, 0) / total })), unfit };
+  // what is left over on each sheet: the strip at the end of every shelf and the band under the last shelf
+  const freeOf = (sh) => { const out = []; for (const sf of sh.shelves) { const rw = sheetW - sf.x; if (rw > 0.5 && sf.h > 0.5) out.push({ x: sf.x, y: sf.y, w: Math.round(rw * 10) / 10, h: Math.round(sf.h * 10) / 10 }); } const last = sh.shelves.at(-1); if (last) { const y = last.y + last.h + kerf; if (sheetH - y > 0.5) out.push({ x: 0, y, w: sheetW, h: Math.round((sheetH - y) * 10) / 10 }); } return out; };
+  return { sheets: sheets.map((s) => ({ items: s.items, used: s.items.reduce((a, i) => a + i.w * i.h, 0) / total, free: freeOf(s) })), unfit };
 }
 
 /** Everything about a kitchen: panels by material, sheets, hardware, countertop slabs. */

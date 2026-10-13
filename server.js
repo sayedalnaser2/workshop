@@ -7,7 +7,7 @@ import os from 'node:os';
 import {
   db, SCHEMA, getSetting, setSetting, nextNumber, insertRow, updateRow, deleteRow, getRow, listRows, tx,
 } from './src/db.js';
-import { needsSetup, authenticate, createUser, updateUser, deleteUser, listUsers, setOwnPassword, makeToken, userFromToken, cookieOf } from './src/auth.js';
+import { needsSetup, authenticate, createUser, updateUser, deleteUser, listUsers, setOwnPassword, makeToken, userFromToken, cookieOf, verifyOwnPassword } from './src/auth.js';
 import { tableAccess } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
 import { seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets, seedBalexco } from './src/seed.js';
@@ -390,6 +390,12 @@ async function api(req, res, url) {
       if (t === 'tasks') { if (body.status === 'done' && cur.status !== 'done') { body.done_at = new Date().toISOString(); body.progress = 100; } else if (body.status && body.status !== 'done' && cur.status === 'done') body.done_at = null; }
       if (t === 'quotes') {
         if (user.role !== 'admin') { delete body.approval; delete body.approved_disc; delete body.approval_note; }
+        // an accepted quotation goes back to draft only with the admin's own password
+        if (cur.status === 'accepted' && body.status && body.status !== 'accepted') {
+          if (user.role !== 'admin') throw bad('Only the admin can change an accepted quotation back to draft.', 403);
+          if (!verifyOwnPassword(user.id, String(body.password || ''))) throw bad('Wrong password.', 403);
+        }
+        delete body.password;
         quoteApproval(body, cur, user);
       }
       if (t === 'credit_notes') {
@@ -402,6 +408,7 @@ async function api(req, res, url) {
       return send(res, 200, saved);
     }
     if (id && m === 'DELETE') {
+      if (t === 'quotes') throw bad('Quotations cannot be deleted. Set the status to Rejected instead.', 403);
       const cur = getRow(t, id);
       if (t === 'tasks') { db.prepare('DELETE FROM task_logs WHERE task_id=?').run(id); db.prepare('DELETE FROM task_sessions WHERE task_id=?').run(id); }
       if (t === 'credit_notes' && cur?.status === 'approved' && user.role !== 'admin') throw bad('Only the admin can delete an approved credit note.', 403);

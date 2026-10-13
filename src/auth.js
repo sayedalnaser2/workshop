@@ -78,3 +78,6 @@ export function userFromToken(tok) {
   return u && u.active ? pub(u) : null;
 }
 export const cookieOf = (req, name) => (req.headers.cookie || '').split(/;\s*/).map((c) => c.split('=')).find(([k]) => k === name)?.[1];
+
+/** True when `password` is the signed-in person's own password (used to confirm sensitive changes). */
+export const verifyOwnPassword = (id, password) => checkHash(db.prepare('SELECT * FROM users WHERE id=?').get(id), password);

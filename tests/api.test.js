@@ -165,6 +165,19 @@ test('audit trail: records who changed what, for the admin only', async () => {
   assert.equal(upd.changes.find((c) => c.f === 'client').to, 'Audit Co Ltd');
   assert.ok(log.rows.some((r) => r.action === 'created'));
   assert.equal((await call('amina', 'GET', '/api/audit')).status, 403);
-  await call('amina', 'DELETE', `/api/t/quotes/${q.id}`);
-  assert.ok((await call('boss', 'GET', `/api/audit?q=${encodeURIComponent(q.number)}`)).data.rows.some((r) => r.action === 'deleted'));
+  const ev = (await call('amina', 'POST', '/api/t/events', { title: 'Audit me', date: '2026-10-30' })).data;
+  await call('amina', 'DELETE', `/api/t/events/${ev.id}`);
+  assert.ok((await call('boss', 'GET', `/api/audit?q=${encodeURIComponent('Audit me')}`)).data.rows.some((r) => r.action === 'deleted'));
+});
+
+test('quotations cannot be deleted; accepted → draft needs the admin and their password', async () => {
+  const q = (await call('amina', 'POST', '/api/t/quotes', { client: 'Locked Co', date: '2026-10-12', vat_rate: 10, disc_mode: 'after', discount: 20, items: [{ qty: 1, price: 1000, desc: 'x' }] })).data;
+  assert.equal((await call('boss', 'DELETE', `/api/t/quotes/${q.id}`)).status, 403);
+  const o = (await call('amina', 'POST', `/api/quotes/${q.id}/to-order`, {})).data; assert.equal(o.amount, 1080); // 1000 + 100 VAT − 20 discount after VAT
+  assert.equal(o.vat, 100);
+  assert.equal((await call('amina', 'PUT', `/api/t/quotes/${q.id}`, { status: 'draft' })).status, 403); // accounts cannot
+  assert.equal((await call('boss', 'PUT', `/api/t/quotes/${q.id}`, { status: 'draft' })).data.error, 'Wrong password.');
+  assert.equal((await call('boss', 'PUT', `/api/t/quotes/${q.id}`, { status: 'draft', password: 'nope' })).status, 403);
+  const ok = await call('boss', 'PUT', `/api/t/quotes/${q.id}`, { status: 'draft', password: 'secret1' });
+  assert.equal(ok.status, 200); assert.equal(ok.data.status, 'draft'); assert.equal(ok.data.password, undefined);
 });

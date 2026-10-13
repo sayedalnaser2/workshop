@@ -28,7 +28,9 @@ export function quotePieces(q, models, lib, glassTypes = lib.glassTypes || []) {
       if (!fin(g.w) || !fin(g.h)) continue;
       for (let k = 0; k < Math.round(g.qty) * n; k++) out.push({ kind: 'glass', item: i, label: g.label, glass_id: it.glass_id ? Number(it.glass_id) : null, w: Math.round(g.w * 10) / 10, h: Math.round(g.h * 10) / 10, model: m.name });
     }
-    for (const a of r.accessories) if (fin(a.qty)) out.push({ kind: 'accessory', item: i, label: a.label, accessory_id: a.accessory_id ? Number(a.accessory_id) : null, qty: a.qty * n, model: m.name });
+    // gaskets for the glass thickness (Balexco chart) replace the model's generic rubber line when the glass is known
+    const gt0 = glassTypes.find((x) => x.id === Number(it.glass_id)); const fit0 = m.spec?.glazing?.type && gt0 ? glazingFits(mmOf(gt0.thickness), m.spec.glazing.type)[0] : null;
+    for (const a of r.accessories) if (fin(a.qty) && !(fit0 && a.accessory?.code === 'RUB')) out.push({ kind: 'accessory', item: i, label: a.label, accessory_id: a.accessory_id ? Number(a.accessory_id) : null, qty: a.qty * n, model: m.name });
     // gaskets for the glass thickness (Balexco chart): the chosen outer + inner gasket run round every pane
     const gt = glassTypes.find((x) => x.id === Number(it.glass_id)); const fit = m.spec?.glazing?.type && gt ? glazingFits(mmOf(gt.thickness), m.spec.glazing.type)[0] : null;
     if (fit) {
@@ -142,4 +144,20 @@ export function lowStock(stock, { profiles = [], glassTypes = [], accessories = 
   for (const g of glassTypes) add('glass', g, sum((s) => s.glass_id === g.id), 'sheet');
   for (const a of accessories) add('accessory', a, sum((s) => s.item_type === 'accessory' && same(s.name, a.name)), a.unit || 'ea');
   return out.sort((a, b) => a.onHand / a.min - b.onHand / b.min);
+}
+
+/** Rubber, gaskets, pile and seals — priced per metre in the library. */
+export const isRubber = (a) => /gasket|rubber|pile|seal|brush/i.test(`${a?.name || ''}`) || /^E21\d\d$/.test(a?.code || '');
+/**
+ * Accessories a set of quotation pieces needs, added up per accessory: qty, unit cost, cost and whether it is rubber.
+ * (metres are rounded up to 0.1 m, everything else to whole pieces)
+ */
+export function accessoriesFor(pieces, accessories) {
+  const m = new Map();
+  for (const p of pieces.filter((x) => x.kind === 'accessory')) {
+    const a = p.accessory_id ? accessories.find((x) => x.id === p.accessory_id) : null; const key = a ? `a${a.id}` : `l${p.label}`;
+    const e = m.get(key) || { key, id: a?.id || null, name: a?.name || p.label, code: a?.code || '', unit: a?.unit || 'ea', price: Number(a?.price) || 0, rubber: isRubber(a || { name: p.label }), qty: 0, models: new Set() };
+    e.qty += p.qty; e.models.add(p.model); m.set(key, e);
+  }
+  return [...m.values()].map((e) => { const q = /^m$|metre|meter/i.test(e.unit) ? Math.ceil(e.qty * 10) / 10 : Math.ceil(e.qty - 1e-9); return { ...e, qty: q, cost: Math.round(q * e.price * 1000) / 1000, models: [...e.models] }; }).sort((a, b) => (b.rubber - a.rubber) || a.name.localeCompare(b.name));
 }

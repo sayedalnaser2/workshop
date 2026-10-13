@@ -257,3 +257,16 @@ table.mini { width: 100%; border-collapse: collapse; } .mini th { font-size: 11p
   .doc .items-print tr { break-inside: avoid; }
 }
 .mini-draw { margin-top: 4px; text-align: center; } .mini-draw svg { width: 64px; height: 56px; }
+
+/* cutting list: bars coloured per size, printable overlay */
+.bar { height: 22px; }
+.bar i { position: relative; opacity: 1; }
+.bar i span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; color: #fff; font-style: normal; text-shadow: 0 0 2px rgba(0, 0, 0, .7); white-space: nowrap; overflow: hidden; }
+.print-overlay { position: fixed; inset: 0; background: var(--bg); overflow: auto; z-index: 70; padding: 14px; }
+.cutprint .card { box-shadow: none; border: 0; padding: 0; margin-top: 10px; }
+.cutprint h3 { font-size: 15px; border-bottom: 2px solid #1f3a5f; padding-bottom: 3px; }
+@media print {
+  body:has(.print-overlay) #app, body:has(.print-overlay) #login { display: none !important; }
+  .print-overlay { position: static; padding: 0; background: #fff; overflow: visible; }
+  .print-overlay .printbar { display: none; }
+}

@@ -21,7 +21,7 @@ db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_
 export const SCHEMA = {
   price_items: { cols: { name: 'TEXT', rate: 'REAL', type: 'TEXT', unit: 'TEXT', note: 'TEXT', model_id: 'INTEGER', sort: 'INTEGER' }, order: 'sort, id' },
   quotes: {
-    cols: { number: 'TEXT', date: 'TEXT', client: 'TEXT', mobile: 'TEXT', site: 'TEXT', title: 'TEXT', items: 'JSON', discount: 'REAL', vat_rate: 'REAL', vat_waived: 'REAL', status: 'TEXT', prepared_by: 'TEXT', notes: 'TEXT', order_inv: 'TEXT', colour: 'TEXT', client_vat: 'TEXT', approval: 'TEXT', approved_disc: 'REAL', approval_note: 'TEXT' },
+    cols: { number: 'TEXT', date: 'TEXT', client: 'TEXT', mobile: 'TEXT', site: 'TEXT', title: 'TEXT', items: 'JSON', discount: 'REAL', vat_rate: 'REAL', vat_waived: 'REAL', status: 'TEXT', prepared_by: 'TEXT', notes: 'TEXT', order_inv: 'TEXT', colour: 'TEXT', client_vat: 'TEXT', disc_mode: 'TEXT', approval: 'TEXT', approved_disc: 'REAL', approval_note: 'TEXT' },
     order: 'date DESC, id DESC',
   },
   orders: { cols: { inv: 'TEXT', date: 'TEXT', client: 'TEXT', site: 'TEXT', mobile: 'TEXT', amount: 'REAL', done: 'INTEGER', quote_no: 'TEXT', note: 'TEXT', vat: 'REAL', client_vat: 'TEXT' }, order: 'date DESC, id DESC' },
