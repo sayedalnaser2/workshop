@@ -27,7 +27,7 @@ export function scene(spec, open = {}) {
   (spec.runs || []).forEach((run, ri) => {
     const { x: ox, z: oz, rot } = pl[ri];
     const map = { 0: (u, v) => [ox + u, oz + v], 90: (u, v) => [ox + v, oz + u], 180: (u, v) => [ox - u, oz - v], 270: (u, v) => [ox - v, oz - u] }[rot] || ((u, v) => [ox + u, oz + v]);
-    let curCi = -1;
+    let curCi = -1; let curFront = null;
     // a box in run coordinates (u along the run, v out from the wall); sw turns it about a vertical hinge line { hu, hv, a (radians), side: 1 hinge at the left end, -1 right end }
     const put = (u0, u1, v0, v1, y0, y1, color, kind, sw) => {
       const C = [];
@@ -36,14 +36,17 @@ export function scene(spec, open = {}) {
         if (sw && sw.a) { const du = u - sw.hu; const dv = v - sw.hv; const c = Math.cos(sw.a); const sn = Math.sin(sw.a) * sw.side; u = sw.hu + du * c - dv * sn; v = sw.hv + du * sn + dv * c; }
         const [x, z] = map(u, v); C.push([x, y, z]);
       }
-      boxes.push({ corners: C, color, kind, ref: { ri, ci: curCi } });
+      boxes.push({ corners: C, color, kind, ref: { ri, ci: curCi, front: curFront } });
     };
     let u = 0;
     for (const [ci, c] of (run.cabinets || []).entries()) {
       curCi = ci;
       const t = CAB_TYPES[c.type] || CAB_TYPES.base; const w = +c.w || 0; const h = +c.h || 0; const d = +c.d || 0;
       if (t.gap) { u += w; continue; }
-      const op = Math.max(0, Math.min(1, +open[`${ri}|${ci}`] || 0));
+      curFront = null; const cabOp = +open[`${ri}|${ci}`] || 0;
+      const fOpen = (k) => { const x = open[`${ri}|${ci}|${k}`]; return Math.max(0, Math.min(1, +(x === undefined ? cabOp : x) || 0)); }; // one drawer or door on its own, else the whole cabinet
+      const nDr = Math.round(+c.drawers || 0); const nDo = Math.round(+c.doors || 0);
+      const op = Math.max(cabOp, ...Array.from({ length: nDr }, (_, i) => fOpen('d' + i)), ...Array.from({ length: nDo }, (_, i) => fOpen('f' + i)), 0);
       const y0 = t.wall ? style.wall_height : t.tall ? 0 : style.plinth;
       if (op > 0) { // a hollow carcass, so the inside shows when doors or drawers are open
         put(u, u + w, 0, 1, y0, y0 + h, carcass, 'carcass'); put(u, u + T, 0, d, y0, y0 + h, carcass, 'carcass'); put(u + w - T, u + w, 0, d, y0, y0 + h, carcass, 'carcass');
@@ -54,8 +57,9 @@ export function scene(spec, open = {}) {
       const doors = Math.round(+c.doors || 0); const drawers = Math.round(+c.drawers || 0); const glazed = Math.min(doors, Math.round(+c.glazed || 0));
       const zn = zonesOf(c);
       if (drawers) {
-        const z = zn.drawers; const dh = z.h / drawers; const zu = u + z.x; const o = op * Math.min(d * 0.7, 40);
+        const z = zn.drawers; const dh = z.h / drawers; const zu = u + z.x;
         for (let i = 0; i < drawers; i++) {
+          curFront = 'd' + i; const o = fOpen(curFront) * Math.min(d * 0.7, 40);
           const ya = y0 + z.y + i * dh; const yb = ya + dh;
           if (o > 0.5) { const L = d - 6; put(zu + T + .3, zu + z.w - T - .3, d + o - L, d + o, ya + 3, ya + dh * 0.62, '#d9d0bd', 'tray'); }
           put(zu + .2, zu + z.w - .2, d + o, d + o + 1.8, ya + .2, yb - .2, alu ? frame : door, 'front');
@@ -65,14 +69,16 @@ export function scene(spec, open = {}) {
       if (doors) {
         const z = zn.doors; const zy = y0 + z.y;
         for (let i = 0; i < doors; i++) {
+          curFront = 'f' + i; const fo = fOpen(curFront);
           const dw = z.w / doors; const a = u + z.x + i * dw; const left = doors === 1 || i % 2 === 0; // handle side opposite the hinge: first door hinges on the left
-          const sw = op > 0 ? { hu: left ? a + .2 : a + dw - .2, hv: d, a: op * 1.75, side: left ? 1 : -1 } : null;
+          const sw = fo > 0 ? { hu: left ? a + .2 : a + dw - .2, hv: d, a: fo * 1.75, side: left ? 1 : -1 } : null;
           put(a + .2, a + dw - .2, d, d + 1.8, zy + .2, zy + z.h - .2, i < glazed ? '#bfe0f2' : alu ? frame : door, i < glazed ? 'glass' : 'front', sw);
           if (alu && i >= glazed) { const fw = Math.min(style.frame_w || 4.5, dw / 3); put(a + .2 + fw, a + dw - .2 - fw, d + 1.8, d + 2.2, zy + .2 + fw, zy + z.h - .2 - fw, door, 'infill', sw); }
           const hx = left ? a + dw - 4 : a + 3; const hy = zy + z.h * (t.wall ? .2 : .75);
           put(hx, hx + 1.2, d + 1.8, d + 3.2, hy - 6, hy + 6, '#b9bec6', 'handle', sw);
         }
       }
+      curFront = null;
       if (t.counter) put(u, u + w, 0, d + over, y0 + h, y0 + h + ct, top, 'top');
       u += w;
     }

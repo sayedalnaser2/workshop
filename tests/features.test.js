@@ -171,3 +171,12 @@ test('kitchen: joining two cabinets makes one carcass; splitting reverses it; op
   const closed = scene(spec); const open = scene(spec, { '0|0': 1, '0|1': 1 });
   assert.ok(open.length > closed.length); assert.ok(open.some((x) => x.kind === 'tray'));
 });
+
+test('3D kitchen: each drawer and door can open on its own', async () => {
+  const { scene } = await import('../public/js/kitchen-3d.js');
+  const spec = { style: {}, counter: {}, runs: [{ cabinets: [{ type: 'drawers', w: 60, h: 72, d: 56, drawers: 3 }, { type: 'base', w: 90, h: 72, d: 56, doors: 2 }] }] };
+  const trays = (o) => scene(spec, o).filter((b) => b.kind === 'tray');
+  assert.equal(trays({}).length, 0); assert.equal(trays({ '0|0|d1': 1 }).length, 1); assert.equal(trays({ '0|0': 1 }).length, 3);
+  assert.equal(trays({ '0|0': 1, '0|0|d0': 0 }).length, 2); // the cabinet is open but one drawer is held shut
+  assert.ok(scene(spec, { '0|1|f1': 1 }).some((b) => b.ref.front === 'f1' && b.corners.some((c, i, a) => c[2] !== a[0][2])));
+});
