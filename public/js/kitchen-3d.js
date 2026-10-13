@@ -18,35 +18,53 @@ export function placeRuns(spec) {
 
 const shade = (hex, f) => { const n = parseInt(String(hex).replace('#', ''), 16); const c = (s) => Math.max(0, Math.min(255, Math.round(((n >> s) & 255) * f))); return `rgb(${c(16)},${c(8)},${c(0)})`; };
 
-/** Boxes { x0,x1,y0,y1,z0,z1, color, kind } for the whole kitchen. */
-export function scene(spec) {
+/** Boxes { corners[8], color, kind, ref } for the whole kitchen. open = { 'ri|ci': 0..1 } how far each cabinet's doors / drawers are open. */
+export function scene(spec, open = {}) {
   const style = { ...DEFAULT_STYLE, ...(spec.style || {}) }; const ct = Math.max(0, +spec.counter?.thickness || 2); const over = +spec.counter?.front || 0;
-  const door = colourHex(style.door_colour) || '#d9c9a8'; const carcass = '#e8e4dc'; const top = stoneHex(spec.counter?.material) || '#6b6f78';
-  const alu = style.kind === 'aluminium'; const frame = colourHex(style.profile_out) || '#9aa3ad';
+  const door = colourHex(style.door_colour) || '#d9c9a8'; const carcass = '#e8e4dc'; const inner = '#f3efe6'; const top = stoneHex(spec.counter?.material) || '#6b6f78';
+  const alu = style.kind === 'aluminium'; const frame = colourHex(style.profile_out) || '#9aa3ad'; const T = +style.t || 1.8;
   const pl = placeRuns(spec); const boxes = [];
   (spec.runs || []).forEach((run, ri) => {
     const { x: ox, z: oz, rot } = pl[ri];
-    const put = (u0, u1, v0, v1, y0, y1, color, kind) => { const ref = { ri, ci: curCi }; // local (along, depth) → world, by rotation
-      const m = { 0: (u, v) => [ox + u, oz + v], 90: (u, v) => [ox + v, oz + u], 180: (u, v) => [ox - u, oz - v], 270: (u, v) => [ox - v, oz - u] }[rot] || ((u, v) => [ox + u, oz + v]);
-      const a = m(u0, v0); const b = m(u1, v1); boxes.push({ x0: Math.min(a[0], b[0]), x1: Math.max(a[0], b[0]), z0: Math.min(a[1], b[1]), z1: Math.max(a[1], b[1]), y0, y1, color, kind, ref });
+    const map = { 0: (u, v) => [ox + u, oz + v], 90: (u, v) => [ox + v, oz + u], 180: (u, v) => [ox - u, oz - v], 270: (u, v) => [ox - v, oz - u] }[rot] || ((u, v) => [ox + u, oz + v]);
+    let curCi = -1;
+    // a box in run coordinates (u along the run, v out from the wall); sw turns it about a vertical hinge line { hu, hv, a (radians), side: 1 hinge at the left end, -1 right end }
+    const put = (u0, u1, v0, v1, y0, y1, color, kind, sw) => {
+      const C = [];
+      for (let i = 0; i < 8; i++) {
+        let u = i & 1 ? u1 : u0; const y = i & 2 ? y1 : y0; let v = i & 4 ? v1 : v0;
+        if (sw && sw.a) { const du = u - sw.hu; const dv = v - sw.hv; const c = Math.cos(sw.a); const sn = Math.sin(sw.a) * sw.side; u = sw.hu + du * c - dv * sn; v = sw.hv + du * sn + dv * c; }
+        const [x, z] = map(u, v); C.push([x, y, z]);
+      }
+      boxes.push({ corners: C, color, kind, ref: { ri, ci: curCi } });
     };
-    let u = 0; let curCi = -1;
+    let u = 0;
     for (const [ci, c] of (run.cabinets || []).entries()) {
       curCi = ci;
       const t = CAB_TYPES[c.type] || CAB_TYPES.base; const w = +c.w || 0; const h = +c.h || 0; const d = +c.d || 0;
       if (t.gap) { u += w; continue; }
+      const op = Math.max(0, Math.min(1, +open[`${ri}|${ci}`] || 0));
       const y0 = t.wall ? style.wall_height : t.tall ? 0 : style.plinth;
-      put(u, u + w, 0, d, y0, y0 + h, carcass, 'carcass');
+      if (op > 0) { // a hollow carcass, so the inside shows when doors or drawers are open
+        put(u, u + w, 0, 1, y0, y0 + h, carcass, 'carcass'); put(u, u + T, 0, d, y0, y0 + h, carcass, 'carcass'); put(u + w - T, u + w, 0, d, y0, y0 + h, carcass, 'carcass');
+        put(u + T, u + w - T, 0, d, y0, y0 + T, inner, 'carcass'); put(u + T, u + w - T, 0, d, y0 + h - T, y0 + h, inner, 'carcass');
+        const sh = Math.round(+c.shelves || 0); for (let i = 1; i <= sh; i++) put(u + T, u + w - T, 1, d - 3, y0 + (h * i) / (sh + 1), y0 + (h * i) / (sh + 1) + 1.2, inner, 'carcass');
+      } else put(u, u + w, 0, d, y0, y0 + h, carcass, 'carcass');
       if (!t.wall && !t.tall) put(u + 1, u + w - 1, 4, d - 4, 0, style.plinth, '#6f7885', 'plinth');
       const doors = Math.round(+c.doors || 0); const drawers = Math.round(+c.drawers || 0); const glazed = Math.min(doors, Math.round(+c.glazed || 0));
-      const fv = (a, b, y1, y2, col, kind) => put(a, b, d, d + 1.8, y1, y2, col, kind);
-      for (let i = 0; i < drawers; i++) { const dh = h / drawers; fv(u + .2, u + w - .2, y0 + i * dh + .2, y0 + (i + 1) * dh - .2, alu ? frame : door, 'front'); put(u + w * .35, u + w * .65, d + 1.8, d + 3, y0 + (i + .55) * dh, y0 + (i + .62) * dh, '#b9bec6', 'handle'); }
+      for (let i = 0; i < drawers; i++) {
+        const dh = h / drawers; const o = op * Math.min(d * 0.7, 40); const ya = y0 + i * dh; const yb = y0 + (i + 1) * dh;
+        if (o > 0.5) { const L = d - 6; put(u + T + .3, u + w - T - .3, d + o - L, d + o, ya + 3, ya + dh * 0.62, '#d9d0bd', 'tray'); }
+        put(u + .2, u + w - .2, d + o, d + o + 1.8, ya + .2, yb - .2, alu ? frame : door, 'front');
+        put(u + w * .35, u + w * .65, d + o + 1.8, d + o + 3, y0 + (i + .55) * dh, y0 + (i + .62) * dh, '#b9bec6', 'handle');
+      }
       for (let i = 0; i < doors; i++) {
-        const dw = w / doors; const a = u + i * dw;
-        fv(a + .2, a + dw - .2, y0 + .2, y0 + h - .2, i < glazed ? '#bfe0f2' : alu ? frame : door, i < glazed ? 'glass' : 'front');
-        if (alu && i >= glazed) { const fw = Math.min(style.frame_w || 4.5, dw / 3); put(a + .2 + fw, a + dw - .2 - fw, d + 1.8, d + 2.2, y0 + .2 + fw, y0 + h - .2 - fw, door, 'infill'); }
-        const hx = doors === 1 ? a + dw - 4 : i % 2 === 0 ? a + dw - 4 : a + 3; const hy = y0 + h * (t.wall ? .2 : .75);
-        put(hx, hx + 1.2, d + 1.8, d + 3.2, hy - 6, hy + 6, '#b9bec6', 'handle');
+        const dw = w / doors; const a = u + i * dw; const left = doors === 1 || i % 2 === 0; // handle side opposite the hinge: first door hinges on the left
+        const sw = op > 0 ? { hu: left ? a + .2 : a + dw - .2, hv: d, a: op * 1.75, side: left ? 1 : -1 } : null;
+        put(a + .2, a + dw - .2, d, d + 1.8, y0 + .2, y0 + h - .2, i < glazed ? '#bfe0f2' : alu ? frame : door, i < glazed ? 'glass' : 'front', sw);
+        if (alu && i >= glazed) { const fw = Math.min(style.frame_w || 4.5, dw / 3); put(a + .2 + fw, a + dw - .2 - fw, d + 1.8, d + 2.2, y0 + .2 + fw, y0 + h - .2 - fw, door, 'infill', sw); }
+        const hx = left ? a + dw - 4 : a + 3; const hy = y0 + h * (t.wall ? .2 : .75);
+        put(hx, hx + 1.2, d + 1.8, d + 3.2, hy - 6, hy + 6, '#b9bec6', 'handle', sw);
       }
       if (t.counter) put(u, u + w, 0, d + over, y0 + h, y0 + h + ct, top, 'top');
       u += w;
@@ -65,7 +83,7 @@ export function draw3D(canvas, boxes, view = {}) {
   ctx.fillStyle = '#eef2f6'; ctx.fillRect(0, 0, W, H);
   if (!boxes.length) return;
   const mn = [Infinity, 0, Infinity]; const mx = [-Infinity, -Infinity, -Infinity];
-  for (const b of boxes) { mn[0] = Math.min(mn[0], b.x0); mn[2] = Math.min(mn[2], b.z0); mx[0] = Math.max(mx[0], b.x1); mx[1] = Math.max(mx[1], b.y1); mx[2] = Math.max(mx[2], b.z1); }
+  for (const b of boxes) for (const q of b.corners) { mn[0] = Math.min(mn[0], q[0]); mn[2] = Math.min(mn[2], q[2]); mx[0] = Math.max(mx[0], q[0]); mx[1] = Math.max(mx[1], q[1]); mx[2] = Math.max(mx[2], q[2]); }
   const cx = (mn[0] + mx[0]) / 2; const cy = mx[1] / 2; const cz = (mn[2] + mx[2]) / 2; const size = Math.max(mx[0] - mn[0], mx[1], mx[2] - mn[2], 100);
   const yaw = view.yaw ?? -0.55; const pitch = view.pitch ?? 0.45; const dist = size * 2.2 / (view.zoom || 1); const f = Math.min(W, H) * 1.05;
   const cyw = Math.cos(yaw); const syw = Math.sin(yaw); const cp = Math.cos(pitch); const sp = Math.sin(pitch);
@@ -82,25 +100,29 @@ export function draw3D(canvas, boxes, view = {}) {
   quad([[fx0, 0, -2], [fx1, 0, -2], [fx1, 260, -2], [fx0, 260, -2]], '#f7f7f4', '#dfe2e6');
   const faces = [];
   for (const b of boxes) {
-    const C = []; for (let i = 0; i < 8; i++) C.push([i & 1 ? b.x1 : b.x0, i & 2 ? b.y1 : b.y0, i & 4 ? b.z1 : b.z0]);
-    for (const [n, idx] of FACES) {
-      const pts = idx.map((i) => cam(...C[i])); const nc = rot(n[0], n[1], n[2]); // back-face culling with the true normal
+    const C = b.corners; const mid = [0, 1, 2].map((k) => C.reduce((t, q) => t + q[k], 0) / 8);
+    for (const [, idx] of FACES) {
+      const q = idx.map((i) => C[i]); const e1 = [q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]]; const e2 = [q[2][0] - q[0][0], q[2][1] - q[0][1], q[2][2] - q[0][2]];
+      let n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]; const L = Math.hypot(...n) || 1; n = n.map((x) => x / L);
+      const fc = [0, 1, 2].map((k) => (q[0][k] + q[1][k] + q[2][k] + q[3][k]) / 4);
+      if (n[0] * (fc[0] - mid[0]) + n[1] * (fc[1] - mid[1]) + n[2] * (fc[2] - mid[2]) < 0) n = n.map((x) => -x); // outward
+      const pts = q.map((c) => cam(...c)); const nc = rot(n[0], n[1], n[2]); // back-face culling with the true normal
       if (nc[0] * pts[0][0] + nc[1] * pts[0][1] + nc[2] * pts[0][2] >= 0) continue;
-      const light = n[1] > 0 ? 1.08 : n[1] < 0 ? .6 : n[2] !== 0 ? .95 : .78;
-      faces.push({ pts, depth: pts.reduce((a, p) => a + p[2], 0) / 4, fill: shade(b.color, light), ref: b.ref, on: same(b.ref, sel) ? 2 : same(b.ref, hov) ? 1 : 0 });
+      const light = n[1] > 0.5 ? 1.08 : n[1] < -0.5 ? .6 : 0.78 + 0.17 * Math.abs(n[2]);
+      faces.push({ pts, depth: pts.reduce((a, p) => a + p[2], 0) / 4, fill: shade(b.color, light), ref: b.ref, kind: b.kind, on: same(b.ref, sel) ? 2 : same(b.ref, hov) ? 1 : 0 });
     }
   }
   faces.sort((a, b) => b.depth - a.depth);
-  for (const fc of faces) { if (fc.pts.some((p) => p[2] < 5)) continue; const p = fc.pts.map(proj); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fillStyle = fc.fill; ctx.fill(); if (fc.on) { ctx.fillStyle = fc.on === 2 ? 'rgba(255,140,0,.38)' : 'rgba(40,120,255,.22)'; ctx.fill(); } ctx.strokeStyle = fc.on === 2 ? '#e07b00' : 'rgba(30,45,62,.55)'; ctx.lineWidth = fc.on === 2 ? 1.8 : .8; ctx.stroke(); if (fc.ref && fc.ref.ci >= 0) canvas._hit.push({ poly: p, ref: fc.ref }); }
+  for (const fc of faces) { if (fc.pts.some((p) => p[2] < 5)) continue; const p = fc.pts.map(proj); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fillStyle = fc.fill; ctx.fill(); if (fc.on) { ctx.fillStyle = fc.on === 2 ? 'rgba(255,140,0,.38)' : 'rgba(40,120,255,.22)'; ctx.fill(); } ctx.strokeStyle = fc.on === 2 ? '#e07b00' : 'rgba(30,45,62,.55)'; ctx.lineWidth = fc.on === 2 ? 1.8 : .8; ctx.stroke(); if (fc.ref && fc.ref.ci >= 0) canvas._hit.push({ poly: p, ref: fc.ref, kind: fc.kind }); }
 }
 
 /** Which cabinet is under a canvas point (the nearest face wins). Call after draw3D. */
 export function pick3D(canvas, x, y) {
   const hits = canvas._hit || [];
   for (let i = hits.length - 1; i >= 0; i--) { // drawn last = nearest
-    const { poly, ref } = hits[i]; let inside = false;
+    const { poly, ref, kind } = hits[i]; let inside = false;
     for (let a = 0, b = poly.length - 1; a < poly.length; b = a++) { const [xi, yi] = poly[a]; const [xj, yj] = poly[b]; if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside; }
-    if (inside) return ref;
+    if (inside) return { ...ref, kind };
   }
   return null;
 }

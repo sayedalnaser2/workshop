@@ -1,7 +1,7 @@
 import { scene, draw3D, pick3D, placeRuns } from '../kitchen-3d.js';
 import { S } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, toast, guard, confirmBox, modal, formHTML, readForm, dataTable, badge, datalist } from '../ui.js';
-import { CAB_TYPES, DEFAULT_STYLE, DEFAULT_COUNTER, kitchenModel, priceKitchen } from '../kitchen.js';
+import { CAB_TYPES, DEFAULT_STYLE, DEFAULT_COUNTER, kitchenModel, priceKitchen, mergeCabinets, splitCabinet, mergeSaving } from '../kitchen.js';
 import { elevationSVG, planSVG, sheetSVG } from '../kitchen-draw.js';
 import { docHeader, docFooter, L, AR, wordsBlock, termsBlock } from '../doc.js';
 import { openPoDialog } from '../po-dialog.js';
@@ -188,9 +188,13 @@ async function editor(el, id, tab) {
   // ---------------------------------------------------------------- 3D view
   function view3d(pane) {
     const v = view3d.v ||= { yaw: -0.55, pitch: 0.45, zoom: 1 }; v.selected = view3d.sel && spec.runs[view3d.sel.ri]?.cabinets[view3d.sel.ci] ? view3d.sel : null; v.hover = null;
-    pane.innerHTML = `<div class="k3"><div class="card"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">3D view</h3><span class="muted">Drag to turn · scroll or pinch to zoom · <b>click a cabinet to select and edit it</b></span><span class="grow"></span><button class="btn sm" data-p="front">Front</button><button class="btn sm" data-p="corner">Corner</button><button class="btn sm" data-p="top">From above</button></div>
+    pane.innerHTML = `<div class="k3"><div class="card"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">3D view</h3><span class="muted">Drag to turn · scroll or pinch to zoom · <b>click a cabinet to select it; click a door or drawer to open or close it</b></span><span class="grow"></span><button class="btn sm" data-oc="1">Open all</button><button class="btn sm" data-oc="0">Close all</button><button class="btn sm" data-p="front">Front</button><button class="btn sm" data-p="corner">Corner</button><button class="btn sm" data-p="top">From above</button></div>
       <canvas id="c3" width="1100" height="640" style="width:100%;margin-top:8px;border-radius:6px;cursor:grab;touch-action:none"></canvas></div><div class="card" id="k3p"></div></div>`;
-    const cv = $('#c3', pane); const go = () => draw3D(cv, scene(spec), v);
+    const cv = $('#c3', pane); const key = (r) => `${r.ri}|${r.ci}`;
+    const tgt = (view3d.open ||= {}); const cur = (view3d.cur ||= {}); let raf = 0;
+    const go = () => draw3D(cv, scene(spec, cur), v);
+    const animate = () => { cancelAnimationFrame(raf); const step = () => { let more = false; for (const k2 of new Set([...Object.keys(tgt), ...Object.keys(cur)])) { const a = cur[k2] || 0; const b = tgt[k2] || 0; if (Math.abs(a - b) > 0.01) { cur[k2] = a + (b - a) * 0.22; more = true; } else if (a !== b) cur[k2] = b; } go(); if (more && cv.isConnected) raf = requestAnimationFrame(step); }; step(); };
+    const setOpen = (r, val) => { tgt[key(r)] = val; animate(); };
     const cabOf = (r) => r && spec.runs[r.ri]?.cabinets[r.ci];
     const FIELDS = [['label', 'Label', 'text'], ['w', 'Width cm'], ['h', 'Height cm'], ['d', 'Depth cm'], ['doors', 'Doors'], ['drawers', 'Drawers'], ['glazed', 'Glazed doors'], ['shelves', 'Shelves']];
     const panel = () => {
@@ -200,10 +204,12 @@ async function editor(el, id, tab) {
       box.innerHTML = `<h3 style="margin-top:0">${esc(t.label)}${c.label ? ` — ${esc(c.label)}` : ''}</h3><div class="muted" style="margin-bottom:8px">${esc(run.name || 'Run ' + (v.selected.ri + 1))} · position ${v.selected.ci + 1} of ${run.cabinets.length}</div>
         <div class="form" style="grid-template-columns:1fr 1fr"><label class="field full"><span>Type</span><select data-f="type">${Object.entries(CAB_TYPES).map(([k2, x]) => `<option value="${k2}" ${c.type === k2 ? 'selected' : ''}>${x.label}</option>`).join('')}</select></label>
         ${FIELDS.map(([k2, l, ty]) => `<label class="field"><span>${l}</span><input data-f="${k2}" ${ty === 'text' ? '' : 'type="number" step="any"'} value="${esc(c[k2] ?? '')}"></label>`).join('')}</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="btn sm" data-mv="-1">◀ Move left</button><button class="btn sm" data-mv="1">Move right ▶</button><button class="btn sm" data-dup>Copy</button><button class="btn sm danger" data-del>Delete</button><button class="btn sm" data-none>Deselect</button></div>`;
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="btn sm" data-mv="-1">◀ Move left</button><button class="btn sm" data-mv="1">Move right ▶</button><button class="btn sm" data-dup>Copy</button><button class="btn sm danger" data-del>Delete</button><button class="btn sm" data-none>Deselect</button></div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line,#dde3ea)"><button class="btn sm primary" data-toggle>${(tgt[`${v.selected.ri}|${v.selected.ci}`] || 0) > 0.5 ? 'Close doors / drawers' : 'Open doors / drawers'}</button></div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line,#dde3ea)"><b>Make it fewer parts</b><div class="muted" style="font-size:12px;margin:2px 0 6px">Joining two neighbours into one cabinet saves a carcass: fewer panels, quicker to make, cheaper.</div>${[['next', 1], ['prev', -1]].map(([nm, dd]) => { const o = run.cabinets[v.selected.ci + dd]; const m = o && (dd > 0 ? mergeCabinets(c, o) : mergeCabinets(o, c)); const sv = m?.cab && (dd > 0 ? mergeSaving(c, o, spec.style) : mergeSaving(o, c, spec.style)); return `<div style="margin:4px 0"><button class="btn sm" data-join="${dd}" ${m?.cab ? '' : 'disabled'} title="${esc(m?.error || '')}">${dd > 0 ? 'Join with next ▶' : '◀ Join with previous'}</button> <span class="muted" style="font-size:12px">${!o ? 'nothing there' : m.cab ? `${fq(m.cab.w)} cm wide · saves ${sv.panels} panels (${fq(sv.m2)} m²)${sv.legs ? ` and ${sv.legs} legs/hangers` : ''}` : esc(m.error)}</span></div>`; }).join('')}<button class="btn sm" data-split ${(+c.w || 0) >= 60 ? '' : 'disabled'}>Split into two</button></div>`;
     };
     const changed = () => { touch(); go(); };
-    const refresh3 = () => { v.selected = view3d.sel; panel(); go(); };
+    const refresh3 = () => { for (const k2 of Object.keys(tgt)) delete tgt[k2]; for (const k2 of Object.keys(cur)) delete cur[k2]; v.selected = view3d.sel; panel(); go(); };
     $('#k3p', pane).addEventListener('input', (e) => { const f = e.target.dataset.f; const c = cabOf(v.selected); if (!c || !f || f === 'type') return; c[f] = f === 'label' ? e.target.value : num(e.target.value); changed(); });
     $('#k3p', pane).addEventListener('change', (e) => { const c = cabOf(v.selected); if (c && e.target.dataset.f === 'type') { Object.assign(c, { ...cabinetOf(e.target.value), label: c.label }); touch(); panel(); go(); } });
     $('#k3p', pane).addEventListener('click', (e) => {
@@ -212,6 +218,9 @@ async function editor(el, id, tab) {
       if (!c) return; const arr = spec.runs[r.ri].cabinets;
       if (el2.matches('[data-mv]')) { const j = r.ci + Number(el2.dataset.mv); if (j >= 0 && j < arr.length) { [arr[r.ci], arr[j]] = [arr[j], arr[r.ci]]; view3d.sel = { ri: r.ri, ci: j }; touch(); refresh3(); } }
       if (el2.matches('[data-dup]')) { arr.splice(r.ci + 1, 0, { ...c }); view3d.sel = { ri: r.ri, ci: r.ci + 1 }; touch(); refresh3(); }
+      if (el2.matches('[data-toggle]')) { setOpen(r, (tgt[key(r)] || 0) > 0.5 ? 0 : 1); panel(); return; }
+      if (el2.matches('[data-join]')) { const dd = Number(el2.dataset.join); const o = arr[r.ci + dd]; const m = dd > 0 ? mergeCabinets(c, o) : mergeCabinets(o, c); if (m.error) return toast(m.error, 'err'); const i0 = Math.min(r.ci, r.ci + dd); arr.splice(i0, 2, m.cab); view3d.sel = { ri: r.ri, ci: i0 }; touch(); toast('Joined into one cabinet'); return refresh3(); }
+      if (el2.matches('[data-split]')) { const sp = splitCabinet(c); if (sp.error) return toast(sp.error, 'err'); arr.splice(r.ci, 1, ...sp.cabs); touch(); toast('Split into two cabinets'); return refresh3(); }
       if (el2.matches('[data-del]')) { arr.splice(r.ci, 1); view3d.sel = null; touch(); refresh3(); }
       if (el2.matches('[data-none]')) { view3d.sel = null; refresh3(); }
     });
@@ -226,11 +235,12 @@ async function editor(el, id, tab) {
       const [x, y] = at(e); const h = pick3D(cv, x, y); const old = v.hover; v.hover = h; cv.style.cursor = h ? 'pointer' : 'grab';
       if ((h?.ri) !== (old?.ri) || (h?.ci) !== (old?.ci)) go();
     };
-    cv.onpointerup = (e) => { pts.delete(e.pointerId); if (drag && !drag.moved) { const [x, y] = at(e); view3d.sel = pick3D(cv, x, y); v.selected = view3d.sel; panel(); go(); } drag = null; pinch = 0; };
+    cv.onpointerup = (e) => { pts.delete(e.pointerId); if (drag && !drag.moved) { const [x, y] = at(e); const hit = pick3D(cv, x, y); view3d.sel = hit && { ri: hit.ri, ci: hit.ci }; v.selected = view3d.sel; if (hit && ['front', 'glass', 'infill', 'handle', 'tray'].includes(hit.kind)) setOpen(hit, (tgt[key(hit)] || 0) > 0.5 ? 0 : 1); panel(); go(); } drag = null; pinch = 0; };
     cv.onpointerleave = () => { if (v.hover) { v.hover = null; go(); } };
     cv.onwheel = (e) => { e.preventDefault(); v.zoom = Math.max(0.4, Math.min(4, v.zoom * (e.deltaY < 0 ? 1.1 : 0.9))); go(); };
+    $$('[data-oc]', pane).forEach((b) => (b.onclick = () => { spec.runs.forEach((run, ri) => run.cabinets.forEach((_, ci) => (tgt[`${ri}|${ci}`] = Number(b.dataset.oc)))); animate(); panel(); }));
     $$('[data-p]', pane).forEach((b) => (b.onclick = () => { Object.assign(v, { front: { yaw: 0, pitch: 0.08 }, corner: { yaw: -0.55, pitch: 0.45 }, top: { yaw: 0, pitch: 1.5 } }[b.dataset.p]); go(); }));
-    panel(); go();
+    panel(); animate();
   }
 
   // ---------------------------------------------------------------- cut list

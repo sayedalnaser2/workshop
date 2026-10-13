@@ -189,3 +189,30 @@ export function priceKitchen(model, opts) {
   const markup = gen('markup_pct'); const byCost = cost * (1 + markup / 100);
   return { lines, cost, rates, byRates, byCost, suggested: byRates > 0 ? byRates : byCost, markup };
 }
+
+const classOf = (c) => { const t = CAB_TYPES[c.type] || CAB_TYPES.base; return t.gap ? 'gap' : t.wall ? 'wall' : t.tall ? 'tall' : 'base'; };
+/** Two neighbouring cabinets built as one wider cabinet: one carcass instead of two (fewer panels, quicker to make, cheaper). Returns { cab } or { error }. */
+export function mergeCabinets(a, b) {
+  if (!a || !b) return { error: 'There is no cabinet next to this one.' };
+  if (classOf(a) !== classOf(b) || classOf(a) === 'gap') return { error: 'Only two cabinets of the same kind (both base, both wall or both tall) can be joined.' };
+  const da = Math.round(+a.doors || 0); const db = Math.round(+b.doors || 0); const ra = Math.round(+a.drawers || 0); const rb = Math.round(+b.drawers || 0);
+  if ((da + db > 0) && (ra + rb > 0)) return { error: 'One has doors and the other drawers — change one first.' };
+  const special = [a, b].find((x) => (CAB_TYPES[x.type] || {}).sink || (CAB_TYPES[x.type] || {}).hob || (CAB_TYPES[x.type] || {}).corner);
+  const cab = { ...a, type: (special || a).type, label: a.label || b.label || '', w: (+a.w || 0) + (+b.w || 0), h: Math.max(+a.h || 0, +b.h || 0), d: Math.max(+a.d || 0, +b.d || 0), doors: da + db, drawers: Math.max(ra, rb), shelves: Math.max(+a.shelves || 0, +b.shelves || 0), glazed: (+a.glazed || 0) + (+b.glazed || 0) };
+  return { cab };
+}
+/** The reverse: one cabinet cut into two equal halves. */
+export function splitCabinet(c) {
+  if (!c || classOf(c) === 'gap') return { error: 'This cannot be split.' };
+  if ((+c.w || 0) < 60) return { error: 'It is too narrow to split (each half would be under 30 cm).' };
+  const half = (n, first) => (first ? Math.ceil(n / 2) : Math.floor(n / 2)); const type = (CAB_TYPES[c.type] || {}).sink || (CAB_TYPES[c.type] || {}).hob || (CAB_TYPES[c.type] || {}).corner ? 'base' : c.type;
+  const mk = (first) => ({ ...c, type: first ? c.type : type, label: first ? c.label : '', w: (+c.w || 0) / 2, doors: half(Math.round(+c.doors || 0), first), glazed: half(Math.round(+c.glazed || 0), first) });
+  return { cabs: [mk(true), mk(false)] };
+}
+/** What joining saves: panels and board area of the carcass compared with two separate cabinets. */
+export function mergeSaving(a, b, style = DEFAULT_STYLE) {
+  const r = mergeCabinets(a, b); if (r.error) return null;
+  const sum = (cabs) => { let n = 0; let m2 = 0; for (const c of cabs) for (const p of cabinetParts(c, style).panels) if (p.mat !== 'door') { n += p.qty; m2 += (p.w * p.h * p.qty) / 10000; } return { n, m2 }; };
+  const x = sum([a, b]); const y = sum([r.cab]); const hw = (c) => { const h = cabinetParts(c, style).hw; return h.legs + h.hangers; };
+  return { panels: x.n - y.n, m2: Math.round((x.m2 - y.m2) * 100) / 100, legs: hw(a) + hw(b) - hw(r.cab) };
+}

@@ -152,3 +152,16 @@ test('aluminium kitchen: doors become profile frames with infill, bars are cut, 
   assert.equal(p.lines.find((l) => /corner/.test(l.label)).total, 2 * alu.profile.corners);
   assert.ok(scene(spec).some((b) => b.kind === 'infill')); assert.equal(placeRuns(spec)[1].z, 160); // the island stands in front of the wall run
 });
+
+test('kitchen: joining two cabinets makes one carcass; splitting reverses it; open doors change the 3D scene', async () => {
+  const { mergeCabinets, splitCabinet, mergeSaving } = await import('../public/js/kitchen.js');
+  const { scene } = await import('../public/js/kitchen-3d.js');
+  const a = { type: 'base', w: 60, h: 72, d: 56, doors: 1, shelves: 1 }; const b = { type: 'sink', w: 90, h: 72, d: 56, doors: 2 };
+  const m = mergeCabinets(a, b).cab; assert.equal(m.w, 150); assert.equal(m.doors, 3); assert.equal(m.type, 'sink');
+  assert.ok(mergeSaving(a, b).panels > 0); assert.ok(mergeSaving(a, b).m2 > 0);
+  assert.ok(mergeCabinets(a, { type: 'wall', w: 60, h: 70, d: 32 }).error); assert.ok(mergeCabinets(a, { type: 'drawers', w: 60, h: 72, d: 56, drawers: 3 }).error);
+  const [h1, h2] = splitCabinet(b).cabs; assert.equal(h1.w + h2.w, 90); assert.equal(h1.doors + h2.doors, 2);
+  const spec = { style: {}, counter: {}, runs: [{ cabinets: [a, { type: 'drawers', w: 60, h: 72, d: 56, drawers: 3 }] }] };
+  const closed = scene(spec); const open = scene(spec, { '0|0': 1, '0|1': 1 });
+  assert.ok(open.length > closed.length); assert.ok(open.some((x) => x.kind === 'tray'));
+});
