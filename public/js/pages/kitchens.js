@@ -24,7 +24,7 @@ const namesOf = (list, kind) => [...new Set(list.filter((o) => o.kind === kind).
 
 export async function render(el, [id, tab]) {
   if (id === 'options' && !isWorker()) return optionsPage(el);
-  if (id) return editor(el, Number(id), isWorker() ? 'sheet' : tab || 'design');
+  if (id) return editor(el, Number(id), isWorker() ? (tab === 'view3d' ? 'view3d' : 'sheet') : tab || 'design');
   return list(el);
 }
 
@@ -43,10 +43,11 @@ async function list(el) {
       ...(isWorker() ? [] : [{ key: 'price', label: 'Price (BD)', num: true, render: (r) => (r.price ? money(r.price, 2) : '<span class="muted">—</span>') }]),
       { key: 'status', label: 'Status', render: (r) => badge(r.status || 'draft', r.status === 'approved' ? 'ok' : '') }],
     onRow: (r) => (location.hash = `#/kitchens/${r.id}`),
-    actions: isWorker() ? undefined : () => '<button class="btn sm" data-act="dup">Duplicate</button> <button class="btn sm danger" data-act="del">Delete</button>',
+    actions: () => `<button class="btn sm primary" data-act="3d">🧊 3D</button>${isWorker() ? '' : ' <button class="btn sm" data-act="dup">Duplicate</button> <button class="btn sm danger" data-act="del">Delete</button>'}`,
   });
   t.addEventListener('act', guard(async (e) => {
     const { act, row } = e.detail;
+    if (act === '3d') { location.hash = `#/kitchens/${row.id}/view3d`; return; }
     if (act === 'del' && await confirmBox(`Delete kitchen “${row.name}”?`)) { await api.del(`t/kitchens/${row.id}`); render(el, []); }
     if (act === 'dup') { const { id, created_at, ...c } = row; delete c.m; delete c.base; delete c.wall; delete c.tall; delete c.counter; delete c.price; delete c.cost; const n = await api.post('t/kitchens', { ...c, name: `${row.name} (copy)` }); location.hash = `#/kitchens/${n.id}`; }
   }));
@@ -91,7 +92,7 @@ async function editor(el, id, tab) {
   const opts = optionsMap(optList);
   k.spec ||= {}; k.spec.style = { ...DEFAULT_STYLE, ...(k.spec.style || {}) }; k.spec.counter = { ...DEFAULT_COUNTER, ...(k.spec.counter || {}) }; k.spec.runs ||= [];
   let model = kitchenModel(k.spec); let dirty = false; let view = sessionStorage.getItem('kv') || 'elev';
-  const spec = k.spec; const TABS = worker ? [['sheet', 'Production sheet']] : [['design', 'Design'], ['view3d', '3D view'], ['cuts', 'Cut list & boards'], ['counter', 'Countertop'], ['price', 'Price'], ['proposal', 'Customer page'], ['sheet', 'Production sheet']];
+  const spec = k.spec; const TABS = worker ? [['sheet', 'Production sheet'], ['view3d', '3D view']] : [['design', 'Design'], ['view3d', '3D view'], ['cuts', 'Cut list & boards'], ['counter', 'Countertop'], ['price', 'Price'], ['proposal', 'Customer page'], ['sheet', 'Production sheet']];
   el.innerHTML = `<div id="kit"></div>`; const root = $('#kit', el);
   const touch = () => { dirty = true; model = kitchenModel(spec); const b = $('#save', root); if (b) b.textContent = 'Save changes ●'; };
   const head = () => `<div class="ph"><a class="btn" href="#/kitchens">← Kitchens</a><h1>${esc(k.name)}</h1>${badge(k.status || 'draft', k.status === 'approved' ? 'ok' : '')}<span class="sub">${[k.client, k.order_inv].filter(Boolean).map(esc).join(' · ')}</span><span class="grow"></span>${worker ? '' : '<button class="btn primary" id="save">Save</button>'}</div>
@@ -106,7 +107,7 @@ async function editor(el, id, tab) {
   // ---------------------------------------------------------------- design
   function design(pane) {
     const sel = (kind, key, label, blank) => `<label class="field"><span>${label}</span><select data-style="${key}">${blank ? '<option value="">same as carcass</option>' : '<option value="">— choose —</option>'}${namesOf(optList, kind).map((n) => `<option ${spec.style[key] === n ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>`;
-    pane.innerHTML = `<div class="kgrid"><div class="card"><div style="display:flex;gap:8px;align-items:center"><h3 style="margin:0">Drawing</h3><span class="grow"></span><div class="seg"><button data-v="elev" class="${view === 'elev' ? 'on' : ''}">Front</button><button data-v="plan" class="${view === 'plan' ? 'on' : ''}">Plan</button></div></div><div id="draw" style="margin-top:8px;overflow-x:auto"></div></div><div id="sum" class="card"></div></div>
+    pane.innerHTML = `<div class="kgrid"><div class="card"><div style="display:flex;gap:8px;align-items:center"><h3 style="margin:0">Drawing</h3><span class="grow"></span><div class="seg"><button data-v="elev" class="${view === 'elev' ? 'on' : ''}">Front</button><button data-v="plan" class="${view === 'plan' ? 'on' : ''}">Plan</button></div><button class="btn sm primary" id="open3d">🧊 Open 3D</button></div><div id="draw" style="margin-top:8px;overflow-x:auto"></div></div><div id="sum" class="card"></div></div>
       <div style="margin-top:14px">
         <div class="card"><div class="form" style="grid-template-columns:repeat(3,1fr)">
           <label class="field"><span>Kitchen name</span><input id="kname" value="${esc(k.name)}"></label><label class="field"><span>Client</span><input id="kclient" value="${esc(k.client || '')}"></label>
@@ -126,6 +127,7 @@ async function editor(el, id, tab) {
       const m = model.meters; const ct = model.tops; const p = worker ? null : priceKitchen(model, opts);
       $('#sum', pane).innerHTML = `<div class="k muted" style="font-size:12px;text-transform:uppercase">Summary</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-top:6px"><span>Base cabinets</span><b>${fq(m.base)} m <span class="muted">(${m.base_n})</span></b><span>Wall cabinets</span><b>${fq(m.wall)} m <span class="muted">(${m.wall_n})</span></b><span>Tall units</span><b>${fq(m.tall)} m <span class="muted">(${m.tall_n})</span></b><span>Countertop</span><b>${fq(ct.run_m)} m · ${fq(Math.round(ct.area_m2 * 100) / 100)} m²</b><span>Boards</span><b>${model.sheets.carcass.sheets.length + model.sheets.door.sheets.length + model.sheets.back.sheets.length} sheets</b>${p ? `<span>Cost estimate</span><b>${p.cost ? 'BD ' + money(p.cost, 2) : '<span class="muted">enter prices</span>'}</b><span>Suggested price</span><b style="font-size:16px">${p.suggested ? 'BD ' + money(p.suggested, 2) : '—'}</b>` : ''}</div>`;
     };
+    $('#open3d', pane).onclick = () => { tab = 'view3d'; draw(); };
     $$('[data-v]', pane).forEach((b) => (b.onclick = () => { view = b.dataset.v; sessionStorage.setItem('kv', view); $$('[data-v]', pane).forEach((x) => x.classList.toggle('on', x === b)); redrawSide(); }));
     const bind = (id2, f) => { const e = $(id2, pane); e.oninput = () => { f(e.value); dirty = true; $('#save', root).textContent = 'Save changes ●'; $('h1', root).textContent = k.name; }; };
     bind('#kname', (v) => (k.name = v)); bind('#kclient', (v) => (k.client = v)); bind('#korder', (v) => (k.order_inv = v)); bind('#knotes', (v) => (k.notes = v));
