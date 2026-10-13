@@ -1,3 +1,4 @@
+import { scene, draw3D, placeRuns } from '../kitchen-3d.js';
 import { S } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, toast, guard, confirmBox, modal, formHTML, readForm, dataTable, badge, datalist } from '../ui.js';
 import { CAB_TYPES, DEFAULT_STYLE, DEFAULT_COUNTER, kitchenModel, priceKitchen } from '../kitchen.js';
@@ -6,7 +7,7 @@ import { docHeader, docFooter, L, AR, wordsBlock, termsBlock } from '../doc.js';
 import { openPoDialog } from '../po-dialog.js';
 
 const isWorker = () => S.me?.role === 'worker';
-const KINDS = [['panel', 'Boards / sheets', 'sheet'], ['handle', 'Handles', ''], ['hinge', 'Hinges', 'pcs'], ['drawer', 'Drawer systems', 'set'], ['marble', 'Countertop stone', 'm²'], ['glass', 'Door glass', 'm²'], ['profile_colour', 'Profile colours', ''], ['preset', 'Cabinet presets', ''], ['general', 'Rates & other prices', '']];
+const KINDS = [['panel', 'Boards / sheets', 'sheet'], ['handle', 'Handles', ''], ['hinge', 'Hinges', 'pcs'], ['drawer', 'Drawer systems', 'set'], ['marble', 'Countertop stone', 'm²'], ['glass', 'Door glass', 'm²'], ['profile', 'Door frame profiles (aluminium)', 'bar'], ['profile_colour', 'Profile colours', ''], ['preset', 'Cabinet presets', ''], ['general', 'Rates & other prices', '']];
 const GEN_NOTE = {};
 
 /** Options from the database → { kind: { name: row } }, marble also keyed "name|thickness"; general → numbers. */
@@ -90,7 +91,7 @@ async function editor(el, id, tab) {
   const opts = optionsMap(optList);
   k.spec ||= {}; k.spec.style = { ...DEFAULT_STYLE, ...(k.spec.style || {}) }; k.spec.counter = { ...DEFAULT_COUNTER, ...(k.spec.counter || {}) }; k.spec.runs ||= [];
   let model = kitchenModel(k.spec); let dirty = false; let view = sessionStorage.getItem('kv') || 'elev';
-  const spec = k.spec; const TABS = worker ? [['sheet', 'Production sheet']] : [['design', 'Design'], ['cuts', 'Cut list & boards'], ['counter', 'Countertop'], ['price', 'Price'], ['proposal', 'Customer page'], ['sheet', 'Production sheet']];
+  const spec = k.spec; const TABS = worker ? [['sheet', 'Production sheet']] : [['design', 'Design'], ['view3d', '3D view'], ['cuts', 'Cut list & boards'], ['counter', 'Countertop'], ['price', 'Price'], ['proposal', 'Customer page'], ['sheet', 'Production sheet']];
   el.innerHTML = `<div id="kit"></div>`; const root = $('#kit', el);
   const touch = () => { dirty = true; model = kitchenModel(spec); const b = $('#save', root); if (b) b.textContent = 'Save changes ●'; };
   const head = () => `<div class="ph"><a class="btn" href="#/kitchens">← Kitchens</a><h1>${esc(k.name)}</h1>${badge(k.status || 'draft', k.status === 'approved' ? 'ok' : '')}<span class="sub">${[k.client, k.order_inv].filter(Boolean).map(esc).join(' · ')}</span><span class="grow"></span>${worker ? '' : '<button class="btn primary" id="save">Save</button>'}</div>
@@ -99,7 +100,7 @@ async function editor(el, id, tab) {
     root.innerHTML = head(); const pane = $('#pane', root);
     $$('[data-tab]', root).forEach((b) => (b.onclick = () => { tab = b.dataset.tab; draw(); }));
     $('#save', root)?.addEventListener('click', guard(async () => { await api.put(`t/kitchens/${id}`, { name: k.name, client: k.client, order_inv: k.order_inv, quote_no: k.quote_no, status: k.status, notes: k.notes, spec }); dirty = false; toast('Kitchen saved'); $('#save', root).textContent = 'Save'; }));
-    ({ design, cuts, counter: counterTab, price, proposal, sheet }[tab])(pane);
+    ({ design, view3d, cuts, counter: counterTab, price, proposal, sheet }[tab])(pane);
   };
 
   // ---------------------------------------------------------------- design
@@ -110,7 +111,9 @@ async function editor(el, id, tab) {
         <div class="card"><div class="form" style="grid-template-columns:repeat(3,1fr)">
           <label class="field"><span>Kitchen name</span><input id="kname" value="${esc(k.name)}"></label><label class="field"><span>Client</span><input id="kclient" value="${esc(k.client || '')}"></label>
           <label class="field"><span>Order / invoice</span><input id="korder" value="${esc(k.order_inv || '')}"></label>
-          ${sel('panel', 'carcass', 'Carcass board')}${sel('panel', 'door', 'Doors & drawer fronts', true)}${sel('panel', 'back', 'Back panels', true)}
+          ${sel('panel', 'carcass', 'Carcass board')}${sel('panel', 'door', spec.style.kind === 'aluminium' ? 'Infill panel inside the frames' : 'Doors & drawer fronts', true)}${sel('panel', 'back', 'Back panels', true)}
+          <label class="field"><span>Kitchen type</span><select data-style="kind"><option value="wood" ${spec.style.kind !== 'aluminium' ? 'selected' : ''}>Wood / board kitchen</option><option value="aluminium" ${spec.style.kind === 'aluminium' ? 'selected' : ''}>Aluminium kitchen (framed doors)</option></select></label>
+          ${spec.style.kind === 'aluminium' ? `${sel('profile', 'profile', 'Door frame profile')}<label class="field"><span>Frame width cm</span><input data-style="frame_w" type="number" step="any" value="${spec.style.frame_w ?? 4.5}"></label><label class="field"><span>Profile bar length cm</span><input data-style="bar_len" type="number" step="any" value="${spec.style.bar_len ?? 600}"></label>` : ''}
           ${sel('handle', 'handle', 'Handle')}${sel('hinge', 'hinge', 'Hinges')}${sel('drawer', 'drawer', 'Drawers')}
           <label class="field"><span>Door colour (drawing &amp; sheets)</span><select data-style="door_colour"><option value="">— not set —</option>${(S.settings.colours || []).map((c) => `<option ${spec.style.door_colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>${sel('glass', 'glass', 'Glazed doors')}${sel('profile_colour', 'profile_in', 'Profile colour (inside)')}${sel('profile_colour', 'profile_out', 'Profile colour (outside)')}
           <label class="field"><span>Status</span><select id="kstatus">${['draft', 'quoted', 'approved', 'in production', 'installed'].map((s) => `<option ${k.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label></div>
@@ -127,13 +130,13 @@ async function editor(el, id, tab) {
     const bind = (id2, f) => { const e = $(id2, pane); e.oninput = () => { f(e.value); dirty = true; $('#save', root).textContent = 'Save changes ●'; $('h1', root).textContent = k.name; }; };
     bind('#kname', (v) => (k.name = v)); bind('#kclient', (v) => (k.client = v)); bind('#korder', (v) => (k.order_inv = v)); bind('#knotes', (v) => (k.notes = v));
     $('#kstatus', pane).onchange = (e) => { k.status = e.target.value; touch(); };
-    $$('[data-style]', pane).forEach((e) => (e.onchange = () => { spec.style[e.dataset.style] = e.tagName === 'SELECT' ? e.value : num(e.value); touch(); redrawSide(); }));
+    $$('[data-style]', pane).forEach((e) => (e.onchange = () => { spec.style[e.dataset.style] = e.tagName === 'SELECT' ? e.value : num(e.value); touch(); if (e.dataset.style === 'kind') { draw(); return; } redrawSide(); }));
     const presetsList = () => optList.filter((o) => o.kind === 'preset');
     const typeOpts = (sel) => Object.entries(CAB_TYPES).map(([t, v]) => `<option value="${t}" ${sel === t ? 'selected' : ''}>${v.label}</option>`).join('');
     const drawRuns = () => {
       $('#runs', pane).innerHTML = spec.runs.map((run, ri) => {
         const tot = run.cabinets.reduce((a, c) => a + (+c.w || 0), 0);
-        return `<div class="card" style="margin-top:12px" data-run="${ri}"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input data-rn style="max-width:220px;font-weight:700" value="${esc(run.name || '')}" placeholder="Run name"><span class="muted">${tot} cm</span><label style="display:flex;gap:4px;align-items:center;font-size:12px" title="A free-standing run in the middle of the room"><input type="checkbox" data-island ${run.island ? 'checked' : ''} style="width:auto"> Island</label>${run.island ? `<label style="display:flex;gap:4px;align-items:center;font-size:12px">seating overhang <input data-over type="number" step="any" value="${run.overhang ?? 30}" style="width:64px"> cm</label>` : ''}<span class="grow"></span><select data-preset style="width:150px" title="Add a saved cabinet"><option value="">+ From preset…</option>${presetsList().map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>${['base', 'drawers', 'sink', 'hob', 'corner', 'wall', 'tall', 'gap'].map((t) => `<button class="btn sm" data-add="${t}">+ ${CAB_TYPES[t].label.split(' ')[0]}</button>`).join('')}<button class="btn sm danger" data-rmrun title="Delete this run">Delete run</button></div>
+        return `<div class="card" style="margin-top:12px" data-run="${ri}"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input data-rn style="max-width:220px;font-weight:700" value="${esc(run.name || '')}" placeholder="Run name"><span class="muted">${tot} cm</span><label style="display:flex;gap:4px;align-items:center;font-size:12px" title="A free-standing run in the middle of the room"><input type="checkbox" data-island ${run.island ? 'checked' : ''} style="width:auto"> Island</label><span class="muted" style="font-size:12px" title="Where this run stands in the 3D view (cm from the back-left corner). Leave blank for automatic.">3D: x <input data-px type="number" placeholder="${placeRuns(spec)[ri].x}" value="${run.place?.x ?? ''}" style="width:56px"> z <input data-pz type="number" placeholder="${placeRuns(spec)[ri].z}" value="${run.place?.z ?? ''}" style="width:56px"> <select data-pr style="width:70px"><option value="">auto</option>${[0, 90, 180, 270].map((r) => `<option value="${r}" ${run.place && +run.place.rot === r ? 'selected' : ''}>${r}°</option>`).join('')}</select></span>${run.island ? `<label style="display:flex;gap:4px;align-items:center;font-size:12px">seating overhang <input data-over type="number" step="any" value="${run.overhang ?? 30}" style="width:64px"> cm</label>` : ''}<span class="grow"></span><select data-preset style="width:150px" title="Add a saved cabinet"><option value="">+ From preset…</option>${presetsList().map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>${['base', 'drawers', 'sink', 'hob', 'corner', 'wall', 'tall', 'gap'].map((t) => `<button class="btn sm" data-add="${t}">+ ${CAB_TYPES[t].label.split(' ')[0]}</button>`).join('')}<button class="btn sm danger" data-rmrun title="Delete this run">Delete run</button></div>
           <div class="items-wrap"><table class="items" style="min-width:720px;margin-top:6px"><thead><tr><th></th><th>Type</th><th>Label</th><th>W</th><th>H</th><th>D</th><th>Doors</th><th>Drawers</th><th>Shelves</th><th>Glazed</th><th></th></tr></thead><tbody>${run.cabinets.map((c, ci) => `<tr data-c="${ci}"><td class="n">${ci + 1}</td><td><select data-f="type" style="width:130px">${typeOpts(c.type)}</select></td><td><input data-f="label" value="${esc(c.label || '')}" style="width:80px"></td>${['w', 'h', 'd', 'doors', 'drawers', 'shelves', 'glazed'].map((f) => `<td><input data-f="${f}" type="number" step="any" class="w-q" value="${c[f] ?? 0}"></td>`).join('')}<td style="white-space:nowrap"><button class="btn sm" data-savepreset title="Save this cabinet as a preset">★</button><button class="btn sm" data-mv="-1" title="Move left">←</button><button class="btn sm" data-mv="1" title="Move right">→</button><button class="btn sm" data-dup title="Duplicate">⧉</button><button class="btn sm danger" data-rm>×</button></td></tr>`).join('') || '<tr><td colspan="11" class="muted" style="padding:10px">No cabinets yet — use the + buttons above.</td></tr>'}</tbody></table></div></div>`;
       }).join('');
       redrawSide();
@@ -143,12 +146,14 @@ async function editor(el, id, tab) {
       const tr = e.target.closest('tr[data-c]'); const card = e.target.closest('[data-run]'); if (!card) return; const run = spec.runs[Number(card.dataset.run)];
       if (e.target.matches('[data-rn]')) { run.name = e.target.value; touch(); redrawSide(); return; }
       if (e.target.matches('[data-over]')) { run.overhang = num(e.target.value); touch(); redrawSide(); return; }
+      if (e.target.matches('[data-px],[data-pz]')) { const c = e.target.closest('[data-run]'); const px = $('[data-px]', c).value; const pz = $('[data-pz]', c).value; if (px === '' && pz === '') delete run.place; else run.place = { x: num(px), z: num(pz), rot: run.place?.rot || placeRuns(spec)[Number(c.dataset.run)].rot }; touch(); return; }
       if (!tr || !e.target.dataset.f) return; const f = e.target.dataset.f; const c = run.cabinets[Number(tr.dataset.c)];
       c[f] = ['label'].includes(f) ? e.target.value : e.target.tagName === 'SELECT' ? e.target.value : num(e.target.value);
       touch(); redrawSide();
     });
     runsEl.addEventListener('change', (e) => {
       const card = e.target.closest('[data-run]'); const run = card && spec.runs[Number(card.dataset.run)];
+      if (e.target.matches('[data-pr]')) { const auto = placeRuns({ ...spec, runs: spec.runs.map((r, i) => (i === Number(card.dataset.run) ? { ...r, place: null } : r)) })[Number(card.dataset.run)]; run.place = { x: run.place?.x ?? auto.x, z: run.place?.z ?? auto.z, rot: e.target.value === '' ? auto.rot : Number(e.target.value) }; touch(); drawRuns(); return; }
       if (e.target.matches('[data-island]')) { run.island = e.target.checked; if (run.island && run.overhang == null) run.overhang = 30; touch(); drawRuns(); return; }
       if (e.target.matches('[data-preset]')) { const o = presetsList().find((x) => x.id === Number(e.target.value)); if (o) { run.cabinets.push({ ...cabinetOf(o.meta?.type || 'base'), ...o.meta }); touch(); drawRuns(); } return; }
     });
@@ -178,14 +183,31 @@ async function editor(el, id, tab) {
     } }] });
   }
 
+  // ---------------------------------------------------------------- 3D view
+  function view3d(pane) {
+    const v = view3d.v ||= { yaw: -0.55, pitch: 0.45, zoom: 1 };
+    pane.innerHTML = `<div class="card"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">3D view</h3><span class="muted">Drag to turn · scroll to zoom · each run's position can be set under Design → run header “3D”</span><span class="grow"></span><button class="btn sm" data-p="front">Front</button><button class="btn sm" data-p="corner">Corner</button><button class="btn sm" data-p="top">From above</button></div>
+      <canvas id="c3" width="1100" height="640" style="width:100%;max-width:1100px;margin-top:8px;border-radius:6px;cursor:grab;touch-action:none"></canvas></div>`;
+    const cv = $('#c3', pane); const go = () => draw3D(cv, scene(spec), v); go();
+    let drag = null;
+    cv.onpointerdown = (e) => { drag = { x: e.clientX, y: e.clientY, yaw: v.yaw, pitch: v.pitch }; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; };
+    cv.onpointermove = (e) => { if (!drag) return; v.yaw = drag.yaw + (e.clientX - drag.x) * 0.008; v.pitch = Math.max(0.02, Math.min(1.5, drag.pitch + (e.clientY - drag.y) * 0.006)); go(); };
+    cv.onpointerup = () => { drag = null; cv.style.cursor = 'grab'; };
+    cv.onwheel = (e) => { e.preventDefault(); v.zoom = Math.max(0.4, Math.min(4, v.zoom * (e.deltaY < 0 ? 1.1 : 0.9))); go(); };
+    $$('[data-p]', pane).forEach((b) => (b.onclick = () => { Object.assign(v, { front: { yaw: 0, pitch: 0.08 }, corner: { yaw: -0.55, pitch: 0.45 }, top: { yaw: 0, pitch: 1.5 } }[b.dataset.p]); go(); }));
+  }
+
   // ---------------------------------------------------------------- cut list
   function cuts(pane) {
-    const sty = spec.style; const mats = [['carcass', `Carcass — ${sty.carcass || 'board not chosen'}`], ['door', `Doors & fronts — ${sty.door || sty.carcass || 'board not chosen'}`], ['back', `Backs — ${sty.back || sty.carcass || 'board not chosen'}`]];
+    const sty = spec.style; const mats = [['carcass', `Carcass — ${sty.carcass || 'board not chosen'}`], ['door', sty.kind === 'aluminium' ? `Infill panels in the aluminium frames — ${sty.door || sty.carcass || 'board not chosen'}` : `Doors & fronts — ${sty.door || sty.carcass || 'board not chosen'}`], ['back', `Backs — ${sty.back || sty.carcass || 'board not chosen'}`]];
     const hw = model.hw; const t = (r) => `<tr><td>${esc(r.label)}</td><td class="num">${fq(r.w)} × ${fq(r.h)}</td><td class="num">${r.qty}</td><td class="num">${r.edge ? fq(r.edge) : ''}</td></tr>`;
     const group = (arr) => { const m = new Map(); for (const p of arr) { const key = `${p.label.replace(/^.* · /, '')}|${p.w}|${p.h}|${p.edge}`; const e = m.get(key) || { ...p, label: p.label.replace(/^.* · /, ''), qty: 0 }; e.qty += p.qty; m.set(key, e); } return [...m.values()]; };
     pane.innerHTML = `<div class="cards"><div class="card stat"><div class="k">Carcass sheets</div><div class="v">${model.sheets.carcass.sheets.length}</div></div><div class="card stat"><div class="k">Door sheets</div><div class="v">${model.sheets.door.sheets.length}</div></div><div class="card stat"><div class="k">Back sheets</div><div class="v">${model.sheets.back.sheets.length}</div></div><div class="card stat"><div class="k">Edge banding</div><div class="v">${fq(Math.round(model.edge_m * 10) / 10)} m</div></div></div>
       ${mats.map(([m, title]) => `<div class="card" style="margin-bottom:14px"><div style="display:flex;gap:8px;align-items:center"><h3 style="margin:0">${esc(title)}</h3><span class="grow"></span><span class="muted">${model.sheets[m].sheets.length} sheet(s) of ${sty.sheet_w}×${sty.sheet_h} · ${fq(Math.round(model.sheets[m].area * 100) / 100)} m² of parts${model.sheets[m].sheets.length ? ' · ' + Math.round((model.sheets[m].area * 10000) / (model.sheets[m].sheets.length * sty.sheet_w * sty.sheet_h) * 100) + '% used' : ''}</span></div>
         ${model.panels[m].length ? `<table class="grid" style="margin-top:8px"><thead><tr><th>Part</th><th class="num">Size cm</th><th class="num">Qty</th><th class="num">Edge band cm each</th></tr></thead><tbody>${group(model.panels[m]).map(t).join('')}</tbody></table><details style="margin-top:8px"><summary style="cursor:pointer;font-weight:600">Show how the sheets are cut</summary><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:8px">${model.sheets[m].sheets.map((s, i) => `<div><div class="muted" style="font-size:12px">Sheet ${i + 1} — ${Math.round(s.used * 100)}% used</div>${sheetSVG(s, sty.sheet_w, sty.sheet_h, { width: 360 })}</div>`).join('')}</div>${model.sheets[m].unfit.length ? `<p class="err">Does not fit a sheet: ${model.sheets[m].unfit.map((p) => `${p.label} ${p.w}×${p.h}`).join(', ')}</p>` : ''}</details>` : '<p class="muted">Nothing in this group yet.</p>'}</div>`).join('')}
+      ${model.profile ? `<div class="card" style="margin-bottom:14px"><div style="display:flex;gap:8px;align-items:center"><h3 style="margin:0">Door frames — ${esc(sty.profile || 'profile not chosen')}</h3><span class="grow"></span><span class="muted">${model.profile.bars.length} bar(s) of ${sty.bar_len} cm · ${fq(Math.round(model.profile.metres * 100) / 100)} m of profile · ${model.profile.corners} corners</span></div>
+        <table class="grid" style="margin-top:8px"><thead><tr><th>Door / front</th><th class="num">Size cm</th><th class="num">Qty</th></tr></thead><tbody>${group(model.frames.map((f) => ({ ...f, edge: 0 }))).map(t).join('')}</tbody></table>
+        <details style="margin-top:8px"><summary style="cursor:pointer">Cutting plan for the bars</summary>${model.profile.bars.map((b, i) => `<p style="margin:6px 0"><b>Bar ${i + 1}</b> — ${b.items.map((x) => fq(x.len)).join(' + ')} <span class="muted">(offcut ${fq(b.free)} cm)</span></p>`).join('')}${model.profile.unfit.length ? `<p class="err">${model.profile.unfit.length} piece(s) are longer than a bar.</p>` : ''}</details></div>` : ''}
       <div class="cols2" style="align-items:start"><div class="card"><h3>Hardware</h3><table class="grid"><tbody><tr><td>Hinges ${sty.hinge ? `<span class="muted">${esc(sty.hinge)}</span>` : ''}</td><td class="num">${hw.hinges}</td></tr><tr><td>Drawer sets ${sty.drawer ? `<span class="muted">${esc(sty.drawer)}</span>` : ''}</td><td class="num">${hw.slides}</td></tr><tr><td>Handles ${sty.handle ? `<span class="muted">${esc(sty.handle)}</span>` : ''}</td><td class="num">${hw.handles} <span class="muted">(${fq(Math.round(hw.handleLen) / 100)} m)</span></td></tr><tr><td>Plinth legs</td><td class="num">${hw.legs}</td></tr><tr><td>Wall hangers</td><td class="num">${hw.hangers}</td></tr><tr><td>Shelf pins</td><td class="num">${hw.pins}</td></tr></tbody></table></div>
       <div class="card"><h3>Glazed doors</h3>${model.glass.length ? `<table class="grid"><thead><tr><th>Glass (${esc(sty.glass || '—')})</th><th class="num">Size</th><th class="num">Qty</th></tr></thead><tbody>${model.glass.map((g) => `<tr><td>Door glass</td><td class="num">${g.w} × ${g.h}</td><td class="num">${g.qty}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No glazed doors.</p>'}</div></div>`;
   }

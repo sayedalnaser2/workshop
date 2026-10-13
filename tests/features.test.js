@@ -138,3 +138,17 @@ test('custom designs: dividers make panes, formulas cover the frame and every pa
   assert.equal(r.glass.length, 3); assert.ok(r.glass.every((g) => g.w > 0 && g.h > 0));
   assert.equal(d.leaves(d.merge(L, 'a')).length, 2);
 });
+
+test('aluminium kitchen: doors become profile frames with infill, bars are cut, 3D scene has boxes', async () => {
+  const { kitchenModel, priceKitchen } = await import('../public/js/kitchen.js');
+  const { scene, placeRuns } = await import('../public/js/kitchen-3d.js');
+  const spec = { style: { kind: 'aluminium', carcass: 'Board', profile: 'P1' }, runs: [{ cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }, { type: 'drawers', w: 60, h: 72, d: 56, drawers: 3 }] }, { island: true, cabinets: [{ type: 'base', w: 90, h: 72, d: 56, doors: 2 }] }] };
+  const wood = kitchenModel({ ...spec, style: { ...spec.style, kind: 'wood' } }); const alu = kitchenModel(spec);
+  assert.equal(wood.profile, null); assert.equal(wood.frames.length, 0);
+  assert.equal(alu.frames.length, 5); assert.equal(alu.profile.pieces, 4 * (1 + 3 + 2));
+  assert.ok(alu.panels.door.every((p) => /infill/.test(p.label)));
+  const p = priceKitchen(alu, { profile: { P1: { price: 10 } }, general: { frame_corner: 2 } });
+  assert.equal(p.lines.find((l) => /Door frame profile/.test(l.label)).total, 10 * alu.profile.bars.length);
+  assert.equal(p.lines.find((l) => /corner/.test(l.label)).total, 2 * alu.profile.corners);
+  assert.ok(scene(spec).some((b) => b.kind === 'infill')); assert.equal(placeRuns(spec)[1].z, 160); // the island stands in front of the wall run
+});
