@@ -1,4 +1,4 @@
-import { scene, draw3D, placeRuns } from '../kitchen-3d.js';
+import { scene, draw3D, pick3D, placeRuns } from '../kitchen-3d.js';
 import { S } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, toast, guard, confirmBox, modal, formHTML, readForm, dataTable, badge, datalist } from '../ui.js';
 import { CAB_TYPES, DEFAULT_STYLE, DEFAULT_COUNTER, kitchenModel, priceKitchen } from '../kitchen.js';
@@ -187,16 +187,50 @@ async function editor(el, id, tab) {
 
   // ---------------------------------------------------------------- 3D view
   function view3d(pane) {
-    const v = view3d.v ||= { yaw: -0.55, pitch: 0.45, zoom: 1 };
-    pane.innerHTML = `<div class="card"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">3D view</h3><span class="muted">Drag to turn · scroll to zoom · each run's position can be set under Design → run header “3D”</span><span class="grow"></span><button class="btn sm" data-p="front">Front</button><button class="btn sm" data-p="corner">Corner</button><button class="btn sm" data-p="top">From above</button></div>
-      <canvas id="c3" width="1100" height="640" style="width:100%;max-width:1100px;margin-top:8px;border-radius:6px;cursor:grab;touch-action:none"></canvas></div>`;
-    const cv = $('#c3', pane); const go = () => draw3D(cv, scene(spec), v); go();
-    let drag = null;
-    cv.onpointerdown = (e) => { drag = { x: e.clientX, y: e.clientY, yaw: v.yaw, pitch: v.pitch }; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; };
-    cv.onpointermove = (e) => { if (!drag) return; v.yaw = drag.yaw + (e.clientX - drag.x) * 0.008; v.pitch = Math.max(0.02, Math.min(1.5, drag.pitch + (e.clientY - drag.y) * 0.006)); go(); };
-    cv.onpointerup = () => { drag = null; cv.style.cursor = 'grab'; };
+    const v = view3d.v ||= { yaw: -0.55, pitch: 0.45, zoom: 1 }; v.selected = view3d.sel && spec.runs[view3d.sel.ri]?.cabinets[view3d.sel.ci] ? view3d.sel : null; v.hover = null;
+    pane.innerHTML = `<div class="k3"><div class="card"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">3D view</h3><span class="muted">Drag to turn · scroll or pinch to zoom · <b>click a cabinet to select and edit it</b></span><span class="grow"></span><button class="btn sm" data-p="front">Front</button><button class="btn sm" data-p="corner">Corner</button><button class="btn sm" data-p="top">From above</button></div>
+      <canvas id="c3" width="1100" height="640" style="width:100%;margin-top:8px;border-radius:6px;cursor:grab;touch-action:none"></canvas></div><div class="card" id="k3p"></div></div>`;
+    const cv = $('#c3', pane); const go = () => draw3D(cv, scene(spec), v);
+    const cabOf = (r) => r && spec.runs[r.ri]?.cabinets[r.ci];
+    const FIELDS = [['label', 'Label', 'text'], ['w', 'Width cm'], ['h', 'Height cm'], ['d', 'Depth cm'], ['doors', 'Doors'], ['drawers', 'Drawers'], ['glazed', 'Glazed doors'], ['shelves', 'Shelves']];
+    const panel = () => {
+      const box = $('#k3p', pane); const c = cabOf(v.selected);
+      if (!c) { box.innerHTML = '<h3 style="margin-top:0">Nothing selected</h3><p class="muted">Click any cabinet in the picture to change its size, doors and drawers, move it along the run, copy it or delete it. The picture, cut list and price follow straight away.</p>' + (spec.runs.length ? `<p><button class="btn sm" data-addrun>+ Add a cabinet to “${esc(spec.runs[0].name || 'Run 1')}”</button></p>` : ''); return; }
+      const run = spec.runs[v.selected.ri]; const t = CAB_TYPES[c.type] || CAB_TYPES.base;
+      box.innerHTML = `<h3 style="margin-top:0">${esc(t.label)}${c.label ? ` — ${esc(c.label)}` : ''}</h3><div class="muted" style="margin-bottom:8px">${esc(run.name || 'Run ' + (v.selected.ri + 1))} · position ${v.selected.ci + 1} of ${run.cabinets.length}</div>
+        <div class="form" style="grid-template-columns:1fr 1fr"><label class="field full"><span>Type</span><select data-f="type">${Object.entries(CAB_TYPES).map(([k2, x]) => `<option value="${k2}" ${c.type === k2 ? 'selected' : ''}>${x.label}</option>`).join('')}</select></label>
+        ${FIELDS.map(([k2, l, ty]) => `<label class="field"><span>${l}</span><input data-f="${k2}" ${ty === 'text' ? '' : 'type="number" step="any"'} value="${esc(c[k2] ?? '')}"></label>`).join('')}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button class="btn sm" data-mv="-1">◀ Move left</button><button class="btn sm" data-mv="1">Move right ▶</button><button class="btn sm" data-dup>Copy</button><button class="btn sm danger" data-del>Delete</button><button class="btn sm" data-none>Deselect</button></div>`;
+    };
+    const changed = () => { touch(); go(); };
+    const refresh3 = () => { v.selected = view3d.sel; panel(); go(); };
+    $('#k3p', pane).addEventListener('input', (e) => { const f = e.target.dataset.f; const c = cabOf(v.selected); if (!c || !f || f === 'type') return; c[f] = f === 'label' ? e.target.value : num(e.target.value); changed(); });
+    $('#k3p', pane).addEventListener('change', (e) => { const c = cabOf(v.selected); if (c && e.target.dataset.f === 'type') { Object.assign(c, { ...cabinetOf(e.target.value), label: c.label }); touch(); panel(); go(); } });
+    $('#k3p', pane).addEventListener('click', (e) => {
+      const r = v.selected; const c = cabOf(r); const el2 = e.target.closest('button'); if (!el2) return;
+      if (el2.matches('[data-addrun]')) { spec.runs[0].cabinets.push(cabinetOf('base')); view3d.sel = { ri: 0, ci: spec.runs[0].cabinets.length - 1 }; touch(); return refresh3(); }
+      if (!c) return; const arr = spec.runs[r.ri].cabinets;
+      if (el2.matches('[data-mv]')) { const j = r.ci + Number(el2.dataset.mv); if (j >= 0 && j < arr.length) { [arr[r.ci], arr[j]] = [arr[j], arr[r.ci]]; view3d.sel = { ri: r.ri, ci: j }; touch(); refresh3(); } }
+      if (el2.matches('[data-dup]')) { arr.splice(r.ci + 1, 0, { ...c }); view3d.sel = { ri: r.ri, ci: r.ci + 1 }; touch(); refresh3(); }
+      if (el2.matches('[data-del]')) { arr.splice(r.ci, 1); view3d.sel = null; touch(); refresh3(); }
+      if (el2.matches('[data-none]')) { view3d.sel = null; refresh3(); }
+    });
+    // mouse / touch: a short press selects, a drag turns the view, two fingers pinch to zoom
+    const pts = new Map(); let drag = null; let pinch = 0;
+    const at = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * (cv.width / r.width), (e.clientY - r.top) * (cv.height / r.height)]; };
+    cv.onpointerdown = (e) => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); if (pts.size === 1) drag = { x: e.clientX, y: e.clientY, yaw: v.yaw, pitch: v.pitch, moved: false }; else { drag = null; const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); } };
+    cv.onpointermove = (e) => {
+      if (pts.has(e.pointerId)) pts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) { v.zoom = Math.max(0.4, Math.min(4, v.zoom * (d / pinch))); go(); } pinch = d; return; }
+      if (drag) { const dx = e.clientX - drag.x; const dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true; if (drag.moved) { v.yaw = drag.yaw + dx * 0.008; v.pitch = Math.max(0.02, Math.min(1.5, drag.pitch + dy * 0.006)); go(); } return; }
+      const [x, y] = at(e); const h = pick3D(cv, x, y); const old = v.hover; v.hover = h; cv.style.cursor = h ? 'pointer' : 'grab';
+      if ((h?.ri) !== (old?.ri) || (h?.ci) !== (old?.ci)) go();
+    };
+    cv.onpointerup = (e) => { pts.delete(e.pointerId); if (drag && !drag.moved) { const [x, y] = at(e); view3d.sel = pick3D(cv, x, y); v.selected = view3d.sel; panel(); go(); } drag = null; pinch = 0; };
+    cv.onpointerleave = () => { if (v.hover) { v.hover = null; go(); } };
     cv.onwheel = (e) => { e.preventDefault(); v.zoom = Math.max(0.4, Math.min(4, v.zoom * (e.deltaY < 0 ? 1.1 : 0.9))); go(); };
     $$('[data-p]', pane).forEach((b) => (b.onclick = () => { Object.assign(v, { front: { yaw: 0, pitch: 0.08 }, corner: { yaw: -0.55, pitch: 0.45 }, top: { yaw: 0, pitch: 1.5 } }[b.dataset.p]); go(); }));
+    panel(); go();
   }
 
   // ---------------------------------------------------------------- cut list

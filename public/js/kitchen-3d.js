@@ -26,12 +26,13 @@ export function scene(spec) {
   const pl = placeRuns(spec); const boxes = [];
   (spec.runs || []).forEach((run, ri) => {
     const { x: ox, z: oz, rot } = pl[ri];
-    const put = (u0, u1, v0, v1, y0, y1, color, kind) => { // local (along, depth) → world, by rotation
+    const put = (u0, u1, v0, v1, y0, y1, color, kind) => { const ref = { ri, ci: curCi }; // local (along, depth) → world, by rotation
       const m = { 0: (u, v) => [ox + u, oz + v], 90: (u, v) => [ox + v, oz + u], 180: (u, v) => [ox - u, oz - v], 270: (u, v) => [ox - v, oz - u] }[rot] || ((u, v) => [ox + u, oz + v]);
-      const a = m(u0, v0); const b = m(u1, v1); boxes.push({ x0: Math.min(a[0], b[0]), x1: Math.max(a[0], b[0]), z0: Math.min(a[1], b[1]), z1: Math.max(a[1], b[1]), y0, y1, color, kind });
+      const a = m(u0, v0); const b = m(u1, v1); boxes.push({ x0: Math.min(a[0], b[0]), x1: Math.max(a[0], b[0]), z0: Math.min(a[1], b[1]), z1: Math.max(a[1], b[1]), y0, y1, color, kind, ref });
     };
-    let u = 0;
-    for (const c of run.cabinets || []) {
+    let u = 0; let curCi = -1;
+    for (const [ci, c] of (run.cabinets || []).entries()) {
+      curCi = ci;
       const t = CAB_TYPES[c.type] || CAB_TYPES.base; const w = +c.w || 0; const h = +c.h || 0; const d = +c.d || 0;
       if (t.gap) { u += w; continue; }
       const y0 = t.wall ? style.wall_height : t.tall ? 0 : style.plinth;
@@ -59,6 +60,7 @@ const FACES = [ // [normal, corner indexes] — corners are numbered by bits: x=
 ];
 /** Draw the boxes on a canvas. view = { yaw, pitch, zoom }. Returns nothing. */
 export function draw3D(canvas, boxes, view = {}) {
+  const sel = view.selected; const hov = view.hover; const same = (a, b) => a && b && a.ri === b.ri && a.ci === b.ci; canvas._hit = [];
   const ctx = canvas.getContext('2d'); const W = canvas.width; const H = canvas.height; ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = '#eef2f6'; ctx.fillRect(0, 0, W, H);
   if (!boxes.length) return;
@@ -85,9 +87,20 @@ export function draw3D(canvas, boxes, view = {}) {
       const pts = idx.map((i) => cam(...C[i])); const nc = rot(n[0], n[1], n[2]); // back-face culling with the true normal
       if (nc[0] * pts[0][0] + nc[1] * pts[0][1] + nc[2] * pts[0][2] >= 0) continue;
       const light = n[1] > 0 ? 1.08 : n[1] < 0 ? .6 : n[2] !== 0 ? .95 : .78;
-      faces.push({ pts, depth: pts.reduce((a, p) => a + p[2], 0) / 4, fill: shade(b.color, light) });
+      faces.push({ pts, depth: pts.reduce((a, p) => a + p[2], 0) / 4, fill: shade(b.color, light), ref: b.ref, on: same(b.ref, sel) ? 2 : same(b.ref, hov) ? 1 : 0 });
     }
   }
   faces.sort((a, b) => b.depth - a.depth);
-  for (const fc of faces) { if (fc.pts.some((p) => p[2] < 5)) continue; const p = fc.pts.map(proj); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fillStyle = fc.fill; ctx.fill(); ctx.strokeStyle = 'rgba(30,45,62,.55)'; ctx.lineWidth = .8; ctx.stroke(); }
+  for (const fc of faces) { if (fc.pts.some((p) => p[2] < 5)) continue; const p = fc.pts.map(proj); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fillStyle = fc.fill; ctx.fill(); if (fc.on) { ctx.fillStyle = fc.on === 2 ? 'rgba(255,140,0,.38)' : 'rgba(40,120,255,.22)'; ctx.fill(); } ctx.strokeStyle = fc.on === 2 ? '#e07b00' : 'rgba(30,45,62,.55)'; ctx.lineWidth = fc.on === 2 ? 1.8 : .8; ctx.stroke(); if (fc.ref && fc.ref.ci >= 0) canvas._hit.push({ poly: p, ref: fc.ref }); }
+}
+
+/** Which cabinet is under a canvas point (the nearest face wins). Call after draw3D. */
+export function pick3D(canvas, x, y) {
+  const hits = canvas._hit || [];
+  for (let i = hits.length - 1; i >= 0; i--) { // drawn last = nearest
+    const { poly, ref } = hits[i]; let inside = false;
+    for (let a = 0, b = poly.length - 1; a < poly.length; b = a++) { const [xi, yi] = poly[a]; const [xj, yj] = poly[b]; if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside; }
+    if (inside) return ref;
+  }
+  return null;
 }

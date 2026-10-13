@@ -175,6 +175,7 @@ table.mini { width: 100%; border-collapse: collapse; } .mini th { font-size: 11p
 
 /* kitchens */
 .kgrid { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 14px; align-items: start; }
+.k3 { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 14px; align-items: start; }
 /* arabic text on printouts, stamps */
 .doc .ar { direction: rtl; unicode-bidi: isolate; font-weight: 400; font-size: .95em; margin-inline-start: 6px; opacity: .85; }
 .doc th .ar { opacity: .9; }
@@ -240,7 +241,7 @@ table.mini { width: 100%; border-collapse: collapse; } .mini th { font-size: 11p
 .lang-btn:hover { background: rgba(255, 255, 255, .1); }
 
 @media (max-width: 900px) {
-  .kgrid { grid-template-columns: 1fr; }
+  .kgrid, .k3 { grid-template-columns: 1fr; }
   #side { position: fixed; left: -250px; z-index: 40; transition: left .2s, right .2s; } #side.open { left: 0; }
   [dir=rtl] #side { left: auto; right: -250px; } [dir=rtl] #side.open { right: 0; }
   .topbar { display: flex; } main { padding: 14px 12px 60px; }
