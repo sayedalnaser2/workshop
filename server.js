@@ -11,8 +11,10 @@ import { needsSetup, authenticate, createUser, updateUser, deleteUser, listUsers
 import { tableAccess } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
 import { seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets, seedBalexco } from './src/seed.js';
-import { isOnTask, taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated, markPresent, shiftStatus } from './src/tasks.js';
+import { isOnTask, taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated, markPresent, shiftStatus, overtimeAction, dayReport } from './src/tasks.js';
+import { targetProgress, METRICS } from './src/targets.js';
 import { exportWorkbook } from './src/exporter.js';
+import { exportActivity } from './src/activity-export.js';
 import { quoteTotals, approvalFor, discountPct } from './public/js/calc.js';
 import { vatReport, orderVat } from './public/js/vat.js';
 import { audit, diff, labelOf, listAudit, notable } from './src/audit.js';
@@ -207,6 +209,30 @@ async function api(req, res, url) {
   if (p[0] === 'activity') {
     need(isAA); const q = url.searchParams; const today = new Date().toISOString().slice(0, 10);
     return send(res, 200, activity(q.get('from') || today, q.get('to') || today, q.get('user') ? Number(q.get('user')) : null));
+  }
+  if (p[0] === 'overtime' && m === 'POST') return send(res, 200, overtimeAction(user, await readJson(req)));
+  if (p[0] === 'attendance-from-tasks') { // what each person did per day, to fill the attendance sheet
+    need(isAA); const q = url.searchParams; const emp = getRow('employees', Number(q.get('employee_id'))); const month = String(q.get('month') || '').slice(0, 7);
+    if (!emp || !/^\d{4}-\d\d$/.test(month)) throw bad('Employee and month are needed.');
+    if (!emp.user_id) return send(res, 200, { linked: false, days: {} });
+    const last = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0)).getUTCDate();
+    return send(res, 200, { linked: true, user_id: emp.user_id, days: dayReport(emp.user_id, `${month}-01T00:00:00.000Z`, `${month}-${String(last).padStart(2, '0')}T23:59:59.999Z`) });
+  }
+  if (p[0] === 'targets' && m === 'GET') { // workers see their own progress, managers see everyone's
+    const all = targetProgress(isAA ? null : user.id);
+    return send(res, 200, { metrics: METRICS, targets: listRows('targets'), progress: all });
+  }
+  if (p[0] === 'target-awards' && m === 'POST') {
+    need(role === 'admin'); const b = await readJson(req);
+    const ex = db.prepare('SELECT id FROM target_awards WHERE target_id=? AND user_id=? AND period_key=?').get(Number(b.target_id), Number(b.user_id), String(b.period_key));
+    if (ex) { deleteRow('target_awards', ex.id); audit(user, 'target_awards', ex.id, 'deleted', `${b.period_key}`); return send(res, 200, { removed: true }); }
+    const row = insertRow('target_awards', { target_id: Number(b.target_id), user_id: Number(b.user_id), period_key: String(b.period_key), awarded_on: new Date().toISOString().slice(0, 10), note: String(b.note || '') });
+    audit(user, 'target_awards', row.id, 'created', `Prize given for ${b.period_key}`); return send(res, 201, row);
+  }
+  if (p[0] === 'activity.xlsx') {
+    need(isAA); const q = url.searchParams; const today = new Date().toISOString().slice(0, 10); const from = (q.get('from') || today).slice(0, 10); const to = (q.get('to') || today).slice(0, 10);
+    const buf = Buffer.from(await exportActivity(from, to, q.get('user') ? Number(q.get('user')) : null));
+    return send(res, 200, buf, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="worker-activity-${from}_${to}.xlsx"` });
   }
   if (p[0] === 'tasks' && p[1]) {
     const tid = Number(p[1]); const t = taskView(tid); if (!t) return send(res, 404, { error: 'Task not found' });
@@ -406,6 +432,7 @@ async function api(req, res, url) {
     if (id && m === 'PUT') {
       const cur = getRow(t, id); if (!cur || !visible(cur)) return send(res, 404, { error: 'Not found' });
       const body = await readJson(req); checkRef(t, body, cur); moneyRules(t, body, cur); if (worker) delete body.unit_cost;
+      if (t === 'overtime' && 'status' in body) need(role === 'admin'); // only the admin approves overtime
       if (t === 'tasks' && 'hidden' in body) { need(role === 'admin'); body.hidden = body.hidden ? 1 : 0; } // only an admin hides or shows tasks
       if (t === 'tasks') { if (body.status === 'done' && cur.status !== 'done') { body.done_at = new Date().toISOString(); body.progress = 100; } else if (body.status && body.status !== 'done' && cur.status === 'done') body.done_at = null; }
       if (t === 'quotes') {

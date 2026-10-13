@@ -209,3 +209,57 @@ test('hidden purchases are ignored in every total', async () => {
   assert.equal(await cost(), o.cost); assert.equal((await call('amina', 'GET', '/api/summary')).data.purchases, before - 40);
   assert.ok(!(await call('amina', 'GET', '/api/vat-report?from=2026-10-01&to=2026-10-31')).data.purchases.some((x) => x.supplier === 'Gulf Glass' && x.total === 40));
 });
+
+test('each employee can have their own shift hours', async () => {
+  const wid = (await call('boss', 'GET', '/api/staff')).data.find((s) => s.name === 'Wasim').id;
+  const base = (await call('wasim', 'GET', '/api/shift')).data.cfg;
+  assert.equal((await call('boss', 'PUT', `/api/users/${wid}`, { shift: { start: '05:30', end: '13:30', breaks: [{ from: '09:00', to: '09:15' }], days: [0, 1, 2, 3, 4], tz: 999 } })).status, 200);
+  const mine = (await call('wasim', 'GET', '/api/shift')).data.cfg;
+  assert.equal(mine.start, '05:30'); assert.equal(mine.end, '13:30'); assert.deepEqual(mine.days, [0, 1, 2, 3, 4]); assert.equal(mine.tz, base.tz); // the time zone stays the workshop's
+  assert.equal((await call('amina', 'PUT', `/api/users/${wid}`, { shift: null })).status, 403);
+  await call('boss', 'PUT', `/api/users/${wid}`, { shift: null });
+  assert.equal((await call('wasim', 'GET', '/api/shift')).data.cfg.start, base.start); // back to the workshop default
+});
+
+test('overtime is recorded by the worker, approved by the admin and shown in the activity report', async () => {
+  const add = await call('wasim', 'POST', '/api/overtime', { action: 'add', minutes: 90, text: 'Finished the glass order' });
+  assert.equal(add.status, 200); assert.equal(add.data.status, 'pending'); assert.equal(add.data.minutes, 90);
+  assert.equal((await call('wasim', 'POST', '/api/overtime', { action: 'add', minutes: 0 })).status, 400);
+  assert.equal((await call('wasim', 'POST', '/api/overtime', { action: 'start' })).status, 200);
+  assert.equal((await call('wasim', 'POST', '/api/overtime', { action: 'start' })).status, 400); // already running
+  assert.equal((await call('wasim', 'POST', '/api/overtime', { action: 'stop' })).data.minutes, 1);
+  assert.equal((await call('wasim', 'PUT', `/api/t/overtime/${add.data.id}`, { status: 'approved' })).status, 403);
+  assert.equal((await call('boss', 'PUT', `/api/t/overtime/${add.data.id}`, { status: 'approved' })).status, 200);
+  const day = new Date().toISOString().slice(0, 10); const act = (await call('boss', 'GET', `/api/activity?from=${day}T00:00:00.000Z&to=${day}T23:59:59.999Z`)).data;
+  assert.ok(act.perDay.some((r) => r.user_name === 'Wasim' && r.overtime_min >= 91)); assert.ok(act.overtime.length >= 2);
+  const x = await fetch(base + `/api/activity.xlsx?from=${day}&to=${day}`, { headers: { Cookie: jar.boss } });
+  assert.equal(x.status, 200); assert.match(x.headers.get('content-type'), /spreadsheetml/); assert.equal((await x.arrayBuffer()).byteLength > 2000, true);
+  assert.equal((await fetch(base + `/api/activity.xlsx?from=${day}&to=${day}`, { headers: { Cookie: jar.wasim } })).status, 403);
+});
+
+test('a worker can ask for a helper; adding one to the team closes the request', async () => {
+  const staff = (await call('boss', 'GET', '/api/staff')).data; const wid = staff.find((s) => s.name === 'Wasim').id; const aid = staff.find((s) => s.name === 'Amina').id;
+  const t = (await call('boss', 'POST', '/api/t/tasks', { title: 'Heavy glass job', assignee_id: wid })).data;
+  const r = await call('wasim', 'POST', `/api/tasks/${t.id}/action`, { action: 'need_helper', text: 'Panel is too heavy for one' });
+  assert.equal(r.data.needs_helper, 1); assert.equal(r.data.helper_note, 'Panel is too heavy for one');
+  const after = await call('boss', 'PUT', `/api/t/tasks/${t.id}`, { team: [aid] });
+  assert.ok(!(await call('boss', 'GET', `/api/tasks/${t.id}`)).data.task.needs_helper);
+  assert.ok((await call('boss', 'GET', `/api/tasks/${t.id}`)).data.logs.some((l) => l.kind === 'helper' && /request closed/.test(l.text)));
+  void after;
+});
+
+test('targets and prizes: only the admin sets them, workers see their own progress', async () => {
+  const mk = (who, b) => call(who, 'POST', '/api/t/targets', b);
+  assert.equal((await mk('amina', { name: 'x', metric: 'tasks_done', period: 'month', goal: 1 })).status, 403);
+  const t = (await mk('boss', { name: 'Finish 1 job this month', metric: 'tasks_done', period: 'month', goal: 1, prize: 'BD 10 voucher', prize_amount: 10, active: 1 })).data;
+  const mine = (await call('wasim', 'GET', '/api/targets')).data; assert.ok(mine.progress.every((p) => p.user_name === 'Wasim'));
+  const pr = mine.progress.find((p) => p.target.id === t.id); assert.ok(pr); assert.equal(pr.goal, 1);
+  const tk = (await call('boss', 'POST', '/api/t/tasks', { title: 'Counts for the target', assignee_id: (await call('boss', 'GET', '/api/staff')).data.find((s) => s.name === 'Wasim').id })).data;
+  await call('wasim', 'POST', `/api/tasks/${tk.id}/action`, { action: 'done' });
+  const after = (await call('wasim', 'GET', '/api/targets')).data.progress.find((p) => p.target.id === t.id);
+  assert.equal(after.achieved, true); assert.ok(after.value >= 1);
+  assert.equal((await call('amina', 'POST', '/api/target-awards', { target_id: t.id, user_id: after.user_id, period_key: after.period.key })).status, 403);
+  assert.equal((await call('boss', 'POST', '/api/target-awards', { target_id: t.id, user_id: after.user_id, period_key: after.period.key })).status, 201);
+  assert.ok((await call('wasim', 'GET', '/api/targets')).data.progress.find((p) => p.target.id === t.id).award);
+  assert.equal((await call('boss', 'POST', '/api/target-awards', { target_id: t.id, user_id: after.user_id, period_key: after.period.key })).data.removed, true); // toggles
+});

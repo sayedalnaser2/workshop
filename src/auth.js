@@ -8,7 +8,7 @@ const secret = () => {
   return s;
 };
 const hash = (pw, salt) => crypto.scryptSync(pw, salt, 64).toString('hex');
-const pub = (u) => (u ? { id: u.id, username: u.username, name: u.name, role: u.role, active: u.active ? 1 : 0, created_at: u.created_at } : null);
+const pub = (u) => { if (!u) return null; let shift = null; try { shift = u.shift ? JSON.parse(u.shift) : null; } catch {} return { id: u.id, username: u.username, name: u.name, role: u.role, active: u.active ? 1 : 0, created_at: u.created_at, shift }; };
 
 // Databases from before user accounts had one shared password: keep it as the "admin" user.
 (function migrate() {
@@ -26,6 +26,8 @@ function validate({ username, name, role, password }, creating) {
   if (role !== undefined && !ROLES[role]) throw bad('Unknown role.');
   if (creating || password) { if (!password || String(password).length < 6) throw bad('Password must have at least 6 characters.'); }
 }
+/** Only the parts of a personal shift we understand. */
+const cleanShift = (s) => { const o = {}; if (/^\d{1,2}:\d{2}$/.test(s.start || '')) o.start = s.start; if (/^\d{1,2}:\d{2}$/.test(s.end || '')) o.end = s.end; if (Array.isArray(s.breaks)) o.breaks = s.breaks.filter((b) => b && /^\d{1,2}:\d{2}$/.test(b.from || '') && /^\d{1,2}:\d{2}$/.test(b.to || '')).map((b) => ({ from: b.from, to: b.to })); if (Array.isArray(s.days)) o.days = s.days.map(Number).filter((d) => d >= 0 && d <= 6); return o; };
 const activeAdmins = (exceptId = 0) => db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin' AND active=1 AND id<>?").get(exceptId).n;
 
 export function createUser(d) {
@@ -43,6 +45,7 @@ export function updateUser(id, d, selfId) {
   if (id === selfId && !active) throw bad('You cannot deactivate your own account.');
   if (d.username && d.username.toLowerCase() !== cur.username.toLowerCase() && db.prepare('SELECT id FROM users WHERE username=? AND id<>?').get(d.username, id)) throw bad('That username is already taken.');
   db.prepare('UPDATE users SET username=?, name=?, role=?, active=? WHERE id=?').run(d.username ?? cur.username, d.name ?? cur.name, role, active, id);
+  if ('shift' in d) db.prepare('UPDATE users SET shift=? WHERE id=?').run(d.shift && typeof d.shift === 'object' ? JSON.stringify(cleanShift(d.shift)) : null, id); // null = the workshop's default hours
   if (d.password) { const salt = crypto.randomBytes(16).toString('hex'); db.prepare('UPDATE users SET salt=?, hash=? WHERE id=?').run(salt, hash(d.password, salt), id); }
   return getUser(id);
 }

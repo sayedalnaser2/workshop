@@ -4,6 +4,7 @@ import { quoteTotals } from '../calc.js';
 import { fmtMin, startTicker, ago } from '../time.js';
 import { lowStock } from '../stock.js';
 import { KINDS as EV_KINDS } from './calendar.js';
+import { progressBar } from './targets.js';
 
 /** Grouped bar chart. data: [{label, a, b}] — a = invoiced, b = received. */
 export function barChart(data, la = 'Invoiced', lb = 'Received') {
@@ -16,13 +17,14 @@ export function barChart(data, la = 'Invoiced', lb = 'Received') {
 
 const today10 = () => new Date().toISOString().slice(0, 10);
 async function workerHome(el) {
-  const [stock, mine, events] = await Promise.all([api.get('t/stock'), api.get('my-tasks'), api.get('t/events').catch(() => [])]);
+  const [stock, mine, events, tg] = await Promise.all([api.get('t/stock'), api.get('my-tasks'), api.get('t/events').catch(() => []), api.get('targets').catch(() => ({ progress: [], metrics: {} }))]);
   const soon = events.filter((e) => e.status !== 'cancelled' && (e.end_date || e.date) >= today10()).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
   const openT = mine.filter((t) => t.status !== 'done'); const run = openT.find((t) => t.running_since && t.running_by === S.me.name); const live = run && run.ticking;
   const low = lowStock(stock, { profiles: S.profiles, glassTypes: S.glass_types, accessories: S.accessories }).length;
   el.innerHTML = `<div class="ph"><h1>Hello ${esc(S.me.name)}</h1><span class="sub">${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</span></div>
   ${run ? `<a class="card" href="#/mytasks" style="display:block;color:inherit;border-color:var(--ok);margin-bottom:14px"><div class="k muted">You are on this task</div><b style="font-size:16px">${esc(run.title)}</b> <span class="muted">${esc(run.order_inv || '')}</span><div style="font-size:22px;font-weight:700;font-variant-numeric:tabular-nums" ${live ? `data-live data-base="${run.actual_min}"` : ''}>${live ? '' : fmtMin(run.actual_min)}</div></a>` : ''}
   <div class="cards"><a class="card stat" href="#/mytasks" style="color:inherit"><div class="k">My open tasks</div><div class="v">${openT.length}</div></a><a class="card stat" href="#/cutting" style="color:inherit"><div class="k">Cutting list</div><div class="v">✂ Open</div></a><a class="card stat" href="#/stock" style="color:inherit"><div class="k">Leftovers in stock</div><div class="v">${Math.round(stock.filter((s) => s.kind === 'leftover').reduce((a, s) => a + Math.max(0, s.qty || 0), 0))}</div></a><a class="card stat" href="#/stock" style="color:inherit"><div class="k">Stock running low</div><div class="v ${low ? 'neg' : ''}">${low}</div></a><a class="card stat" href="#/surveys" style="color:inherit"><div class="k">Site surveys</div><div class="v">📐</div></a><a class="card stat" href="#/models" style="color:inherit"><div class="k">Models</div><div class="v">${S.models.length}</div></a></div>
+  ${tg.progress.length ? `<div class="card" style="margin-bottom:14px"><div style="display:flex;align-items:center"><h3 style="margin:0">🏆 My targets</h3><span class="grow"></span><a class="btn sm" href="#/targets">All</a></div><div class="mgrid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr));margin-top:8px">${tg.progress.slice(0, 3).map((p) => `<div><b>${esc(p.target.name)}</b>${progressBar(p, tg.metrics[p.target.metric]?.unit || '')}${p.target.prize ? `<div class="muted" style="font-size:12px">Prize: ${esc(p.target.prize)}</div>` : ''}</div>`).join('')}</div></div>` : ''}
   ${soon.length ? `<div class="card"><h3>Coming up for you</h3><table class="grid"><tbody>${soon.map((e) => `<tr class="click" onclick="location.hash='#/calendar'"><td><b>${dmy(e.date)}</b> ${esc((e.start || '').slice(0, 5))}</td><td>${esc(e.title)} <span class="muted">${esc([e.client, e.site].filter(Boolean).join(' — '))}</span></td></tr>`).join('')}</tbody></table></div>` : ''}`;
   startTicker(el);
 }
@@ -44,6 +46,7 @@ export async function render(el) {
     <a class="card stat link" href="#/orders" data-flt="orders:Open"><div class="k">Open orders</div><div class="v">${s.openOrders}</div></a>
     <a class="card stat link" href="#/quotes" data-flt="quotes:Open"><div class="k">Open quotations</div><div class="v">${s.quotesOpen}</div></a>
     ${s.pendingApprovals ? `<a class="card stat link" href="#/approvals" style="border-color:var(--warn)"><div class="k">Waiting for approval</div><div class="v neg">${s.pendingApprovals}</div></a>` : ''}
+    ${tasks.some((t) => !t.hidden && t.needs_helper && t.status !== 'done') ? `<a class="card stat link" href="#/tasks" data-flt="tasks:Needs helper" style="border-color:var(--bad)"><div class="k">Need a helper</div><div class="v neg">${tasks.filter((t) => !t.hidden && t.needs_helper && t.status !== 'done').length}</div></a>` : ''}
     ${low.length ? `<a class="card stat link" href="#/stock" style="border-color:var(--bad)"><div class="k">Stock running low</div><div class="v neg">${low.length}</div></a>` : ''}
   </div>
   <div class="cols2" style="align-items:start">

@@ -10,16 +10,17 @@ const AA = ['admin', 'account'];
 export const PAGE_ROLES = {
   dashboard: ALL, quotes: AA, orders: AA, receipts: AA, statements: AA, models: ALL, cutting: ALL, stock: ALL, materials: AA, prices: AA,
   mytasks: ALL, tasks: AA, activity: AA, kitchens: ALL, pos: AA, suppliers: AA, purchases: AA, cashbank: AA, payments: AA, employees: AA, reports: AA, settings: ['admin'], users: ['admin'],
-  calendar: ALL, surveys: ALL, creditnotes: AA, approvals: AA, audit: ['admin'],
+  calendar: ALL, surveys: ALL, creditnotes: AA, approvals: AA, audit: ['admin'], targets: ALL, about: ALL,
 };
 export const canPage = (role, page) => (PAGE_ROLES[page === '' ? 'dashboard' : page] || []).includes(role);
 
-const WORKER_READ = new Set(['kitchens', 'models', 'profiles', 'accessories', 'glass_types', 'quotes', 'events']);
+const WORKER_READ = new Set(['kitchens', 'models', 'profiles', 'accessories', 'glass_types', 'quotes', 'events', 'notes']);
 const WORKER_RW = new Set(['stock', 'surveys']);
 /** 'rw' | 'r' | '' for a data table. */
 export function tableAccess(role, table) {
+  if (table === 'targets' || table === 'target_awards') return role === 'admin' ? 'rw' : role === 'account' ? 'r' : ''; // only the admin sets targets and prizes
   if (role === 'admin' || role === 'account') return 'rw';
-  if (table === 'tasks' || table === 'task_logs' || table === 'task_sessions' || table === 'attachments') return role === 'worker' ? '' : 'rw';
+  if (table === 'tasks' || table === 'task_logs' || table === 'task_sessions' || table === 'attachments' || table === 'overtime') return role === 'worker' ? '' : 'rw';
   if (role === 'worker') return WORKER_RW.has(table) ? 'rw' : WORKER_READ.has(table) ? 'r' : '';
   return '';
 }

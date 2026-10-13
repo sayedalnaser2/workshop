@@ -28,7 +28,7 @@ export const SCHEMA = {
   receipts: { cols: { no: 'TEXT', date: 'TEXT', order_inv: 'TEXT', client: 'TEXT', amount: 'REAL', method: 'TEXT', ref: 'TEXT', note: 'TEXT', account: 'TEXT' }, order: 'date DESC, id DESC' },
   payments: { cols: { no: 'TEXT', date: 'TEXT', paid_to: 'TEXT', amount: 'REAL', done: 'INTEGER', category: 'TEXT', lines: 'JSON', note: 'TEXT', account: 'TEXT', employee_id: 'INTEGER', method: 'TEXT', ref: 'TEXT' }, order: 'date DESC, id DESC' },
   purchases: { cols: { date: 'TEXT', pv: 'TEXT', invoice: 'TEXT', supplier: 'TEXT', amount: 'REAL', order_inv: 'TEXT', note: 'TEXT', vat: 'REAL', hidden: 'INTEGER' }, order: 'date DESC, id DESC' },
-  employees: { cols: { name: 'TEXT', salary: 'REAL', active: 'INTEGER', note: 'TEXT', role: 'TEXT', nationality: 'TEXT', id_no: 'TEXT', passport_no: 'TEXT', phone: 'TEXT', join_date: 'TEXT', left_date: 'TEXT', permit_expiry: 'TEXT', iban: 'TEXT', emergency: 'TEXT', address: 'TEXT' }, order: 'name' },
+  employees: { cols: { name: 'TEXT', salary: 'REAL', active: 'INTEGER', note: 'TEXT', user_id: 'INTEGER', role: 'TEXT', nationality: 'TEXT', id_no: 'TEXT', passport_no: 'TEXT', phone: 'TEXT', join_date: 'TEXT', left_date: 'TEXT', permit_expiry: 'TEXT', iban: 'TEXT', emergency: 'TEXT', address: 'TEXT' }, order: 'name' },
   profiles: { cols: { code: 'TEXT', name: 'TEXT', series: 'TEXT', bar_length: 'REAL', price_bar: 'REAL', weight_m: 'REAL', color: 'TEXT', min_qty: 'REAL' }, order: 'series, name' },
   accessories: { cols: { code: 'TEXT', name: 'TEXT', unit: 'TEXT', price: 'REAL', min_qty: 'REAL' }, order: 'name' },
   glass_types: { cols: { name: 'TEXT', price_m2: 'REAL', thickness: 'TEXT', min_qty: 'REAL' }, order: 'name' },
@@ -42,13 +42,17 @@ export const SCHEMA = {
   attendance: { cols: { employee_id: 'INTEGER', date: 'TEXT', status: 'TEXT', hours: 'REAL', site: 'TEXT', note: 'TEXT' }, order: 'date' },
   kitchens: { cols: { name: 'TEXT', client: 'TEXT', order_inv: 'TEXT', quote_no: 'TEXT', status: 'TEXT', spec: 'JSON', notes: 'TEXT' }, order: 'id DESC' },
   kitchen_options: { cols: { kind: 'TEXT', name: 'TEXT', price: 'REAL', unit: 'TEXT', meta: 'JSON', note: 'TEXT', sort: 'INTEGER' }, order: 'kind, sort, name' },
-  tasks: { cols: { order_inv: 'TEXT', quote_no: 'TEXT', title: 'TEXT', description: 'TEXT', stage: 'TEXT', assignee_id: 'INTEGER', team: 'JSON', hidden: 'INTEGER', status: 'TEXT', progress: 'REAL', estimate_min: 'REAL', due: 'TEXT', priority: 'TEXT', created_by: 'INTEGER', started_at: 'TEXT', done_at: 'TEXT', note: 'TEXT' }, order: 'id DESC' },
+  tasks: { cols: { order_inv: 'TEXT', quote_no: 'TEXT', title: 'TEXT', description: 'TEXT', stage: 'TEXT', assignee_id: 'INTEGER', team: 'JSON', hidden: 'INTEGER', needs_helper: 'INTEGER', helper_note: 'TEXT', status: 'TEXT', progress: 'REAL', estimate_min: 'REAL', due: 'TEXT', priority: 'TEXT', created_by: 'INTEGER', started_at: 'TEXT', done_at: 'TEXT', note: 'TEXT' }, order: 'id DESC' },
   task_logs: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', ts: 'TEXT', kind: 'TEXT', text: 'TEXT', progress: 'REAL', minutes: 'REAL' }, order: 'ts DESC' },
   task_sessions: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', started: 'TEXT', ended: 'TEXT', kind: 'TEXT' }, order: 'started DESC' },
   employee_docs: { cols: { employee_id: 'INTEGER', type: 'TEXT', number: 'TEXT', expiry: 'TEXT', file_name: 'TEXT', file_path: 'TEXT', note: 'TEXT' }, order: 'expiry' },
   credit_notes: { cols: { no: 'TEXT', date: 'TEXT', order_inv: 'TEXT', client: 'TEXT', client_vat: 'TEXT', lines: 'JSON', vat_rate: 'REAL', net: 'REAL', vat: 'REAL', total: 'REAL', reason: 'TEXT', status: 'TEXT', requested_by: 'TEXT', approval_note: 'TEXT' }, order: 'date DESC, id DESC' },
   events: { cols: { date: 'TEXT', end_date: 'TEXT', start: 'TEXT', end: 'TEXT', kind: 'TEXT', title: 'TEXT', order_inv: 'TEXT', quote_no: 'TEXT', client: 'TEXT', site: 'TEXT', mobile: 'TEXT', team: 'JSON', status: 'TEXT', note: 'TEXT' }, order: 'date, start' },
   surveys: { cols: { date: 'TEXT', client: 'TEXT', mobile: 'TEXT', site: 'TEXT', status: 'TEXT', items: 'JSON', notes: 'TEXT', quote_no: 'TEXT', surveyor: 'TEXT' }, order: 'date DESC, id DESC' },
+  overtime: { cols: { user_id: 'INTEGER', user_name: 'TEXT', day: 'TEXT', started: 'TEXT', ended: 'TEXT', minutes: 'REAL', task_id: 'INTEGER', note: 'TEXT', status: 'TEXT', kind: 'TEXT' }, order: 'day DESC, id DESC' },
+  targets: { cols: { name: 'TEXT', metric: 'TEXT', period: 'TEXT', goal: 'REAL', prize: 'TEXT', prize_amount: 'REAL', user_id: 'INTEGER', active: 'INTEGER', note: 'TEXT' }, order: 'id' },
+  target_awards: { cols: { target_id: 'INTEGER', user_id: 'INTEGER', period_key: 'TEXT', awarded_on: 'TEXT', note: 'TEXT' }, order: 'id DESC' },
+  notes: { cols: { text: 'TEXT', color: 'TEXT', done: 'INTEGER', pinned: 'INTEGER', audience: 'TEXT', author: 'TEXT', author_id: 'INTEGER' }, order: 'pinned DESC, id DESC' },
   attachments: { cols: { ref_type: 'TEXT', ref_key: 'TEXT', tag: 'TEXT', kind: 'TEXT', file_name: 'TEXT', file_path: 'TEXT', mime: 'TEXT', note: 'TEXT', user_name: 'TEXT', size: 'INTEGER' }, order: 'id' },
 };
 
@@ -58,13 +62,15 @@ for (const [t, s] of Object.entries(SCHEMA)) {
   ddl.push(`CREATE TABLE IF NOT EXISTS ${t} (id INTEGER PRIMARY KEY AUTOINCREMENT, ${cols}, created_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
 }
 ddl.push('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);');
-ddl.push('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE COLLATE NOCASE, name TEXT, role TEXT, salt TEXT, hash TEXT, active INTEGER DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);');
+ddl.push('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE COLLATE NOCASE, name TEXT, role TEXT, salt TEXT, hash TEXT, active INTEGER DEFAULT 1, shift TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);');
 ddl.push('CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT DEFAULT CURRENT_TIMESTAMP, user_id INTEGER, user_name TEXT, tbl TEXT, row_id INTEGER, label TEXT, action TEXT, changes TEXT);');
 ddl.push('CREATE TABLE IF NOT EXISTS work_days (user_id INTEGER, day TEXT, first_seen TEXT, PRIMARY KEY (user_id, day));');
 ddl.push('CREATE INDEX IF NOT EXISTS ix_receipts_order ON receipts(order_inv);');
 ddl.push('CREATE INDEX IF NOT EXISTS ix_purchases_order ON purchases(order_inv);');
 ddl.push('CREATE INDEX IF NOT EXISTS ix_orders_inv ON orders(inv);');
 db.exec(ddl.join('\n'));
+// older databases: users gained a personal shift
+if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'shift')) db.exec('ALTER TABLE users ADD COLUMN shift TEXT');
 // add columns introduced after a database was first created
 for (const [t, sc] of Object.entries(SCHEMA)) {
   const have = new Set(db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name));
