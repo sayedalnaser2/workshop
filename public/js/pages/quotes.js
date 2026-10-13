@@ -147,7 +147,7 @@ async function editor(el, id) {
       costTotal += c; $('[data-cost]', tr).textContent = c ? `cost ≈ ${money(c, 2)}` : '';
       tr.classList.toggle('manual', !!it.manual);
       const fitEl = $('[data-fit]', tr); if (fitEl) { const gn = glazingNote(m, S.glass_types.find((g) => g.id === Number(it.glass_id))); fitEl.textContent = gn?.best ? `bead ${gn.best.codes[0]} · ${gn.best.outerCode}+${gn.best.innerCode}` : gn ? '⚠ glass does not fit' : ''; fitEl.title = gn?.text || ''; fitEl.style.color = gn && !gn.best ? 'var(--bad)' : ''; }
-      const dr = $('[data-draw]', tr); if (dr) { const key = [it.model_id, it.w, it.h, it.glass_id, it.colour || q.colour, it.hand, it.swing].join('|'); if (dr.dataset.k !== key) { dr.dataset.k = key; dr.innerHTML = m ? drawModel(m.kind, it.w || m.def_w, it.h || m.def_h, { dims: false, colour: it.colour || q.colour, glass: S.glass_types.find((g) => g.id === Number(it.glass_id))?.name, hand: it.hand, swing: it.swing }) : ''; } }
+      const dr = $('[data-draw]', tr); if (dr) { const key = [it.model_id, it.w, it.h, it.glass_id, it.colour || q.colour, it.hand, it.swing].join('|'); if (dr.dataset.k !== key) { dr.dataset.k = key; dr.innerHTML = m ? drawModel(m.kind, it.w || m.def_w, it.h || m.def_h, { dims: false, colour: it.colour || q.colour, glass: S.glass_types.find((g) => g.id === Number(it.glass_id))?.name, hand: it.hand, swing: it.swing, layout: m.spec?.layout }) : ''; } }
     });
     $('#totals', el).innerHTML = `
       <div class="row"><span>Items total</span><b id="t_sub">${money(T.subtotal)}</b></div>

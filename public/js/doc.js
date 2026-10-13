@@ -18,7 +18,7 @@ export const L = (key, en) => bi(en, AR[key]);
 
 export function docHeader(title, ar = '', sub = '') {
   const c = S.settings.company || {};
-  return `<div class="dh"><img src="/img/logo.png" alt="${esc(c.name)}"><div class="co"><b>${esc(c.name)}</b><br>${esc(c.name_ar || '')}${c.cr ? `<br>CR ${esc(c.cr)} <span class="ar">${AR.cr}</span>` : ''}${c.vat_no ? `<br><b>VAT No. ${esc(c.vat_no)}</b> <span class="ar">${AR.vatNo}</span>` : ''}${c.address ? `<br>${esc(c.address)}` : ''}<br>${esc(c.phones || '')}<br>${esc(c.email || '')}</div></div><h2>${esc(title)}</h2>${ar ? `<div class="ar-title">${ar}</div>` : ''}${sub}`;
+  return `<div class="dh"><img src="/logo?v=${S.settings.logo?.v || 0}" alt="${esc(c.name)}"><div class="co"><b>${esc(c.name)}</b><br>${esc(c.name_ar || '')}${c.cr ? `<br>CR ${esc(c.cr)} <span class="ar">${AR.cr}</span>` : ''}${c.vat_no ? `<br><b>VAT No. ${esc(c.vat_no)}</b> <span class="ar">${AR.vatNo}</span>` : ''}${c.address ? `<br>${esc(c.address)}` : ''}<br>${esc(c.phones || '')}<br>${esc(c.email || '')}</div></div><h2>${esc(title)}</h2>${ar ? `<div class="ar-title">${ar}</div>` : ''}${sub}`;
 }
 export function docFooter() {
   const c = S.settings.company || {};

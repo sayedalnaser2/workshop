@@ -270,3 +270,13 @@ table.mini { width: 100%; border-collapse: collapse; } .mini th { font-size: 11p
   .print-overlay { position: static; padding: 0; background: #fff; overflow: visible; }
   .print-overlay .printbar { display: none; }
 }
+
+/* dashboard notes */
+.notes { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.note-card { position: relative; border-radius: 6px; padding: 10px 12px 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); color: #2a2a2a; min-height: 74px; display: flex; flex-direction: column; gap: 6px; }
+.note-card.c-yellow { background: #fff3a8; } .note-card.c-blue { background: #cfe5ff; } .note-card.c-green { background: #d4f0c9; } .note-card.c-pink { background: #ffd6e3; }
+.note-card.done .ntext { text-decoration: line-through; opacity: .55; }
+.note-card .ntext { white-space: pre-wrap; flex: 1; padding-right: 54px; } .note-card small { opacity: .65; }
+.note-card .nact { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; opacity: 0; transition: opacity .15s; }
+.note-card:hover .nact, .note-card:focus-within .nact { opacity: 1; } .nact button { border: 0; background: rgba(255, 255, 255, .55); border-radius: 4px; cursor: pointer; padding: 1px 5px; font: inherit; }
+@media (hover: none) { .note-card .nact { opacity: 1; } }

@@ -44,6 +44,7 @@ const ROUTES = [
   { path: 'approvals', title: 'Approvals', icon: '✔', mod: 'approvals' },
   { path: 'audit', title: 'Audit Trail', icon: '☷', mod: 'audit' },
   { path: 'users', title: 'Users', icon: '⚿', mod: 'users' },
+  { path: 'about', title: 'About Us', icon: 'ℹ', mod: 'about' },
   { path: 'settings', title: 'Settings', icon: '⚙', mod: 'settings' },
 ];
 
@@ -64,6 +65,7 @@ $('#meBtn').onclick = () => {
 
 // Page modules are listed statically so the production build can bundle and split them.
 const PAGES = {
+  about: () => import('./pages/about.js'),
   activity: () => import('./pages/activity.js'),
   approvals: () => import('./pages/approvals.js'),
   audit: () => import('./pages/audit.js'),

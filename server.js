@@ -15,6 +15,7 @@ import { isOnTask, taskViews, taskView, myTasks, taskAction, logsFor, sessionsFo
 import { targetProgress, METRICS } from './src/targets.js';
 import { exportWorkbook } from './src/exporter.js';
 import { exportActivity } from './src/activity-export.js';
+import { purgeOldPhotos, photoStats } from './src/retention.js';
 import { quoteTotals, approvalFor, discountPct } from './public/js/calc.js';
 import { vatReport, orderVat } from './public/js/vat.js';
 import { audit, diff, labelOf, listAudit, notable } from './src/audit.js';
@@ -209,6 +210,18 @@ async function api(req, res, url) {
   if (p[0] === 'activity') {
     need(isAA); const q = url.searchParams; const today = new Date().toISOString().slice(0, 10);
     return send(res, 200, activity(q.get('from') || today, q.get('to') || today, q.get('user') ? Number(q.get('user')) : null));
+  }
+  if (p[0] === 'photo-stats') { need(role === 'admin'); return send(res, 200, photoStats(Number(getSetting('photo_retention_months')) || 0)); }
+  if (p[0] === 'purge-photos' && m === 'POST') { need(role === 'admin'); const n = await purgeOldPhotos(Number(getSetting('photo_retention_months')) || 0, filesDir()); audit(user, 'attachments', null, 'deleted', `${n} old photo(s) removed`); return send(res, 200, { deleted: n }); }
+  if (p[0] === 'logo') { // the company logo shown on the login page and printouts
+    need(role === 'admin');
+    if (m === 'DELETE') { await unlink(path.join(filesDir(), 'logo.bin')).catch(() => {}); setSetting('logo', null); audit(user, 'settings', null, 'updated', 'Logo reset'); return send(res, 200, { ok: true }); }
+    if (m === 'POST') {
+      const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase(); if (!['image/png', 'image/jpeg', 'image/webp'].includes(mime)) throw bad('The logo must be a PNG, JPG or WebP picture.');
+      const buf = await readBody(req, 3e6); if (!buf.length) throw bad('Empty file.');
+      await mkdir(filesDir(), { recursive: true }); await writeFile(path.join(filesDir(), 'logo.bin'), buf); setSetting('logo', { mime, v: Date.now() });
+      audit(user, 'settings', null, 'updated', 'Logo changed'); return send(res, 200, { ok: true, v: getSetting('logo').v });
+    }
   }
   if (p[0] === 'overtime' && m === 'POST') return send(res, 200, overtimeAction(user, await readJson(req)));
   if (p[0] === 'attendance-from-tasks') { // what each person did per day, to fill the attendance sheet
@@ -405,7 +418,7 @@ async function api(req, res, url) {
     if (!acc || (m !== 'GET' && acc !== 'rw')) throw forbid();
     const worker = role === 'worker';
     // a worker's calendar only holds the jobs they are on
-    const visible = (r) => !(worker && t === 'events') || (r.team || []).map(Number).includes(user.id);
+    const visible = (r) => (!(worker && t === 'events') || (r.team || []).map(Number).includes(user.id)) && (!(worker && t === 'notes') || ['all', 'workers'].includes(r.audience || 'all'));
     if (!id && m === 'GET') return send(res, 200, worker ? listRows(t).filter(visible).map((r) => redact(t, r)) : listRows(t));
     if (id && m === 'GET') { const r = getRow(t, id); return r && visible(r) ? send(res, 200, worker ? redact(t, r) : r) : send(res, 404, { error: 'Not found' }); }
     if (!id && m === 'POST') {
@@ -417,6 +430,7 @@ async function api(req, res, url) {
         if (t === 'quotes') quoteApproval(body, null, user);
         if (t === 'surveys') { body.surveyor = body.surveyor || user.name; body.status = body.status || 'open'; }
         if (t === 'events') body.status = body.status || 'planned';
+        if (t === 'notes') { body.author = user.name; body.author_id = user.id; body.audience = body.audience || 'staff'; }
         if (t === 'credit_notes') {
           Object.assign(body, creditTotals(body)); checkCredit(body);
           body.status = user.role === 'admin' || !approvalCfg().credit_notes ? 'approved' : 'pending'; body.requested_by = user.name;
@@ -471,6 +485,11 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
     if (url.pathname === '/healthz') return await send(res, 200, { ok: true });
+    if (url.pathname === '/logo') { // public: the login page needs it before anyone is signed in
+      const lg = getSetting('logo'); const own = lg?.mime ? await readFile(path.join(filesDir(), 'logo.bin')).catch(() => null) : null;
+      const buf = own || await readFile(path.join(PUBLIC, 'img/logo.png'));
+      return await send(res, 200, buf, { 'Content-Type': own ? lg.mime : 'image/png', 'Cache-Control': 'no-cache', ETag: `"logo-${own ? lg.v : 'default'}"` });
+    }
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
     return await serveStatic(req, res, decodeURIComponent(url.pathname));
   } catch (e) {
@@ -482,6 +501,7 @@ server.keepAliveTimeout = 65000;
 server.listen(PORT, () => console.log(`Workshop running on http://localhost:${PORT}${PUBLIC.endsWith('dist') ? ' (production build)' : ' (development, unbundled)'}`));
 
 // a consistent copy of the database every day (kept for 14 days), and tidy-up on shutdown
-const backup = () => runBackup().then((n) => n && console.log(`Backup saved: ${n}`)).catch((e) => console.error('Backup failed:', e.message));
+const purge = () => purgeOldPhotos(Number(getSetting('photo_retention_months')) || 0, filesDir()).then((n) => n && console.log(`Removed ${n} old photo(s)`)).catch((e) => console.error('Photo clean-up failed:', e.message));
+const backup = () => { purge(); return runBackup().then((n) => n && console.log(`Backup saved: ${n}`)).catch((e) => console.error('Backup failed:', e.message)); };
 setTimeout(backup, 5000).unref(); setInterval(backup, 6 * 3600e3).unref();
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { db.exec('PRAGMA optimize'); } catch {} server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); });

@@ -263,3 +263,27 @@ test('targets and prizes: only the admin sets them, workers see their own progre
   assert.ok((await call('wasim', 'GET', '/api/targets')).data.progress.find((p) => p.target.id === t.id).award);
   assert.equal((await call('boss', 'POST', '/api/target-awards', { target_id: t.id, user_id: after.user_id, period_key: after.period.key })).data.removed, true); // toggles
 });
+
+test('logo: admin only, picture types only, public /logo serves it, reset restores the default', async () => {
+  const up = (user, type) => fetch(base + '/api/logo', { method: 'POST', headers: { 'Content-Type': type, Cookie: jar[user] }, body: PNG });
+  assert.equal((await up('amina', 'image/png')).status, 403);
+  assert.equal((await up('boss', 'text/html')).status, 400);
+  assert.equal((await up('boss', 'image/png')).status, 200);
+  const r = await fetch(base + '/logo'); assert.equal(r.status, 200); assert.equal(r.headers.get('content-type'), 'image/png');
+  assert.equal((await call('boss', 'DELETE', '/api/logo')).status, 200);
+});
+
+test('photo retention: stats and purge are admin only; settings keep the months', async () => {
+  assert.equal((await call('amina', 'GET', '/api/photo-stats')).status, 403);
+  assert.equal((await call('amina', 'POST', '/api/purge-photos')).status, 403);
+  assert.equal((await call('boss', 'GET', '/api/photo-stats')).status, 200);
+  assert.equal((await call('boss', 'POST', '/api/purge-photos')).data.deleted, 0); // nothing is old yet
+});
+
+test('dashboard notes: workers only see notes meant for them', async () => {
+  await call('boss', 'POST', '/api/t/notes', { text: 'Staff only', audience: 'staff' });
+  await call('boss', 'POST', '/api/t/notes', { text: 'For the team', audience: 'workers' });
+  const w = (await call('wasim', 'GET', '/api/t/notes')).data.map((n) => n.text);
+  assert.ok(w.includes('For the team')); assert.ok(!w.includes('Staff only'));
+  assert.ok((await call('amina', 'GET', '/api/t/notes')).data.map((n) => n.text).includes('Staff only'));
+});

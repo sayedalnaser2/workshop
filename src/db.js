@@ -124,6 +124,12 @@ export const DEFAULT_SETTINGS = {
     '- In the event of payment by Benefit App, please send a copy of the transaction via WhatsApp to +973 36645548.',
   ],
   bar_kerf: 0.5,
+  locations: ['Living room', 'Majlis', 'Dining room', 'Master bedroom', 'Bedroom 1', 'Bedroom 2', 'Bedroom 3', 'Maid room', 'Kitchen', 'Bathroom', 'Main entrance', 'Balcony', 'Staircase', 'Laundry', 'Store room', 'Garage', 'Office', 'Roof'],
+  photo_retention_months: 6,
+  accessory_markup: 25,
+  glass_sheet: { w: 321, h: 225 },
+  discount_mode: 'after',
+  about: { text: '', services: ['Aluminium windows and doors', 'Glass partitions, shower screens and railings', 'Curtain wall and shop fronts', 'Kitchen cabinets and countertops'], mission: '' },
   intro_line: 'Fabrication of aluminium with all accessories',
 };
 for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) if (getSetting(k) === null) setSetting(k, v);

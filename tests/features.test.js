@@ -128,3 +128,13 @@ test('cutting list: gaskets for the glass thickness are added to the quotation p
   assert.deepEqual(g.map((p) => p.label), ['Gasket B (E2112)', 'Gasket E (E2103)']);
   assert.equal(g[0].qty, 7.44); // pane 93×93 cm → 3.72 m round it, two windows
 });
+
+test('custom designs: dividers make panes, formulas cover the frame and every pane', async () => {
+  const d = await import('../public/js/designer.js');
+  let L = d.split(d.newLayout(), '', 'v', 0.6); L = d.split(L, 'a', 'h', 0.35); L = d.setType(L, 'b', 'SR');
+  assert.equal(d.leaves(L).length, 3); assert.equal(d.dividers(L).length, 2);
+  const sp = d.layoutToSpec(L, { frame: 1, sash: 2, mullion: 3 }, {});
+  const r = computeModel({ spec: sp }, 200, 150, { profiles: [{ id: 1 }, { id: 2 }, { id: 3 }], accessories: [] });
+  assert.equal(r.glass.length, 3); assert.ok(r.glass.every((g) => g.w > 0 && g.h > 0));
+  assert.equal(d.leaves(d.merge(L, 'a')).length, 2);
+});
