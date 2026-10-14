@@ -51,7 +51,7 @@ export async function exportWorkbook() {
   // ---- one sheet per quotation, same cell layout as "Q26 70"
   const used = new Set(['Setup', 'Orders List', 'Rec.List', 'Pay.List', 'Pur.List']);
   for (const q of db.prepare('SELECT * FROM quotes ORDER BY date, id').all().map((x) => ({ ...x, items: JSON.parse(x.items || '[]') }))) {
-    let name = /^Q\d{4}\d{3}$/.test(q.number) ? `Q${q.number.slice(1, 3)} ${q.number.slice(-3)}` : `Q00 ${q.number}`.slice(0, 31);
+    let name = /^\d{6}$/.test(q.number) ? `Q${q.number.slice(0, 2)} ${q.number.slice(2)}` : /^Q\d{4}\d{3}$/.test(q.number) ? `Q${q.number.slice(1, 3)} ${q.number.slice(-3)}` : `Q00 ${q.number}`.slice(0, 31);
     for (let n = 2; used.has(name); n++) name = `${name.replace(/ \(\d+\)$/, '')} (${n})`;
     used.add(name);
     const ws = wb.addWorksheet(name);

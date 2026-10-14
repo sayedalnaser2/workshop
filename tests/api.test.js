@@ -45,12 +45,12 @@ test('roles are enforced on the server', async () => {
 });
 test('quotation → order → receipt → balance, with automatic numbers', async () => {
   const q = (await call('amina', 'POST', '/api/t/quotes', { client: 'Test Co', date: '2026-10-11', vat_rate: 10, vat_waived: 0, discount: 0, items: [{ w: 100, h: 150, desc: 'Window', qty: 2, price: 100 }] })).data;
-  assert.match(q.number, /^Q2610\d{3}$/);
+  assert.match(q.number, /^26\d{4}$/);
   const o = (await call('amina', 'POST', `/api/quotes/${q.id}/to-order`, {})).data;
-  assert.match(o.inv, /^I2610\d{3}$/); assert.equal(o.amount, 220); invNo = o.inv;
+  assert.match(o.inv, /^26\d{4}$/); assert.equal(o.amount, 220); invNo = o.inv;
   assert.equal((await call('amina', 'POST', `/api/quotes/${q.id}/to-order`, {})).status, 400); // only once
   const r = await call('amina', 'POST', '/api/t/receipts', { order_inv: o.inv, client: 'Test Co', amount: 100, method: 'Cash', date: '2026-10-11' });
-  assert.equal(r.status, 201); assert.match(r.data.no, /^R \d{3}$/);
+  assert.equal(r.status, 201); assert.match(r.data.no, /^26\d{4}$/);
   const l = (await call('amina', 'GET', '/api/ledger')).data.find((x) => x.inv === o.inv);
   assert.equal(l.paid, 100); assert.equal(l.balance, 120);
 });
@@ -117,7 +117,7 @@ test('a discount over the limit waits for the admin; credit notes reduce the bal
   const o = (await call('amina', 'GET', '/api/ledger')).data.find((x) => x.quote_no === q.number);
   assert.ok(o.vat > 0 || o.vat === 0); // VAT saved on the order for the tax report
   const cn = await call('amina', 'POST', '/api/t/credit_notes', { order_inv: o.inv, client: o.client, date: '2026-10-12', vat_rate: 10, reason: 'Door returned', lines: [{ desc: 'Door returned', qty: 1, price: 100 }] });
-  assert.equal(cn.status, 201); assert.equal(cn.data.status, 'pending'); assert.equal(cn.data.total, 110); assert.match(cn.data.no, /^CN\d{4}\d{3}$/);
+  assert.equal(cn.status, 201); assert.equal(cn.data.status, 'pending'); assert.equal(cn.data.total, 110); assert.match(cn.data.no, /^26\d{4}$/);
   assert.equal((await call('amina', 'GET', '/api/ledger')).data.find((x) => x.inv === o.inv).balance, o.balance); // not yet
   assert.equal((await call('boss', 'POST', `/api/approvals/credit_notes/${cn.data.id}`, { decision: 'approve' })).data.status, 'approved');
   const after = (await call('amina', 'GET', '/api/ledger')).data.find((x) => x.inv === o.inv);

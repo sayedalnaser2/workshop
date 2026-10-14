@@ -140,20 +140,17 @@ const ym = (date) => {
   return String(d.getFullYear()).slice(2) + pad(d.getMonth() + 1, 2);
 };
 
-/** Peek or allocate the next document number. kind: quote | invoice | receipt | payment */
+/**
+ * Peek or allocate the next document number: the two-digit year followed by a four-digit running number (260001, 260002 …).
+ * Every kind (quote, invoice, receipt, payment, po, credit) counts on its own and starts again at 0001 on 1 January.
+ */
 export function nextNumber(kind, date, consume = false) {
-  const c = getSetting('counters');
-  const n = c[kind] || 1;
-  if (consume) { c[kind] = n + 1; setSetting('counters', c); }
-  switch (kind) {
-    case 'quote': return `Q${ym(date)}${pad(n)}`;
-    case 'invoice': return `I${ym(date)}${pad(n)}`;
-    case 'receipt': return `R ${pad(n)}`;
-    case 'payment': return `P ${pad(n)}`;
-    case 'po': return `PO${ym(date)}${pad(n)}`;
-    case 'credit': return `CN${ym(date)}${pad(n)}`;
-  }
-  throw new Error('bad kind');
+  if (!['quote', 'invoice', 'receipt', 'payment', 'po', 'credit'].includes(kind)) throw new Error('bad kind');
+  const c = getSetting('counters'); const yy = String(new Date().getFullYear()).slice(2);
+  const was = (c.year || {})[kind];
+  const n = was && was !== yy ? 1 : (c[kind] || 1); // a new year starts again at 1; a counter with no year recorded yet keeps its value
+  if (consume) { c[kind] = n + 1; c.year = { ...(c.year || {}), [kind]: yy }; setSetting('counters', c); }
+  return `${yy}${pad(n, 4)}`;
 }
 
 const enc = (t, row) => {

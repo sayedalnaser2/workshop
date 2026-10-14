@@ -180,3 +180,13 @@ test('3D kitchen: each drawer and door can open on its own', async () => {
   assert.equal(trays({ '0|0': 1, '0|0|d0': 0 }).length, 2); // the cabinet is open but one drawer is held shut
   assert.ok(scene(spec, { '0|1|f1': 1 }).some((b) => b.ref.front === 'f1' && b.corners.some((c, i, a) => c[2] !== a[0][2])));
 });
+
+test('document numbers: two-digit year + four digits, each kind counts on its own and restarts every year', async () => {
+  const { nextNumber } = await import('../src/db.js'); const { getSetting, setSetting } = await import('../src/db.js');
+  const yy = String(new Date().getFullYear()).slice(2);
+  const c = getSetting('counters'); setSetting('counters', { ...c, quote: 7, year: { ...(c.year || {}), quote: yy } });
+  assert.equal(nextNumber('quote'), `${yy}0007`); assert.equal(nextNumber('quote', null, true), `${yy}0007`); assert.equal(nextNumber('quote'), `${yy}0008`);
+  const c2 = getSetting('counters'); setSetting('counters', { ...c2, quote: 150, year: { ...(c2.year || {}), quote: '25' } }); // last used in 2025
+  assert.equal(nextNumber('quote', null, true), `${yy}0001`); assert.equal(nextNumber('quote'), `${yy}0002`);
+  assert.match(nextNumber('invoice'), /^\d{6}$/); assert.match(nextNumber('receipt'), /^\d{6}$/);
+});
