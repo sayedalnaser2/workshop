@@ -122,11 +122,14 @@ $('#menuBtn').onclick = () => $('#side').classList.toggle('open');
 // ------------------------------------------------------------------ auth
 const loginEl = $('#login'); const appEl = $('#app');
 async function boot() {
+  // ask for the signed-in user and the shared data at the same time (and warm the first page's code) instead of one after the other
+  const early = fetch('/api/bootstrap', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).catch(() => null); // plain fetch: a signed-out 401 here must not trigger the auth-lost handler
   const me = await api.get('me');
   if (!me.loggedIn) return showLogin(me.needsSetup);
   S.me = me.user; buildNav();
   loginEl.hidden = true; appEl.hidden = false;
-  await refresh();
+  const first = ROUTES.find((x) => !x.group && x.path === location.hash.replace(/^#\/?/, '').split('/')[0]) || ROUTES[0]; PAGES[first.mod]?.().catch(() => {});
+  const data = await early; if (data) Object.assign(S, data); else await refresh();
   route();
 }
 function showLogin(needsSetup) {

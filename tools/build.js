@@ -21,6 +21,9 @@ const jsFile = find(js.metafile, /^app-.*\.js$/); const cssFile = find(css.metaf
 
 let html = await readFile(path.join(pub, 'index.html'), 'utf8');
 html = html.replace('/css/style.css', `/assets/${cssFile}`).replace('/js/app.js', `/assets/${jsFile}`);
+// the code is split into one small file per page; let the browser fetch them all in parallel right away instead of discovering them one after another
+const chunks = Object.keys(js.metafile.outputs).map((f) => path.basename(f)).filter((f) => /^chunk-.*\.js$/.test(f));
+html = html.replace('</head>', chunks.map((c) => `<link rel="modulepreload" href="/assets/${c}">`).join('') + '</head>');
 await writeFile(path.join(out, 'index.html'), html);
 await cp(path.join(pub, 'img'), path.join(out, 'img'), { recursive: true });
 console.log(`Built dist/: ${jsFile}, ${cssFile}`);
