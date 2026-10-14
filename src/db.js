@@ -71,6 +71,8 @@ ddl.push('CREATE INDEX IF NOT EXISTS ix_orders_inv ON orders(inv);');
 db.exec(ddl.join('\n'));
 // older databases: users gained a personal shift
 if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'shift')) db.exec('ALTER TABLE users ADD COLUMN shift TEXT');
+// … and personal permissions on top of the role
+if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'perms')) db.exec('ALTER TABLE users ADD COLUMN perms TEXT');
 // add columns introduced after a database was first created
 for (const [t, sc] of Object.entries(SCHEMA)) {
   const have = new Set(db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name));

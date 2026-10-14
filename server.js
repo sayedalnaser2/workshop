@@ -8,7 +8,7 @@ import {
   db, SCHEMA, getSetting, setSetting, nextNumber, insertRow, updateRow, deleteRow, getRow, listRows, tx,
 } from './src/db.js';
 import { needsSetup, syncEmployees, authenticate, createUser, updateUser, deleteUser, listUsers, setOwnPassword, makeToken, userFromToken, cookieOf, verifyOwnPassword } from './src/auth.js';
-import { tableAccess } from './public/js/perm.js';
+import { tableAccess, hasAny, hasEditAny, seesMoney } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
 import { seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets, seedBalexco, seedAluKitchen } from './src/seed.js';
 import { isOnTask, taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated, markPresent, shiftStatus, overtimeAction, dayReport } from './src/tasks.js';
@@ -98,7 +98,7 @@ function redact(table, r) {
     default: return r;
   }
 }
-const bootstrap = (role = 'admin') => role === 'worker' ? ({
+const bootstrap = (user = { role: 'admin' }) => user.role === 'worker' && !seesMoney(user) ? ({
   settings: Object.fromEntries(['colours', 'bar_kerf', 'min_offcut', 'leftover_pct'].map((k) => [k, getSetting(k)]).concat([['company', { name: getSetting('company')?.name }]])),
   price_items: [], profiles: listRows('profiles').map((r) => redact('profiles', r)), accessories: listRows('accessories').map((r) => redact('accessories', r)),
   glass_types: listRows('glass_types').map((r) => redact('glass_types', r)), models: listRows('models'), employees: [], next: {},
@@ -195,20 +195,22 @@ async function api(req, res, url) {
   const user = userFromToken(cookieOf(req, 'ws'));
   if (!user) return send(res, 401, { error: 'Not signed in.' });
   markPresent(user.id);
-  const role = user.role; const isAA = role === 'admin' || role === 'account';
+  const role = user.role; const isAA = hasAny(user, ['tasks']); // task managers (admin and accounts, or anyone given the Tasks page)
   const need = (ok) => { if (!ok) throw forbid(); };
+  const needAny = (...pages) => need(hasAny(user, pages)); // at least view access to one of these pages
+  const needEdit = (...pages) => need(hasEditAny(user, pages));
 
-  if (p[0] === 'bootstrap') return send(res, 200, bootstrap(role));
-  if (p[0] === 'summary') { need(isAA); return send(res, 200, summary()); }
-  if (p[0] === 'ledger') { need(isAA); return send(res, 200, ordersLedger()); }
+  if (p[0] === 'bootstrap') return send(res, 200, bootstrap(user));
+  if (p[0] === 'summary') { needAny('reports', 'orders', 'receipts', 'payments', 'cashbank', 'quotes'); return send(res, 200, summary()); }
+  if (p[0] === 'ledger') { needAny('orders', 'receipts', 'statements', 'reports', 'creditnotes', 'purchases', 'payments', 'cashbank', 'tasks'); return send(res, 200, ordersLedger()); }
 
   // --- tasks: workers use these endpoints (never the raw tables) so they only ever touch their own work
   if (p[0] === 'staff') return send(res, 200, listUsers().filter((u) => u.active).map((u) => (isAA ? { id: u.id, name: u.name, role: u.role } : { id: u.id, name: u.name }))); // names only for workers (calendar teams)
   if (p[0] === 'shift') return send(res, 200, shiftStatus(user));
   if (p[0] === 'my-tasks') return send(res, 200, myTasks(user));
-  if (p[0] === 'tasks-view') { need(isAA); return send(res, 200, taskViews()); }
+  if (p[0] === 'tasks-view') { needAny('tasks', 'orders', 'activity'); return send(res, 200, taskViews()); }
   if (p[0] === 'activity') {
-    need(isAA); const q = url.searchParams; const today = new Date().toISOString().slice(0, 10);
+    needAny('activity'); const q = url.searchParams; const today = new Date().toISOString().slice(0, 10);
     return send(res, 200, activity(q.get('from') || today, q.get('to') || today, q.get('user') ? Number(q.get('user')) : null));
   }
   if (p[0] === 'photo-stats') { need(role === 'admin'); return send(res, 200, photoStats(Number(getSetting('photo_retention_months')) || 0)); }
@@ -225,7 +227,7 @@ async function api(req, res, url) {
   }
   if (p[0] === 'overtime' && m === 'POST') return send(res, 200, overtimeAction(user, await readJson(req)));
   if (p[0] === 'attendance-from-tasks') { // what each person did per day, to fill the attendance sheet
-    need(isAA); const q = url.searchParams; const emp = getRow('employees', Number(q.get('employee_id'))); const month = String(q.get('month') || '').slice(0, 7);
+    needAny('employees'); const q = url.searchParams; const emp = getRow('employees', Number(q.get('employee_id'))); const month = String(q.get('month') || '').slice(0, 7);
     if (!emp || !/^\d{4}-\d\d$/.test(month)) throw bad('Employee and month are needed.');
     if (!emp.user_id) return send(res, 200, { linked: false, days: {} });
     const last = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5)), 0)).getUTCDate();
@@ -243,7 +245,7 @@ async function api(req, res, url) {
     audit(user, 'target_awards', row.id, 'created', `Prize given for ${b.period_key}`); return send(res, 201, row);
   }
   if (p[0] === 'activity.xlsx') {
-    need(isAA); const q = url.searchParams; const today = new Date().toISOString().slice(0, 10); const from = (q.get('from') || today).slice(0, 10); const to = (q.get('to') || today).slice(0, 10);
+    needAny('activity'); const q = url.searchParams; const today = new Date().toISOString().slice(0, 10); const from = (q.get('from') || today).slice(0, 10); const to = (q.get('to') || today).slice(0, 10);
     const buf = Buffer.from(await exportActivity(from, to, q.get('user') ? Number(q.get('user')) : null));
     return send(res, 200, buf, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="worker-activity-${from}_${to}.xlsx"` });
   }
@@ -257,7 +259,7 @@ async function api(req, res, url) {
 
   // --- approvals: discounts above the limit and credit notes made by Accounts wait for the admin
   if (p[0] === 'approvals') {
-    need(isAA);
+    needAny('approvals');
     if (!p[1] && m === 'GET') {
       const quotes = db.prepare("SELECT id, number, client, date, discount, approval, approval_note, items, vat_rate, vat_waived, prepared_by FROM quotes WHERE approval IN ('pending','rejected') ORDER BY id DESC").all().map((q) => ({ ...q, items: JSON.parse(q.items || '[]') })).map((q) => ({ id: q.id, number: q.number, client: q.client, date: q.date, discount: q.discount, pct: discountPct(q), total: quoteTotals(q).grand, approval: q.approval, note: q.approval_note, prepared_by: q.prepared_by }));
       const credits = db.prepare("SELECT id, no, client, date, order_inv, total, reason, status, requested_by, approval_note FROM credit_notes WHERE status IN ('pending','rejected') ORDER BY id DESC").all();
@@ -281,7 +283,7 @@ async function api(req, res, url) {
     return send(res, 200, listAudit({ table: q.get('table') || '', user: Number(q.get('user')) || 0, from: q.get('from') || '', to: q.get('to') || '', q: q.get('q') || '', limit: Number(q.get('limit')) || 100, offset: Number(q.get('offset')) || 0 }));
   }
   if (p[0] === 'vat-report' && m === 'GET') {
-    need(isAA); const q = url.searchParams;
+    needAny('reports'); const q = url.searchParams;
     const credits = listRows('credit_notes').filter((c) => c.status === 'approved');
     return send(res, 200, vatReport({ orders: listRows('orders'), quotes: listRows('quotes'), credits, purchases: listRows('purchases').filter((p) => !p.hidden), payments: listRows('payments'), settings: { vat_rate: getSetting('vat_rate'), purchase_vat_default: getSetting('purchase_vat_default') } }, q.get('from') || '', q.get('to') || ''));
   }
@@ -326,7 +328,7 @@ async function api(req, res, url) {
     const uid = p[1] ? Number(p[1]) : null;
     if (!uid && m === 'GET') return send(res, 200, listUsers());
     if (!uid && m === 'POST') { const b = await readJson(req); const u = createUser(b); audit(user, 'users', u.id, 'created', `${u.name} (${u.role})`); return send(res, 201, u); }
-    if (uid && m === 'PUT') { const b = await readJson(req); const before = listUsers().find((x) => x.id === uid); const u = updateUser(uid, b, user.id); audit(user, 'users', uid, 'updated', u.name, [...['name', 'username', 'role', 'active'].filter((k) => before && before[k] !== u[k]).map((k) => ({ f: k, from: String(before[k]), to: String(u[k]) })), ...(b.password ? [{ f: 'password', from: '', to: '(reset)' }] : [])]); return send(res, 200, u); }
+    if (uid && m === 'PUT') { const b = await readJson(req); const before = listUsers().find((x) => x.id === uid); const u = updateUser(uid, b, user.id); audit(user, 'users', uid, 'updated', u.name, [...['name', 'username', 'role', 'active'].filter((k) => before && before[k] !== u[k]).map((k) => ({ f: k, from: String(before[k]), to: String(u[k]) })), ...(b.password ? [{ f: 'password', from: '', to: '(reset)' }] : []), ...(JSON.stringify(before?.perms || null) !== JSON.stringify(u.perms || null) ? [{ f: 'permissions', from: JSON.stringify(before?.perms?.pages || {}), to: JSON.stringify(u.perms?.pages || {}) }] : [])]); return send(res, 200, u); }
     if (uid && m === 'DELETE') { const before = listUsers().find((x) => x.id === uid); deleteUser(uid, user.id); audit(user, 'users', uid, 'deleted', before?.name || ''); return send(res, 200, { ok: true }); }
   }
 
@@ -356,7 +358,7 @@ async function api(req, res, url) {
     return send(res, 200, out, { 'Content-Disposition': `attachment; filename="workshop-backup-${new Date().toISOString().slice(0, 10)}.json"` });
   }
   if (p[0] === 'export.xlsx') {
-    need(isAA);
+    needAny('reports');
     const buf = Buffer.from(await exportWorkbook());
     return send(res, 200, buf, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="TALENTS-export-${new Date().toISOString().slice(0, 10)}.xlsx"` });
   }
@@ -370,7 +372,7 @@ async function api(req, res, url) {
     finally { unlink(tmp).catch(() => {}); }
   }
   if (p[0] === 'assign-accounts' && m === 'POST') {
-    need(isAA);
+    needEdit('cashbank');
     const { account } = await readJson(req);
     if (!['cash', 'bank'].includes(account)) return send(res, 400, { error: 'account must be cash or bank' });
     const a = db.prepare("UPDATE receipts SET account=? WHERE account IS NULL OR account=''").run(account).changes;
@@ -379,7 +381,7 @@ async function api(req, res, url) {
   }
   // employee documents: raw upload / download, stored under DATA_DIR/files
   if (p[0] === 'employee-docs' && p[2] === 'file') {
-    need(isAA);
+    (m === 'GET' ? needAny : needEdit)('employees');
     const id = Number(p[1]); const d = getRow('employee_docs', id);
     if (!d) return send(res, 404, { error: 'Not found' });
     if (m === 'POST') {
@@ -395,7 +397,7 @@ async function api(req, res, url) {
     return send(res, 200, buf, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${encodeURIComponent(d.file_name || 'file')}"` });
   }
   if (p[0] === 'quotes' && p[2] === 'to-order' && m === 'POST') {
-    need(isAA);
+    needEdit('orders');
     const q = getRow('quotes', Number(p[1]));
     if (!q) return send(res, 404, { error: 'Quote not found' });
     if (q.order_inv) return send(res, 400, { error: `Already converted to ${q.order_inv}` });
@@ -414,13 +416,13 @@ async function api(req, res, url) {
   // --- generic CRUD
   if (p[0] === 't' && SCHEMA[p[1]]) {
     const t = p[1]; const id = p[2] ? Number(p[2]) : null;
-    const acc = tableAccess(role, t);
+    const acc = tableAccess(user, t);
     if (!acc || (m !== 'GET' && acc !== 'rw')) throw forbid();
-    const worker = role === 'worker';
+    const worker = role === 'worker'; const hide = worker && !seesMoney(user); // workers see no prices or costs unless they were given a money page
     // a worker's calendar only holds the jobs they are on
     const visible = (r) => (!(worker && t === 'events') || (r.team || []).map(Number).includes(user.id)) && (!(worker && t === 'notes') || ['all', 'workers'].includes(r.audience || 'all'));
-    if (!id && m === 'GET') return send(res, 200, worker ? listRows(t).filter(visible).map((r) => redact(t, r)) : listRows(t));
-    if (id && m === 'GET') { const r = getRow(t, id); return r && visible(r) ? send(res, 200, worker ? redact(t, r) : r) : send(res, 404, { error: 'Not found' }); }
+    if (!id && m === 'GET') return send(res, 200, worker ? listRows(t).filter(visible).map((r) => (hide ? redact(t, r) : r)) : listRows(t));
+    if (id && m === 'GET') { const r = getRow(t, id); return r && visible(r) ? send(res, 200, hide ? redact(t, r) : r) : send(res, 404, { error: 'Not found' }); }
     if (!id && m === 'POST') {
       const body = await readJson(req);
       const row = tx(() => {

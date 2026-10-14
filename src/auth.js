@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { db, getSetting, setSetting } from './db.js';
-import { ROLES } from '../public/js/perm.js';
+import { ROLES, PAGE_LABELS, LOCKED_PAGES } from '../public/js/perm.js';
 
 const secret = () => {
   let s = getSetting('session_secret');
@@ -8,7 +8,7 @@ const secret = () => {
   return s;
 };
 const hash = (pw, salt) => crypto.scryptSync(pw, salt, 64).toString('hex');
-const pub = (u) => { if (!u) return null; let shift = null; try { shift = u.shift ? JSON.parse(u.shift) : null; } catch {} return { id: u.id, username: u.username, name: u.name, role: u.role, active: u.active ? 1 : 0, created_at: u.created_at, shift }; };
+const pub = (u) => { if (!u) return null; let shift = null; try { shift = u.shift ? JSON.parse(u.shift) : null; } catch {} let perms = null; try { perms = u.perms ? JSON.parse(u.perms) : null; } catch {} return { id: u.id, username: u.username, name: u.name, role: u.role, active: u.active ? 1 : 0, created_at: u.created_at, shift, perms }; };
 
 // Databases from before user accounts had one shared password: keep it as the "admin" user.
 (function migrate() {
@@ -28,6 +28,8 @@ function validate({ username, name, role, password }, creating) {
 }
 /** Only the parts of a personal shift we understand. */
 const cleanShift = (s) => { const o = {}; if (/^\d{1,2}:\d{2}$/.test(s.start || '')) o.start = s.start; if (/^\d{1,2}:\d{2}$/.test(s.end || '')) o.end = s.end; if (Array.isArray(s.breaks)) o.breaks = s.breaks.filter((b) => b && /^\d{1,2}:\d{2}$/.test(b.from || '') && /^\d{1,2}:\d{2}$/.test(b.to || '')).map((b) => ({ from: b.from, to: b.to })); if (Array.isArray(s.days)) o.days = s.days.map(Number).filter((d) => d >= 0 && d <= 6); return o; };
+/** A person's own page settings: only known pages, only none / view / edit, never the admin-only pages. null when nothing differs from the role. */
+const cleanPerms = (p) => { const pages = {}; for (const [k, v] of Object.entries(p?.pages || {})) if (k in PAGE_LABELS && !LOCKED_PAGES.includes(k) && ['none', 'view', 'edit'].includes(v)) pages[k] = v; return Object.keys(pages).length ? { pages } : null; };
 const activeAdmins = (exceptId = 0) => db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin' AND active=1 AND id<>?").get(exceptId).n;
 
 const ROLE_TITLE = { admin: 'Admin', account: 'Accounts', worker: 'Worker' };
@@ -58,6 +60,7 @@ export function updateUser(id, d, selfId) {
   if (d.username && d.username.toLowerCase() !== cur.username.toLowerCase() && db.prepare('SELECT id FROM users WHERE username=? AND id<>?').get(d.username, id)) throw bad('That username is already taken.');
   db.prepare('UPDATE users SET username=?, name=?, role=?, active=? WHERE id=?').run(d.username ?? cur.username, d.name ?? cur.name, role, active, id);
   db.prepare('UPDATE employees SET name=?, active=? WHERE user_id=?').run(d.name ?? cur.name, active, id); // the employee follows the login
+  if ('perms' in d) db.prepare('UPDATE users SET perms=? WHERE id=?').run(d.perms && typeof d.perms === 'object' && role !== 'admin' ? JSON.stringify(cleanPerms(d.perms)) : null, id); // null = just follow the role
   if ('shift' in d) db.prepare('UPDATE users SET shift=? WHERE id=?').run(d.shift && typeof d.shift === 'object' ? JSON.stringify(cleanShift(d.shift)) : null, id); // null = the workshop's default hours
   if (d.password) { const salt = crypto.randomBytes(16).toString('hex'); db.prepare('UPDATE users SET salt=?, hash=? WHERE id=?').run(salt, hash(d.password, salt), id); }
   return getUser(id);

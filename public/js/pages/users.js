@@ -1,7 +1,7 @@
 import { S } from '../app.js';
 import { api, $, $$, esc, dmy, dataTable, editRow, confirmBox, toast, guard, badge, modal } from '../ui.js';
 import { cfgOf, parseBreaks } from '../shift.js';
-import { ROLES, ROLE_INFO } from '../perm.js';
+import { ROLES, ROLE_INFO, PAGE_LABELS, roleLevel } from '../perm.js';
 
 export async function render(el) {
   const rows = await api.get('users');
@@ -19,9 +19,9 @@ export async function render(el) {
   dataTable(t, {
     rows, search: ['name', 'username'], empty: 'No users.',
     cols: [{ key: 'name', label: 'Name', render: (r) => `<b>${esc(r.name)}</b>${r.id === S.me.id ? ' <span class="muted">(you)</span>' : ''}` }, { key: 'username', label: 'Username' }, { key: 'role', label: 'Role', render: (r) => badge(ROLES[r.role], r.role === 'admin' ? 'bad' : r.role === 'account' ? 'blue' : '') }, { key: 'active', label: 'Status', render: (r) => (r.active ? badge('Active', 'ok') : badge('Switched off', 'warn')) }, { key: 'shift', label: 'Working hours', render: (r) => (r.shift ? `<b>${esc(r.shift.start || cfgOf(S.settings.shift).start)}–${esc(r.shift.end || cfgOf(S.settings.shift).end)}</b>` : '<span class="muted">workshop hours</span>') }, { key: 'created_at', label: 'Created', render: (r) => dmy((r.created_at || '').slice(0, 10)) }],
-    onRow: open, actions: (r) => `<button class="btn sm" data-act="hours" title="This person's own shift">Hours</button> ${r.id === S.me.id ? '' : '<button class="btn sm danger" data-act="del">Delete</button>'}`,
+    onRow: open, actions: (r) => `<button class="btn sm" data-act="perms" title="What this person can open and change, on top of their role">Permissions${r.perms?.pages ? ' ●' : ''}</button> <button class="btn sm" data-act="hours" title="This person's own shift">Hours</button> ${r.id === S.me.id ? '' : '<button class="btn sm danger" data-act="del">Delete</button>'}`,
   });
-  t.addEventListener('act', guard(async (e) => { if (e.detail.act === 'hours') return shiftModal(e.detail.row, () => render(el)); if (e.detail.act === 'del' && await confirmBox(`Delete ${e.detail.row.name}? They will no longer be able to sign in.`)) { await api.del(`users/${e.detail.row.id}`); toast('Deleted'); render(el); } }));
+  t.addEventListener('act', guard(async (e) => { if (e.detail.act === 'perms') return permsModal(e.detail.row, () => render(el)); if (e.detail.act === 'hours') return shiftModal(e.detail.row, () => render(el)); if (e.detail.act === 'del' && await confirmBox(`Delete ${e.detail.row.name}? They will no longer be able to sign in.`)) { await api.del(`users/${e.detail.row.id}`); toast('Deleted'); render(el); } }));
 }
 
 /** One person's own working hours (start, end, breaks, days) — or back to the workshop's. */
@@ -38,5 +38,20 @@ function shiftModal(u, done) {
   modal({ title: 'Working hours', body: w, buttons: [{ label: 'Cancel' }, { label: 'Save', kind: 'primary', onClick: async () => {
     const shift = $('#sdef', w).checked ? null : { start: $('#s_start', w).value || base.start, end: $('#s_end', w).value || base.end, breaks: parseBreaks($('#s_br', w).value), days: $$('[data-day]', w).filter((x) => x.checked).map((x) => Number(x.dataset.day)) };
     await api.put(`users/${u.id}`, { shift }); toast('Working hours saved'); done();
+  } }] });
+}
+
+const LEVELS = { none: 'No access', view: 'View only', edit: 'Can edit' };
+const NAME_OF = { '': 'no access', view: 'view only', edit: 'can edit' };
+/** One person's own page access: follow the role, or set each page to no access / view only / can edit. */
+function permsModal(u, done) {
+  const own = u.perms?.pages || {}; const w = document.createElement('div');
+  if (u.role === 'admin') { w.innerHTML = '<p>Admins can do everything — their access cannot be limited here. Change their role first if you want to restrict them.</p>'; return modal({ title: `Permissions — ${u.name}`, body: w, buttons: [{ label: 'Close' }] }); }
+  w.innerHTML = `<p style="margin-top:0">Choose what <b>${esc(u.name)}</b> can open and change. “Role default” follows the <b>${esc(ROLES[u.role])}</b> role. Users, Settings and the audit trail always stay with the admin, and only the admin approves discounts and overtime.</p>
+    <div style="max-height:56vh;overflow:auto"><table class="grid"><thead><tr><th>Page</th><th>Role default</th><th>For this person</th></tr></thead><tbody>${Object.entries(PAGE_LABELS).map(([k, l]) => `<tr><td>${esc(l)}</td><td class="muted">${NAME_OF[roleLevel(u.role, k)]}</td><td><select data-pg="${k}" style="min-width:140px"><option value="">Role default</option>${Object.entries(LEVELS).map(([v, t]) => `<option value="${v}" ${own[k] === v ? 'selected' : ''}>${t}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+    <p class="muted" style="font-size:12px;margin-bottom:0">Giving a worker pages that show prices (quotations, orders, price list, purchasing, cash…) also lets them see prices and costs.</p>`;
+  modal({ title: `Permissions — ${u.name}`, body: w, buttons: [{ label: 'Cancel' }, { label: 'Reset to role', onClick: async () => { await api.put(`users/${u.id}`, { perms: null }); toast('Back to the role defaults'); done(); } }, { label: 'Save', kind: 'primary', onClick: async () => {
+    const pages = {}; for (const sel of $$('[data-pg]', w)) if (sel.value) pages[sel.dataset.pg] = sel.value;
+    await api.put(`users/${u.id}`, { perms: Object.keys(pages).length ? { pages } : null }); toast('Permissions saved'); done();
   } }] });
 }

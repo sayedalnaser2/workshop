@@ -20,6 +20,8 @@ npm run bench        # times the API and counts bytes: node tools/bench.mjs http
 
 On first visit you create the admin account (name, username, password); add everyone else under **Users**. Older databases that used one shared password keep it as the user `admin`.
 
+**Per-person permissions:** Users → **Permissions** lets the admin set each page to *No access / View only / Can edit* for one person on top of their role (the role stays the default). Users, Settings and the audit trail always stay admin-only; discount and overtime approval stay with the admin.
+
 | Role | Can |
 |---|---|
 | Admin | everything, incl. Users, Settings, Excel import, backup |

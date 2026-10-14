@@ -11,7 +11,7 @@ export async function render(el, [id]) {
   if (id) return editor(el, id === 'new' ? null : Number(id));
   const groups = {};
   for (const m of S.models) (groups[m.category || 'Other'] ||= []).push(m);
-  el.innerHTML = `<div class="ph"><h1>Models</h1><span class="sub">Window &amp; door templates — a drawing plus the formulas that turn any W×H into cut lengths, glass sizes and accessories</span><span class="grow"></span>${canWrite(S.me?.role, 'models') ? '<a class="btn primary" href="#/models/new">+ New model</a>' : ''}</div>` +
+  el.innerHTML = `<div class="ph"><h1>Models</h1><span class="sub">Window &amp; door templates — a drawing plus the formulas that turn any W×H into cut lengths, glass sizes and accessories</span><span class="grow"></span>${canWrite(S.me, 'models') ? '<a class="btn primary" href="#/models/new">+ New model</a>' : ''}</div>` +
     (Object.keys(groups).length ? Object.entries(groups).map(([g, ms]) => `<h3 style="margin:18px 0 8px">${esc(g)}</h3><div class="mgrid">${ms.map((m) => `<a class="card mcard" href="#/models/${m.id}" style="color:inherit">${drawModel(m.kind, m.def_w, m.def_h, { dims: false, layout: m.spec?.layout })}<b>${esc(m.name)}</b><span class="muted">${esc(m.series || '')} · ${fq(m.def_w)} × ${fq(m.def_h)} cm</span></a>`).join('')}</div>`).join('') : '<div class="card muted">No models yet.</div>');
 }
 
@@ -105,7 +105,7 @@ async function editor(el, id) {
   $('#designer', el).addEventListener('change', (e) => { if (e.target.matches('[data-ty]')) { m.spec.layout = setType(m.spec.layout, e.target.closest('tr').dataset.p, e.target.value); preview(); } });
   $('#designer', el).addEventListener('input', (e) => { if (e.target.matches('[data-fr]')) { m.spec.layout = setFraction(m.spec.layout, e.target.closest('tr').dataset.p, Number(e.target.value) / 100); e.target.nextElementSibling.textContent = e.target.value + '%'; preview(); } });
   drawSpec(); preview(); fitPanel(); designer();
-  const readOnly = !canWrite(S.me?.role, 'models');
+  const readOnly = !canWrite(S.me, 'models');
   if (readOnly) {
     el.insertAdjacentHTML('afterbegin', '<div class="card" style="margin-bottom:12px;border-color:var(--warn)">View only — your account cannot change models.</div>');
     $$('input,select,textarea,#save,#dup,#del,[data-add],[data-rm]', el).filter((x) => !['tw', 'th', 'tg', 'tc'].includes(x.id)).forEach((x) => (x.disabled = true));

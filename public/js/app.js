@@ -50,7 +50,7 @@ const ROUTES = [
 
 const nav = $('#nav');
 function buildNav() {
-  const role = S.me?.role; const allowed = ROUTES.filter((r) => r.group || canPage(role, r.path));
+  const role = S.me?.role; const allowed = ROUTES.filter((r) => r.group || canPage(S.me, r.path));
   // drop group headings that have no pages left
   const items = allowed.filter((r, i) => !r.group || (allowed[i + 1] && !allowed[i + 1].group));
   nav.innerHTML = items.map((r) => (r.group ? `<div class="grp">${r.group}</div>` : `<a href="#/${r.path}" data-p="${r.path}"><span style="width:18px;text-align:center">${r.icon}</span>${esc(r.title)}</a>`)).join('');
@@ -101,7 +101,7 @@ async function route() {
   const hash = location.hash.replace(/^#\/?/, '');
   const [path, ...rest] = hash.split('/');
   const r = ROUTES.find((x) => !x.group && x.path === path) || ROUTES[0];
-  if (!canPage(S.me?.role, r.path)) { $('#view').innerHTML = '<div class="card"><h3>No access</h3><p class="muted">Your account (' + esc(ROLES[S.me?.role] || '') + ') does not include this page.</p><a class="btn" href="#/">Back to the dashboard</a></div>'; $$('#nav a').forEach((a) => a.classList.remove('on')); return; }
+  if (!canPage(S.me, r.path)) { $('#view').innerHTML = '<div class="card"><h3>No access</h3><p class="muted">Your account (' + esc(ROLES[S.me?.role] || '') + ') does not include this page.</p><a class="btn" href="#/">Back to the dashboard</a></div>'; $$('#nav a').forEach((a) => a.classList.remove('on')); return; }
   $$('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.p === r.path));
   $('#pageTitle').textContent = r.title; document.title = r.title + ' · Workshop';
   $('#side').classList.remove('open');

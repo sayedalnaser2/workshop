@@ -17,7 +17,7 @@ const timeRange = (e) => (e.start ? hm(e.start) + (e.end ? '–' + hm(e.end) : '
 export const waLink = (mobile, text) => { let n = String(mobile || '').replace(/\D/g, ''); if (n.length === 8) n = '973' + n; return n ? `https://wa.me/${n}?text=${encodeURIComponent(text)}` : ''; };
 
 export async function render(el) {
-  const manage = canWrite(S.me.role, 'events'); let view = sessionStorage.getItem('cal-view') || 'month'; let cur = today();
+  const manage = canWrite(S.me, 'events'); let view = sessionStorage.getItem('cal-view') || 'month'; let cur = today();
   const draw = async () => {
     const [events, staff, due] = await Promise.all([api.get('t/events'), api.get('staff'), (S.me.role === 'worker' ? api.get('my-tasks') : api.get('tasks-view')).catch(() => [])]);
     const tasks = due.filter((t) => t.due && t.status !== 'done' && !t.hidden);
@@ -53,7 +53,7 @@ export async function render(el) {
 
 /** Create / edit / view a calendar event. Warns when a team member is already booked. */
 export async function openEventDialog({ event = null, date = today(), order = null, staff = null, events = null, onSaved }) {
-  const manage = canWrite(S.me.role, 'events');
+  const manage = canWrite(S.me, 'events');
   staff ||= await api.get('staff'); events ||= await api.get('t/events').catch(() => []);
   const ledger = manage ? await api.get('ledger').catch(() => []) : [];
   const e = event || { date, end_date: '', start: '08:00', end: '', kind: order ? 'install' : 'install', title: '', order_inv: order?.inv || '', client: order?.client || '', site: order?.site || '', mobile: order?.mobile || '', team: [], status: 'planned', note: '' };

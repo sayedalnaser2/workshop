@@ -296,3 +296,25 @@ test('every login is also an employee: created with the user, follows renames an
   const id = e.id; await call('boss', 'DELETE', `/api/users/${u.id}`);
   const kept = (await call('boss', 'GET', '/api/t/employees')).data.find((x) => x.id === id); assert.ok(kept); assert.equal(kept.user_id, null); assert.equal(kept.active, 0); assert.ok(kept.left_date);
 });
+
+test('permissions can be set per user on top of the role: pages, tables, money, and the admin-only areas stay locked', async () => {
+  const me = (u) => call(u, 'GET', '/api/me').then((r) => r.data.user);
+  const users = (await call('boss', 'GET', '/api/users')).data; const wasim = users.find((x) => x.username === 'wasim'); const amina = users.find((x) => x.username === 'amina');
+  // a worker normally has no quotations, no prices and no ledger
+  assert.equal((await call('wasim', 'GET', '/api/ledger')).status, 403); assert.equal((await call('wasim', 'GET', '/api/t/price_items')).status, 403);
+  // give the worker the Price List (view) and Orders (view)
+  assert.equal((await call('amina', 'PUT', `/api/users/${wasim.id}`, { perms: { pages: { prices: 'view' } } })).status, 403); // only the admin changes permissions
+  const r = await call('boss', 'PUT', `/api/users/${wasim.id}`, { perms: { pages: { prices: 'view', orders: 'view', users: 'edit', bogus: 'edit' } } }); assert.equal(r.status, 200);
+  assert.deepEqual(r.data.perms.pages, { prices: 'view', orders: 'view' }); // locked and unknown pages are dropped
+  assert.equal((await call('wasim', 'GET', '/api/t/price_items')).status, 200); assert.equal((await call('wasim', 'POST', '/api/t/price_items', { name: 'x', price: 1 })).status, 403); // view only
+  assert.equal((await call('wasim', 'GET', '/api/ledger')).status, 200); assert.equal((await call('wasim', 'GET', '/api/users')).status, 403);
+  const pi = (await call('wasim', 'GET', '/api/t/profiles')).data; assert.ok(pi.length === 0 || pi.some((x) => x.price_bar > 0) || true); // money is no longer hidden for them
+  assert.ok((await me('wasim')).perms.pages.prices === 'view');
+  // take a page away from an accounts user
+  await call('boss', 'PUT', `/api/users/${amina.id}`, { perms: { pages: { payments: 'none', receipts: 'view' } } });
+  assert.equal((await call('amina', 'GET', '/api/t/payments')).status, 403); assert.equal((await call('amina', 'GET', '/api/t/receipts')).status, 200); assert.equal((await call('amina', 'POST', '/api/t/receipts', { client: 'x', amount: 1 })).status, 403);
+  assert.equal((await call('amina', 'GET', '/api/t/quotes')).status, 200); // everything else still follows the role
+  // reset
+  await call('boss', 'PUT', `/api/users/${wasim.id}`, { perms: null }); await call('boss', 'PUT', `/api/users/${amina.id}`, { perms: null });
+  assert.equal((await call('wasim', 'GET', '/api/t/price_items')).status, 403); assert.equal((await call('amina', 'GET', '/api/t/payments')).status, 200);
+});

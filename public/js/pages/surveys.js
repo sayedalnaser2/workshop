@@ -41,7 +41,7 @@ async function editor(el, id) {
   const s = await api.get(`t/surveys/${id}`).catch(() => null);
   if (!s) { el.innerHTML = '<p class="err">Survey not found.</p>'; return; }
   s.items = (s.items?.length ? s.items : [blank()]).map((i) => ({ ...i, uid: i.uid || uid() }));
-  const canQuote = canPage(S.me.role, 'quotes');
+  const canQuote = canPage(S.me, 'quotes');
   const models = S.models; const colours = S.settings.colours || [];
   el.innerHTML = `<div class="ph"><a class="btn" href="#/surveys">← Surveys</a><h1>${esc(s.client)}</h1>${s.quote_no ? badge('Quoted ' + s.quote_no, 'ok') : ''}<span class="grow"></span><span class="muted" id="saved"></span></div>
     <details class="card" ${s.site ? '' : 'open'}><summary style="cursor:pointer;font-weight:600">Customer & site — ${esc([s.site, s.mobile].filter(Boolean).join(' · ') || 'add details')}</summary><div class="form" style="margin-top:10px;grid-template-columns:repeat(3,1fr)"><label class="field"><span>Customer</span><input data-h="client" value="${esc(s.client)}"></label><label class="field"><span>Mobile</span><input data-h="mobile" type="tel" value="${esc(s.mobile || '')}"></label><label class="field"><span>Date</span><input data-h="date" type="date" value="${esc(s.date)}"></label><label class="field full"><span>Site / address</span><input data-h="site" value="${esc(s.site || '')}"></label><label class="field full"><span>General notes</span><textarea data-h="notes" rows="2">${esc(s.notes || '')}</textarea></label></div></details>
