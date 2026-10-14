@@ -287,3 +287,12 @@ test('dashboard notes: workers only see notes meant for them', async () => {
   assert.ok(w.includes('For the team')); assert.ok(!w.includes('Staff only'));
   assert.ok((await call('amina', 'GET', '/api/t/notes')).data.map((n) => n.text).includes('Staff only'));
 });
+
+test('every login is also an employee: created with the user, follows renames and deactivation, kept (as left) when the user is deleted', async () => {
+  const u = (await call('boss', 'POST', '/api/users', { username: 'sami', name: 'Sami Carpenter', role: 'worker', password: 'sami1234' })).data;
+  const find = async () => (await call('boss', 'GET', '/api/t/employees')).data.find((e) => e.user_id === u.id);
+  let e = await find(); assert.ok(e); assert.equal(e.name, 'Sami Carpenter'); assert.equal(e.active, 1); assert.equal(e.role, 'Worker');
+  await call('boss', 'PUT', `/api/users/${u.id}`, { name: 'Sami Ali', active: false }); e = await find(); assert.equal(e.name, 'Sami Ali'); assert.equal(e.active, 0);
+  const id = e.id; await call('boss', 'DELETE', `/api/users/${u.id}`);
+  const kept = (await call('boss', 'GET', '/api/t/employees')).data.find((x) => x.id === id); assert.ok(kept); assert.equal(kept.user_id, null); assert.equal(kept.active, 0); assert.ok(kept.left_date);
+});

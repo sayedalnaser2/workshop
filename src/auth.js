@@ -30,11 +30,23 @@ function validate({ username, name, role, password }, creating) {
 const cleanShift = (s) => { const o = {}; if (/^\d{1,2}:\d{2}$/.test(s.start || '')) o.start = s.start; if (/^\d{1,2}:\d{2}$/.test(s.end || '')) o.end = s.end; if (Array.isArray(s.breaks)) o.breaks = s.breaks.filter((b) => b && /^\d{1,2}:\d{2}$/.test(b.from || '') && /^\d{1,2}:\d{2}$/.test(b.to || '')).map((b) => ({ from: b.from, to: b.to })); if (Array.isArray(s.days)) o.days = s.days.map(Number).filter((d) => d >= 0 && d <= 6); return o; };
 const activeAdmins = (exceptId = 0) => db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin' AND active=1 AND id<>?").get(exceptId).n;
 
+const ROLE_TITLE = { admin: 'Admin', account: 'Accounts', worker: 'Worker' };
+/** Every login is also an employee: make sure each user has an employee record (matching a not-yet-linked employee of the same name, else creating one). */
+export function syncEmployees() {
+  const emps = db.prepare('SELECT id, name, user_id FROM employees').all();
+  for (const u of db.prepare('SELECT id, name, role, active FROM users').all()) {
+    if (emps.some((e) => e.user_id === u.id)) continue;
+    const same = emps.find((e) => !e.user_id && String(e.name || '').trim().toLowerCase() === String(u.name || '').trim().toLowerCase());
+    if (same) { db.prepare('UPDATE employees SET user_id=? WHERE id=?').run(u.id, same.id); same.user_id = u.id; }
+    else { const r = db.prepare('INSERT INTO employees(name,salary,active,user_id,role) VALUES(?,?,?,?,?)').run(u.name, 0, u.active ? 1 : 0, u.id, ROLE_TITLE[u.role] || u.role); emps.push({ id: Number(r.lastInsertRowid), name: u.name, user_id: u.id }); }
+  }
+}
 export function createUser(d) {
   validate(d, true);
   if (db.prepare('SELECT id FROM users WHERE username=?').get(d.username)) throw bad('That username is already taken.');
   const salt = crypto.randomBytes(16).toString('hex');
   const r = db.prepare('INSERT INTO users(username,name,role,salt,hash,active) VALUES(?,?,?,?,?,1)').run(d.username, d.name || d.username, d.role || 'worker', salt, hash(d.password, salt));
+  syncEmployees();
   return getUser(Number(r.lastInsertRowid));
 }
 export function updateUser(id, d, selfId) {
@@ -45,6 +57,7 @@ export function updateUser(id, d, selfId) {
   if (id === selfId && !active) throw bad('You cannot deactivate your own account.');
   if (d.username && d.username.toLowerCase() !== cur.username.toLowerCase() && db.prepare('SELECT id FROM users WHERE username=? AND id<>?').get(d.username, id)) throw bad('That username is already taken.');
   db.prepare('UPDATE users SET username=?, name=?, role=?, active=? WHERE id=?').run(d.username ?? cur.username, d.name ?? cur.name, role, active, id);
+  db.prepare('UPDATE employees SET name=?, active=? WHERE user_id=?').run(d.name ?? cur.name, active, id); // the employee follows the login
   if ('shift' in d) db.prepare('UPDATE users SET shift=? WHERE id=?').run(d.shift && typeof d.shift === 'object' ? JSON.stringify(cleanShift(d.shift)) : null, id); // null = the workshop's default hours
   if (d.password) { const salt = crypto.randomBytes(16).toString('hex'); db.prepare('UPDATE users SET salt=?, hash=? WHERE id=?').run(salt, hash(d.password, salt), id); }
   return getUser(id);
@@ -53,6 +66,7 @@ export function deleteUser(id, selfId) {
   const cur = db.prepare('SELECT * FROM users WHERE id=?').get(id); if (!cur) return;
   if (id === selfId) throw bad('You cannot delete your own account.');
   if (cur.role === 'admin' && cur.active && activeAdmins(id) === 0) throw bad('There must be at least one active admin.');
+  db.prepare('UPDATE employees SET user_id=NULL, active=0, left_date=COALESCE(left_date, date(\'now\')) WHERE user_id=?').run(id); // keep the employee and their pay history, but they have left
   db.prepare('DELETE FROM users WHERE id=?').run(id);
 }
 export function setOwnPassword(id, current, password) {
