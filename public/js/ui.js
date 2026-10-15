@@ -163,3 +163,12 @@ export function requireRef(d, root) {
 }
 export const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
 export const iconBtn = (act, label, cls = '') => `<button class="btn sm ${cls}" data-act="${act}">${label}</button>`;
+
+// While a date is being typed the browser fires "change" with a half-typed year (0002, 0020…), which re-rendered the page and
+// wiped what the user was typing. Ignore those; the real change fires once the year is complete (4 digits, >= 1900).
+if (typeof document !== 'undefined') {
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t && t.type === 'date' && t.value && Number(t.value.slice(0, 4)) < 1900) e.stopImmediatePropagation();
+  }, true);
+}
