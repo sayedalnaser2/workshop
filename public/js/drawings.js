@@ -40,7 +40,9 @@ export function drawModel(kind, w = 100, h = 100, { dims = true, colour = '', gl
   let s = `<rect x="${x0}" y="${y0}" width="${W}" height="${H}" fill="${FR}" stroke="#26435f" stroke-width="1.5"/>`;
   const pane = (x, y, ww, hh) => `<rect x="${x}" y="${y}" width="${ww}" height="${hh}" ${glass}/>`;
   const ix = x0 + ft, iy = y0 + ft, iw = W - 2 * ft, ih = H - 2 * ft;
-  const tri = (x, y, ww, hh, hinge) => { // dashed opening symbol, apex on the hinge side
+  // dashed opening symbol: its point is on the side OPPOSITE the hinge (the handle side), so every symbol is drawn with the hinge side flipped
+  const tri = (x, y, ww, hh, side) => {
+    const hinge = { L: 'R', R: 'L', B: 'T', T: 'B' }[side] || side;
     if (hinge === 'L') return `<path d="M${x + ww} ${y} L${x} ${y + hh / 2} L${x + ww} ${y + hh}" ${dash}/>`;
     if (hinge === 'R') return `<path d="M${x} ${y} L${x + ww} ${y + hh / 2} L${x} ${y + hh}" ${dash}/>`;
     if (hinge === 'B') return `<path d="M${x} ${y} L${x + ww / 2} ${y + hh} L${x + ww} ${y}" ${dash}/>`;
