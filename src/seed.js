@@ -1,4 +1,4 @@
-import { db, insertRow, updateRow, listRows } from './db.js';
+import { db, insertRow, updateRow, listRows, getSetting } from './db.js';
 
 // Starter library. Profile prices are left at 0 and the deductions are generic examples:
 // edit them in Models / Profiles to match the profile system you actually buy.
@@ -234,4 +234,19 @@ export function seedChart(DEFAULT_CHART) {
     const row = insertRow('accounts', { code, name, type, parent_id: par ? par.id : null, sys: sys || '', note: '', active: 1 });
     have.set(code, { id: row.id, code, sys });
   }
+}
+
+/** The workshop's bank accounts. A database from before this feature gets one account (key "bank") holding its old opening balance. */
+export function seedBankAccounts() {
+  if (db.prepare('SELECT COUNT(*) n FROM bank_accounts').get().n) return;
+  const open = (getSetting('opening') || {}).bank || 0;
+  const row = insertRow('bank_accounts', { key: 'bank', name: 'Bank account', bank: '', number: '', opening: Number(open) || 0, print: 0, active: 1, note: '', coa_id: null, sort: 1 });
+  linkBankToChart(row);
+}
+/** Every bank account has its own account in the chart, under "Bank" — so the trial balance shows each bank separately. */
+export function linkBankToChart(b) {
+  const parent = db.prepare("SELECT id, code FROM accounts WHERE sys='bank'").get() || db.prepare("SELECT id, code FROM accounts WHERE code='122'").get(); if (!parent) return b;
+  const taken = new Set(db.prepare('SELECT code FROM accounts').all().map((a) => a.code)); let n = 1; while (taken.has(`${parent.code}${n}`)) n++;
+  const acc = insertRow('accounts', { code: `${parent.code}${n}`, name: b.name || 'Bank account', type: 'asset', parent_id: parent.id, sys: '', note: '', active: 1 });
+  return updateRow('bank_accounts', b.id, { coa_id: acc.id });
 }

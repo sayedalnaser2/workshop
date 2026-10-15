@@ -11,7 +11,7 @@ import { needsSetup, syncEmployees, authenticate, createUser, updateUser, delete
 import { tableAccess, hasAny, hasEditAny, seesMoney } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
 import { DEFAULT_CHART, buildEntries, trialBalance, statements, accountLedger, DEBIT_TYPES } from './public/js/accounting.js';
-import { seedChart, seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets, seedBalexco, seedAluKitchen } from './src/seed.js';
+import { seedBankAccounts, linkBankToChart, seedChart, seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets, seedBalexco, seedAluKitchen } from './src/seed.js';
 import { isOnTask, taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated, markPresent, shiftStatus, overtimeAction, dayReport } from './src/tasks.js';
 import { targetProgress, METRICS } from './src/targets.js';
 import { exportWorkbook } from './src/exporter.js';
@@ -22,7 +22,7 @@ import { vatReport, orderVat } from './public/js/vat.js';
 import { audit, diff, labelOf, listAudit, notable } from './src/audit.js';
 import { respond, staticServer, throttleCheck, throttleFail, throttleOk, runBackup, listBackups, backupDir } from './src/web.js';
 
-syncEmployees(); seedChart(DEFAULT_CHART); seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets(); seedBalexco(); seedAluKitchen();
+syncEmployees(); seedChart(DEFAULT_CHART); seedBankAccounts(); seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets(); seedBalexco(); seedAluKitchen();
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DEV = process.env.WORKSHOP_DEV === '1';
@@ -106,7 +106,7 @@ const bootstrap = (user = { role: 'admin' }) => user.role === 'worker' && !seesM
 }) : ({
   settings: Object.fromEntries(db.prepare('SELECT key FROM settings').all().filter((r) => !['auth', 'session_secret'].includes(r.key)).map((r) => [r.key, getSetting(r.key)])),
   price_items: listRows('price_items'), profiles: listRows('profiles'), accessories: listRows('accessories'),
-  glass_types: listRows('glass_types'), models: listRows('models'), employees: listRows('employees'),
+  glass_types: listRows('glass_types'), models: listRows('models'), employees: listRows('employees'), bank_accounts: listRows('bank_accounts'),
   next: { quote: nextNumber('quote'), invoice: nextNumber('invoice'), receipt: nextNumber('receipt'), payment: nextNumber('payment'), po: nextNumber('po'), credit: nextNumber('credit') },
 });
 
@@ -139,7 +139,7 @@ function moneyRules(t, body, cur = {}) {
 }
 
 const ledgerData = () => ({
-  accounts: listRows('accounts'), orders: listRows('orders'), quotes: listRows('quotes'), credits: listRows('credit_notes').filter((c) => c.status === 'approved'), receipts: listRows('receipts'), payments: listRows('payments'),
+  banks: listRows('bank_accounts'), accounts: listRows('accounts'), orders: listRows('orders'), quotes: listRows('quotes'), credits: listRows('credit_notes').filter((c) => c.status === 'approved'), receipts: listRows('receipts'), payments: listRows('payments'),
   purchases: listRows('purchases').filter((x) => !x.hidden), cash: listRows('cash_entries'), journals: listRows('journals'), settings: { vat_rate: getSetting('vat_rate'), purchase_vat_default: getSetting('purchase_vat_default'), opening: getSetting('opening') },
 });
 /** The chart is protected where postings depend on it; a journal voucher must balance. */
@@ -151,6 +151,7 @@ function accountingRules(t, body, cur = {}) {
     if (db.prepare('SELECT id FROM accounts WHERE lower(code)=lower(?) AND id<>?').get(String(m.code).trim(), cur.id || 0)) throw bad(`There is already an account with code ${m.code}.`);
     if (m.parent_id) { const par = getRow('accounts', Number(m.parent_id)); if (!par) throw bad('The parent account does not exist.'); if (par.type !== m.type) throw bad('An account must have the same type as its parent.'); if (cur.id && Number(m.parent_id) === cur.id) throw bad('An account cannot be its own parent.'); }
   }
+  if (t === 'bank_accounts' && (!cur.id || 'name' in body) && !String(({ ...cur, ...body }).name || '').trim()) throw bad('Give the bank account a name.');
   if (t === 'journals' && (!cur.id || 'lines' in body)) {
     const lines = (({ ...cur, ...body }).lines || []).filter((l) => l && (Number(l.debit) || Number(l.credit)));
     if (lines.length < 2) throw bad('A journal voucher needs at least two lines.');
@@ -402,7 +403,7 @@ async function api(req, res, url) {
   if (p[0] === 'assign-accounts' && m === 'POST') {
     needEdit('cashbank');
     const { account } = await readJson(req);
-    if (!['cash', 'bank'].includes(account)) return send(res, 400, { error: 'account must be cash or bank' });
+    if (account !== 'cash' && !db.prepare('SELECT id FROM bank_accounts WHERE key=?').get(account)) return send(res, 400, { error: 'account must be cash or one of the bank accounts' });
     const a = db.prepare("UPDATE receipts SET account=? WHERE account IS NULL OR account=''").run(account).changes;
     const b = db.prepare("UPDATE payments SET account=? WHERE account IS NULL OR account=''").run(account).changes;
     return send(res, 200, { receipts: Number(a), payments: Number(b) });
@@ -469,7 +470,8 @@ async function api(req, res, url) {
         }
         const a = AUTO[t];
         if (a && !body[a[0]]) body[a[0]] = nextNumber(a[1], body.date, true);
-        const created = insertRow(t, body); if (t === 'tasks') onTaskCreated(created, user);
+        let created = insertRow(t, body); if (t === 'tasks') onTaskCreated(created, user);
+        if (t === 'bank_accounts') { if (!created.key) created = updateRow(t, created.id, { key: `bank-${created.id}` }); if (created.sort == null) created = updateRow(t, created.id, { sort: created.id }); created = linkBankToChart(created); }
         audit(user, t, created.id, 'created', labelOf(created), notable(created)); return created;
       });
       return send(res, 201, row);
@@ -495,12 +497,15 @@ async function api(req, res, url) {
         const merged = { ...cur, ...body }; Object.assign(body, creditTotals(merged)); checkCredit({ ...merged, ...body }, id);
         if (user.role !== 'admin' && approvalCfg().credit_notes && ['approved', 'rejected'].includes(cur.status)) body.status = 'pending'; // changed after a decision: needs a new one
       }
+      if (t === 'bank_accounts' && 'key' in body) delete body.key; // the key is what records point at; it never changes
       const saved = updateRow(t, id, body); if (t === 'tasks') onTaskUpdated(cur, saved, user);
+      if (t === 'bank_accounts' && saved.coa_id && ('name' in body || 'active' in body)) updateRow('accounts', saved.coa_id, { ...(body.name ? { name: body.name } : {}), ...('active' in body ? { active: saved.active === 0 ? 0 : 1 } : {}) });
       const ch = diff(t, cur, saved); if (ch.length) audit(user, t, id, 'updated', labelOf(saved), ch);
       return send(res, 200, saved);
     }
     if (id && m === 'DELETE') {
       if (t === 'accounts') need(role === 'admin'); // …or deletes them
+      if (t === 'bank_accounts') { const k = getRow(t, id)?.key; const used = k && ['receipts', 'payments', 'cash_entries'].some((tb) => db.prepare(`SELECT id FROM ${tb} WHERE account=?`).get(k)); if (used) throw bad('This bank account has receipts, vouchers or entries, so it cannot be deleted. Switch it off instead.'); if (k === 'bank') throw bad('The original bank account cannot be deleted. Switch it off or rename it.'); }
       if (t === 'quotes') throw bad('Quotations cannot be deleted. Set the status to Rejected instead.', 403);
       const cur = getRow(t, id);
       if (t === 'accounts') {
@@ -509,6 +514,7 @@ async function api(req, res, url) {
       }
       if (t === 'tasks') { db.prepare('DELETE FROM task_logs WHERE task_id=?').run(id); db.prepare('DELETE FROM task_sessions WHERE task_id=?').run(id); }
       if (t === 'credit_notes' && cur?.status === 'approved' && user.role !== 'admin') throw bad('Only the admin can delete an approved credit note.', 403);
+      if (t === 'bank_accounts') { const coa = getRow(t, id)?.coa_id; if (coa && !buildEntries(ledgerData()).some((e) => e.account === coa)) deleteRow('accounts', coa); }
       deleteRow(t, id); audit(user, t, id, 'deleted', labelOf(cur), cur ? notable(cur).map((c) => ({ f: c.f, from: c.to, to: '' })) : null);
       return send(res, 200, { ok: true });
     }

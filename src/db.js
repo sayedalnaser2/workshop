@@ -53,6 +53,7 @@ export const SCHEMA = {
   targets: { cols: { name: 'TEXT', metric: 'TEXT', period: 'TEXT', goal: 'REAL', prize: 'TEXT', prize_amount: 'REAL', user_id: 'INTEGER', active: 'INTEGER', note: 'TEXT' }, order: 'id' },
   target_awards: { cols: { target_id: 'INTEGER', user_id: 'INTEGER', period_key: 'TEXT', awarded_on: 'TEXT', note: 'TEXT' }, order: 'id DESC' },
   accounts: { cols: { code: 'TEXT', name: 'TEXT', type: 'TEXT', parent_id: 'INTEGER', sys: 'TEXT', note: 'TEXT', active: 'INTEGER' }, order: 'code' },
+  bank_accounts: { cols: { key: 'TEXT', name: 'TEXT', bank: 'TEXT', number: 'TEXT', opening: 'REAL', print: 'INTEGER', active: 'INTEGER', note: 'TEXT', coa_id: 'INTEGER', sort: 'INTEGER' }, order: 'sort, id' },
   journals: { cols: { no: 'TEXT', date: 'TEXT', description: 'TEXT', lines: 'JSON', note: 'TEXT' }, order: 'date DESC, id DESC' },
   notes: { cols: { text: 'TEXT', color: 'TEXT', done: 'INTEGER', pinned: 'INTEGER', audience: 'TEXT', author: 'TEXT', author_id: 'INTEGER' }, order: 'pinned DESC, id DESC' },
   attachments: { cols: { ref_type: 'TEXT', ref_key: 'TEXT', tag: 'TEXT', kind: 'TEXT', file_name: 'TEXT', file_path: 'TEXT', mime: 'TEXT', note: 'TEXT', user_name: 'TEXT', size: 'INTEGER' }, order: 'id' },

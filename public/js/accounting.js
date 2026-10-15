@@ -2,6 +2,7 @@
 // Nothing is typed twice: invoices, credit notes, receipts, payment vouchers, supplier purchases and cash/bank entries are turned
 // into debit/credit postings on the chart of accounts, and manual journal vouchers add to them.
 import { orderVat, vatIn } from './vat.js';
+import { CASH, primaryBank, accountOf } from './banks.js';
 
 export const TYPES = { asset: 'Assets', liability: 'Liabilities', equity: 'Owner equity', income: 'Income (sales)', expense: 'Expenses' };
 /** Debit-normal types: their balance is debit − credit. */
@@ -24,13 +25,14 @@ const CASH_IN = { 'Owner deposit': 'capital', 'Loan received': 'loans', Refund: 
 const CASH_OUT = { 'Bank charges': 'bank_charges', 'Owner withdrawal': 'drawings', 'Loan repayment': 'loans', 'Cash withdrawal': 'transit', 'Other expense': 'other_expense', Transfer: 'transit' };
 const r3 = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
 const inRange = (d, from, to) => !!d && (!from || d >= from) && (!to || d <= to);
+const within = (d, from, to) => (!from && !to) || inRange(d, from, to); // with no period every entry counts, even one without a date
 
 /**
  * All postings. data = { accounts, orders, quotes, credits (approved), receipts, payments, purchases, cash, journals, settings }.
  * Returns [{ date, ref, source, desc, account (id), debit, credit }] — every document balances on its own.
  */
 export function buildEntries(data) {
-  const { accounts = [], orders = [], quotes = [], credits = [], receipts = [], payments = [], purchases = [], cash = [], journals = [], settings = {} } = data;
+  const { banks = [], accounts = [], orders = [], quotes = [], credits = [], receipts = [], payments = [], purchases = [], cash = [], journals = [], settings = {} } = data;
   const bySys = new Map(accounts.filter((a) => a.sys).map((a) => [a.sys, a.id]));
   // if someone deleted the account an automatic posting normally goes to, use the first account of the same kind instead, so the books still balance
   const typeOf = new Map(DEFAULT_CHART.filter((r) => r[4]).map((r) => [r[4], r[2]]));
@@ -38,10 +40,13 @@ export function buildEntries(data) {
   const rate = Number(settings.vat_rate ?? 10); const assume = !!settings.purchase_vat_default; const qNo = new Map(quotes.map((q) => [q.number, q]));
   const out = []; const A = (sys) => bySys.get(sys) || firstOf(sys);
   const post = (date, ref, source, desc, lines) => { for (const [acc, debit, credit] of lines) if (acc && (debit || credit)) out.push({ date: date || '', ref, source, desc, account: acc, debit: r3(debit || 0), credit: r3(credit || 0) }); };
-  const cashOf = (r) => A((r.account || (r.method === 'Cash' ? 'cash' : r.method ? 'bank' : '')) === 'cash' ? 'cash' : 'bank');
+  // the books account for a cash box or one of the bank accounts (each bank account has its own account under Bank)
+  const moneyAcc = (key) => (key === CASH ? A('cash') : (banks.find((b) => b.key === key) || (key === 'bank' ? primaryBank(banks) : null))?.coa_id || primaryBank(banks)?.coa_id || A('bank'));
+  const cashOf = (r) => moneyAcc(accountOf(r, banks) || 'bank');
   const open = settings.opening || {};
   if (Number(open.cash)) post('0000-00-00', 'Opening', 'Opening', 'Opening balance — cash in hand', [[A('cash'), open.cash > 0 ? open.cash : 0, open.cash < 0 ? -open.cash : 0], [A('opening'), open.cash < 0 ? -open.cash : 0, open.cash > 0 ? open.cash : 0]]);
-  if (Number(open.bank)) post('0000-00-00', 'Opening', 'Opening', 'Opening balance — bank', [[A('bank'), open.bank > 0 ? open.bank : 0, open.bank < 0 ? -open.bank : 0], [A('opening'), open.bank < 0 ? -open.bank : 0, open.bank > 0 ? open.bank : 0]]);
+  const bankOpen = banks.length ? banks.map((b) => [b.opening, moneyAcc(b.key), b.name]) : [[open.bank, A('bank'), 'bank']]; // each bank account brings its own opening balance
+  for (const [amt, acc, nm] of bankOpen) if (Number(amt)) post('0000-00-00', 'Opening', 'Opening', `Opening balance — ${nm}`, [[acc, amt > 0 ? amt : 0, amt < 0 ? -amt : 0], [A('opening'), amt < 0 ? -amt : 0, amt > 0 ? amt : 0]]);
   for (const o of orders) { const vat = orderVat(o, qNo, rate); const amt = Number(o.amount) || 0; post(o.date, o.inv, 'Sales invoice', `Invoice ${o.inv} — ${o.client || ''}`.trim(), [[A('ar'), amt, 0], [A('sales'), 0, amt - vat], [A('vat_out'), 0, vat]]); }
   for (const c of credits) post(c.date, c.no, 'Credit note', `Credit note ${c.no} — ${c.client || ''} (${c.order_inv || ''})`.trim(), [[A('sales'), c.net || 0, 0], [A('vat_out'), c.vat || 0, 0], [A('ar'), 0, c.total || 0]]);
   for (const r of receipts) post(r.date, r.no, 'Receipt voucher', `Receipt ${r.no} — ${r.client || r.order_inv || ''}`.trim(), [[cashOf(r), r.amount, 0], [A('ar'), 0, r.amount]]);
@@ -51,7 +56,7 @@ export function buildEntries(data) {
     post(v.date, v.no, 'Payment voucher', `Payment ${v.no} — ${v.paid_to || ''}${v.category ? ' (' + v.category + ')' : ''}`.trim(), [[target, v.amount, 0], [cashOf(v), 0, v.amount]]);
   }
   for (const c of cash) {
-    const acct = A(c.account === 'cash' ? 'cash' : 'bank'); const amt = Number(c.amount) || 0;
+    const acct = moneyAcc(c.account || 'bank'); const amt = Number(c.amount) || 0;
     if (c.direction === 'in') post(c.date, c.category || 'Cash entry', 'Cash/bank entry', `${c.category || 'Money in'}${c.party ? ' — ' + c.party : ''}`, [[acct, amt, 0], [A(CASH_IN[c.category] || 'other_income'), 0, amt]]);
     else post(c.date, c.category || 'Cash entry', 'Cash/bank entry', `${c.category || 'Money out'}${c.party ? ' — ' + c.party : ''}`, [[A(CASH_OUT[c.category] || 'other_expense'), amt, 0], [acct, 0, amt]]);
   }
@@ -62,22 +67,22 @@ export function buildEntries(data) {
 /** Per-account totals between two dates (inclusive; empty = no limit), with the tree rolled up. */
 export function trialBalance(accounts, entries, from = '', to = '') {
   const own = new Map(accounts.map((a) => [a.id, { debit: 0, credit: 0 }]));
-  for (const e of entries) { if (e.date !== '0000-00-00' && !inRange(e.date, from, to)) continue; if (e.date === '0000-00-00' && from) continue; const o = own.get(e.account); if (o) { o.debit += e.debit; o.credit += e.credit; } }
+  for (const e of entries) { if (e.date === '0000-00-00' ? !!from : !within(e.date, from, to)) continue; const o = own.get(e.account); if (o) { o.debit += e.debit; o.credit += e.credit; } }
   const kids = new Map(); for (const a of accounts) { const k = kids.get(a.parent_id || 0) || []; k.push(a); kids.set(a.parent_id || 0, k); }
   const rows = new Map();
   const roll = (a) => { const o = own.get(a.id); let debit = o.debit; let credit = o.credit; for (const c of kids.get(a.id) || []) { const r = roll(c); debit += r.debit; credit += r.credit; } const row = { id: a.id, debit: r3(debit), credit: r3(credit), own: { debit: r3(o.debit), credit: r3(o.credit) }, balance: r3(DEBIT_TYPES.has(a.type) ? debit - credit : credit - debit), leaf: !(kids.get(a.id) || []).length }; rows.set(a.id, row); return row; };
   for (const a of kids.get(0) || []) roll(a);
   // a balance shown in the debit or credit column according to its sign (the way a trial balance is written)
-  const cols = (a) => { const r = rows.get(a.id); const net = r3(r.debit - r.credit); return { ...r, tbDebit: net > 0 ? net : 0, tbCredit: net < 0 ? -net : 0 }; };
+  const cols = (a) => { const r = rows.get(a.id); const net = r3(r.debit - r.credit); const own = r3(r.own.debit - r.own.credit); return { ...r, tbDebit: net > 0 ? net : 0, tbCredit: net < 0 ? -net : 0, ownDebit: own > 0 ? own : 0, ownCredit: own < 0 ? -own : 0 }; };
   const list = accounts.map((a) => ({ ...a, ...cols(a) }));
-  const leaves = list.filter((a) => a.leaf && !a.group);
-  const totalDebit = r3(leaves.reduce((s, a) => s + a.tbDebit, 0)); const totalCredit = r3(leaves.reduce((s, a) => s + a.tbCredit, 0));
+  // totals use what was posted to each account itself (a heading that also received postings still counts exactly once)
+  const totalDebit = r3(list.reduce((s, a) => s + a.ownDebit, 0)); const totalCredit = r3(list.reduce((s, a) => s + a.ownCredit, 0));
   return { list, totalDebit, totalCredit, balanced: Math.abs(totalDebit - totalCredit) < 0.0005 };
 }
 
 /** Income statement and balance sheet from a trial balance. */
 export function statements(tb) {
-  const sum = (type) => r3(tb.list.filter((a) => a.type === type && a.leaf).reduce((s, a) => s + a.balance, 0));
+  const sum = (type) => r3(tb.list.filter((a) => a.type === type).reduce((s, a) => s + (DEBIT_TYPES.has(type) ? a.ownDebit - a.ownCredit : a.ownCredit - a.ownDebit), 0));
   const income = sum('income'); const expenses = sum('expense'); const profit = r3(income - expenses);
   const assets = sum('asset'); const liabilities = sum('liability'); const equity = sum('equity');
   return { income, expenses, profit, assets, liabilities, equity, equityWithProfit: r3(equity + profit), balanced: Math.abs(assets - (liabilities + equity + profit)) < 0.0005 };
@@ -87,7 +92,7 @@ export function statements(tb) {
 export function accountLedger(account, entries, from = '', to = '') {
   const debitNormal = DEBIT_TYPES.has(account.type); const rows = []; let bal = 0;
   for (const e of entries.filter((x) => x.account === account.id).sort((a, b) => (a.date || '').localeCompare(b.date || ''))) {
-    if (e.date !== '0000-00-00' && !inRange(e.date, from, to)) continue;
+    if (e.date !== '0000-00-00' && !within(e.date, from, to)) continue;
     bal += debitNormal ? e.debit - e.credit : e.credit - e.debit; rows.push({ ...e, balance: r3(bal) });
   }
   return rows;

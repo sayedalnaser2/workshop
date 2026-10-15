@@ -349,3 +349,27 @@ test('accounting: chart is seeded, postings balance, journals must balance, prot
   assert.equal((await call('boss', 'DELETE', `/api/t/accounts/${na.data.id}`)).status, 200);
   await call('boss', 'DELETE', `/api/t/journals/${j.data.id}`);
 });
+
+test('several bank accounts: the original one exists, new ones get their own chart account, money follows the chosen account', async () => {
+  const banks = (await call('boss', 'GET', '/api/t/bank_accounts')).data; assert.equal(banks[0].key, 'bank'); assert.ok(banks[0].coa_id);
+  const b2 = await call('amina', 'POST', '/api/t/bank_accounts', { name: 'BBK current', bank: 'BBK', number: 'BH00BBKX', opening: 1000, print: 1, active: 1 }); assert.equal(b2.status, 201);
+  assert.equal(b2.data.key, `bank-${b2.data.id}`); assert.ok(b2.data.coa_id);
+  assert.equal((await call('amina', 'POST', '/api/t/bank_accounts', { name: ' ' })).status, 400);
+  assert.equal((await call('wasim', 'GET', '/api/t/bank_accounts')).status, 403);
+  // a receipt into the new account shows up on that account's chart entry, and the books still balance
+  const inv = (await call('boss', 'GET', '/api/t/orders')).data[0];
+  const r = await call('amina', 'POST', '/api/t/receipts', { order_inv: inv.inv, client: inv.client, amount: 5, method: 'Bank transfer', ref: 'TT9', account: b2.data.key }); assert.equal(r.status, 201);
+  const acc = (await call('boss', 'GET', '/api/accounting')).data; const row = acc.tb.list.find((a) => a.id === b2.data.coa_id);
+  assert.equal(row.ownDebit, 1005); assert.equal(acc.tb.balanced, true); // opening 1000 + the receipt
+  assert.equal(acc.accounts.find((a) => a.id === b2.data.coa_id).parent_id, acc.accounts.find((a) => a.sys === 'bank').id);
+  // renaming follows into the chart; used accounts cannot be deleted
+  await call('amina', 'PUT', `/api/t/bank_accounts/${b2.data.id}`, { name: 'BBK main', key: 'hack' });
+  assert.equal((await call('boss', 'GET', '/api/t/accounts')).data.find((a) => a.id === b2.data.coa_id).name, 'BBK main');
+  assert.equal((await call('boss', 'GET', '/api/t/bank_accounts')).data.find((b) => b.id === b2.data.id).key, b2.data.key); // the key never changes
+  assert.equal((await call('boss', 'DELETE', `/api/t/bank_accounts/${b2.data.id}`)).status, 400);
+  assert.equal((await call('boss', 'DELETE', `/api/t/bank_accounts/${banks[0].id}`)).status, 400);
+  const b3 = (await call('boss', 'POST', '/api/t/bank_accounts', { name: 'Spare', active: 1 })).data;
+  assert.equal((await call('boss', 'DELETE', `/api/t/bank_accounts/${b3.id}`)).status, 200);
+  assert.ok(!(await call('boss', 'GET', '/api/t/accounts')).data.some((a) => a.id === b3.coa_id)); // its empty chart account went too
+  assert.equal((await call('boss', 'GET', '/api/accounting')).data.tb.balanced, true);
+});

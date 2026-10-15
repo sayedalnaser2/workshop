@@ -1,3 +1,4 @@
+import { accountChoices, primaryBank, CASH } from '../banks.js';
 import { S, refresh } from '../app.js';
 import { api, $, esc, money, dmy, today, dataTable, editRow, confirmBox, toast, guard, datalist, num, wireRef, requireRef, REF_LABEL } from '../ui.js';
 import { amountInWords } from '../calc.js';
@@ -29,7 +30,7 @@ async function list(el) {
 const fields = (orders) => [
   { key: 'no', label: 'Receipt #', hint: 'Leave blank for the next number: ' + S.next.receipt }, { key: 'date', label: 'Date', type: 'date' },
   { key: 'order_inv', label: 'Invoice (money in must come from an invoice)', type: 'select', required: true, options: [['', '— choose the invoice —'], ...[...orders].sort((a, b) => (b.balance > 0.0005) - (a.balance > 0.0005) || (b.date || '').localeCompare(a.date || '')).map((o) => [o.inv, `${o.inv} — ${o.client || ''}${o.balance > 0.0005 ? ` (due ${money(o.balance, 2)})` : ' (paid)'}`])] }, { key: 'client', label: 'Client' },
-  { key: 'amount', label: 'Amount (BD)', type: 'number', required: true }, { key: 'method', label: 'Paid by', type: 'select', options: ['', 'Cash', 'Benefit', 'Cheque', 'Bank transfer'] }, { key: 'ref', label: 'Reference number' }, { key: 'account', label: 'Paid into', type: 'select', options: [['', 'Automatic (cash → cash box, others → bank)'], ['cash', 'Cash box'], ['bank', 'Bank account']] }, { key: 'note', label: 'Note', full: true },
+  { key: 'amount', label: 'Amount (BD)', type: 'number', required: true }, { key: 'method', label: 'Paid by', type: 'select', options: ['', 'Cash', 'Benefit', 'Cheque', 'Bank transfer'] }, { key: 'ref', label: 'Reference number' }, { key: 'account', label: 'Paid into', type: 'select', options: [['', 'Automatic (cash → cash box, others → main bank account)'], ...accountChoices(S.bank_accounts)] }, { key: 'note', label: 'Note', full: true },
 ];
 
 async function form(el, orderId) {
@@ -47,7 +48,7 @@ async function form(el, orderId) {
     if (!d.order_inv) return toast('Choose the invoice this money is for', 'err');
     if (!d.amount) return toast('Enter the amount', 'err');
     requireRef(d, $('#f', el));
-    if (!d.account) d.account = d.method === 'Cash' ? 'cash' : 'bank';
+    if (!d.account) d.account = d.method === 'Cash' ? CASH : primaryBank(S.bank_accounts)?.key || 'bank';
     const r = await api.post('t/receipts', d); await refresh(); toast(`Saved ${r.no}`);
     location.hash = print ? `#/receipts/${r.id}/print` : '#/receipts';
   });

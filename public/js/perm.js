@@ -43,7 +43,7 @@ export const canPage = (user, page) => levelOf(user, page) !== '';
 
 /** Which page owns each data table (for who may change it). */
 export const TABLE_PAGE = {
-  accounts: 'coa', journals: 'journals',
+  accounts: 'coa', journals: 'journals', bank_accounts: 'cashbank',
   quotes: 'quotes', orders: 'orders', credit_notes: 'creditnotes', receipts: 'receipts', payments: 'payments', purchases: 'purchases', purchase_orders: 'pos', suppliers: 'suppliers', items: 'suppliers',
   cash_entries: 'cashbank', employees: 'employees', employee_events: 'employees', attendance: 'employees', employee_docs: 'employees', price_items: 'prices',
   profiles: 'materials', accessories: 'materials', glass_types: 'materials', models: 'models', kitchens: 'kitchens', kitchen_options: 'kitchens', stock: 'stock',
@@ -52,8 +52,8 @@ export const TABLE_PAGE = {
 /** Tables a page needs to read to work at all — handed out (read-only) when the page was granted to someone on top of their role. */
 export const SUPPORT = {
   quotes: ['kitchens', 'stock', 'price_items', 'models', 'profiles', 'accessories', 'glass_types', 'orders', 'suppliers'], orders: ['credit_notes', 'purchases', 'quotes', 'receipts', 'price_items', 'models', 'profiles', 'accessories', 'glass_types'],
-  creditnotes: ['quotes', 'orders'], receipts: ['orders'], statements: ['credit_notes', 'receipts', 'orders'], payments: ['suppliers', 'employees', 'accounts'], pos: ['payments', 'purchases', 'stock', 'suppliers', 'items', 'profiles', 'accessories', 'glass_types'],
-  stock: ['items', 'profiles'], suppliers: ['items'], cashbank: ['payments', 'receipts'], cutting: ['quotes', 'stock', 'profiles', 'accessories', 'glass_types', 'models'], kitchens: ['items', 'quotes'],
+  creditnotes: ['quotes', 'orders'], receipts: ['orders', 'bank_accounts'], statements: ['credit_notes', 'receipts', 'orders'], payments: ['suppliers', 'employees', 'accounts', 'bank_accounts'], pos: ['payments', 'purchases', 'stock', 'suppliers', 'items', 'bank_accounts', 'profiles', 'accessories', 'glass_types'],
+  stock: ['items', 'profiles'], suppliers: ['items'], cashbank: ['payments', 'receipts', 'bank_accounts'], cutting: ['quotes', 'stock', 'profiles', 'accessories', 'glass_types', 'models'], kitchens: ['items', 'quotes'],
   surveys: ['quotes'], supstatements: ['purchases', 'payments', 'suppliers'], journals: ['accounts'], coa: ['accounts', 'journals'], trialbalance: ['accounts', 'journals', 'orders', 'receipts', 'payments', 'purchases', 'credit_notes', 'cash_entries'], purchases: ['suppliers'], employees: ['payments'], tasks: ['orders', 'quotes'], activity: ['task_logs', 'task_sessions'], dashboard: ['events', 'quotes', 'stock'], calendar: ['events'], reports: ['orders', 'quotes', 'purchases', 'payments', 'receipts', 'credit_notes'],
 };
 /** Pages that show prices, costs or money: giving one of these to a worker lifts the "money hidden" rule for them. */

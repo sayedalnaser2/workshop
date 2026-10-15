@@ -9,7 +9,8 @@ const loadOpen = () => { try { return new Set(JSON.parse(sessionStorage.getItem(
 export async function render(el, [id]) {
   if (id) return ledger(el, Number(id));
   const data = await api.get('accounting'); const accounts = data.accounts; const tb = new Map(data.tb.list.map((a) => [a.id, a]));
-  const write = canWrite(S.me, 'accounts'); const admin = S.me?.role === 'admin'; // anyone with the page can rename; only the admin adds or deletes const open = loadOpen(); if (!open.size) for (const a of accounts) if (!a.parent_id) open.add(a.id); // first visit: the five main groups are open
+  const write = canWrite(S.me, 'accounts'); const admin = S.me?.role === 'admin'; /* anyone with the page can rename; only the admin adds or deletes */
+  const open = loadOpen(); if (!open.size) for (const a of accounts) if (!a.parent_id) open.add(a.id); // first visit: the five main groups are open
   const kids = new Map(); for (const a of accounts) { const k = kids.get(a.parent_id || 0) || []; k.push(a); kids.set(a.parent_id || 0, k); }
   const label = (a) => `${a.code} — ${a.name}`;
   const fields = () => [

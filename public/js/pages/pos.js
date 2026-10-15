@@ -1,5 +1,6 @@
 import { S, refresh } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, dmy, today, confirmBox, toast, guard, badge, modal, formHTML, readForm, wireRef, requireRef } from '../ui.js';
+import { accountChoices, primaryBank } from '../banks.js';
 import { openPoDialog } from '../po-dialog.js';
 import { printView, docHeader } from '../doc.js';
 
@@ -65,12 +66,12 @@ export async function receivePo(po) {
 
 /** Paying a purchase order makes a payment voucher to the supplier, then marks the order paid (separate from received). */
 export function payPo(po, done) {
-  const f = [{ key: 'date', label: 'Paid on', type: 'date' }, { key: 'amount', label: 'Amount (BD)', type: 'number' }, { key: 'method', label: 'Paid by', type: 'select', options: ['Cash', 'Benefit', 'Cheque', 'Bank transfer'] }, { key: 'ref', label: 'Reference number' }, { key: 'account', label: 'Paid from', type: 'select', options: [['', 'Automatic (cash → cash box, others → bank)'], ['cash', 'Cash box'], ['bank', 'Bank account']] }];
+  const f = [{ key: 'date', label: 'Paid on', type: 'date' }, { key: 'amount', label: 'Amount (BD)', type: 'number' }, { key: 'method', label: 'Paid by', type: 'select', options: ['Cash', 'Benefit', 'Cheque', 'Bank transfer'] }, { key: 'ref', label: 'Reference number' }, { key: 'account', label: 'Paid from', type: 'select', options: [['', 'Automatic (cash → cash box, others → main bank account)'], ...accountChoices(S.bank_accounts)] }];
   const w = document.createElement('div'); w.innerHTML = `<p style="margin-top:0">Pay <b>${esc(po.supplier)}</b> for ${esc(po.po)}. This also creates a payment voucher.</p>` + formHTML(f, { date: today(), amount: po.total, method: 'Cash' }); wireRef(w);
   modal({ title: `Mark ${po.po} as paid`, body: w, buttons: [{ label: 'Cancel' }, { label: 'Pay and save', kind: 'primary', onClick: async () => {
     const d = readForm(w, f); if (!(d.amount > 0)) { toast('Enter the amount', 'err'); return false; } requireRef(d, w);
     const sups = await api.get('t/suppliers'); if (!sups.some((x) => x.name.toLowerCase() === po.supplier.toLowerCase())) await api.post('t/suppliers', { name: po.supplier });
-    const v = await api.post('t/payments', { date: d.date, paid_to: po.supplier, category: 'Supplier payment', amount: d.amount, method: d.method, ref: d.ref, account: d.account || (d.method === 'Cash' ? 'cash' : 'bank'), lines: [{ text: `Purchase order ${po.po}`, amount: d.amount }], note: po.po, done: 1 });
+    const v = await api.post('t/payments', { date: d.date, paid_to: po.supplier, category: 'Supplier payment', amount: d.amount, method: d.method, ref: d.ref, account: d.account || (d.method === 'Cash' ? 'cash' : primaryBank(S.bank_accounts)?.key || 'bank'), lines: [{ text: `Purchase order ${po.po}`, amount: d.amount }], note: po.po, done: 1 });
     await api.put(`t/purchase_orders/${po.id}`, { paid: 1, paid_date: d.date, paid_method: d.method, paid_ref: d.ref, paid_no: v.no });
     await refresh(); toast(`Paid — voucher ${v.no}`); done?.();
   } }] });

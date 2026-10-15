@@ -205,3 +205,9 @@ test('accounting engine: every document posts in balance; supplier ledger = purc
   assert.equal(a.trialBalance(accounts, e, '2026-10-06', '2026-10-06').list.find((x) => x.sys === 'cash').balance, 600); // a period
   const l = supplierLedger('sup', data.purchases, data.payments); assert.equal(l.balance, 330 - 300); assert.equal(l.entries.length, 3);
 });
+
+test('page modules load and render without throwing (catches broken syntax / stray comments)', async () => {
+  // every page file must at least parse as an ES module
+  const { readdirSync } = await import('node:fs'); const { spawnSync } = await import('node:child_process');
+  for (const f of readdirSync(new URL('../public/js/pages/', import.meta.url))) { const r = spawnSync(process.execPath, ['--check', new URL('../public/js/pages/' + f, import.meta.url).pathname]); assert.equal(r.status, 0, `${f}: ${r.stderr}`); }
+});
