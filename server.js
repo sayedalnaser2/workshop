@@ -306,7 +306,7 @@ async function api(req, res, url) {
     return send(res, 200, listAudit({ table: q.get('table') || '', user: Number(q.get('user')) || 0, from: q.get('from') || '', to: q.get('to') || '', q: q.get('q') || '', limit: Number(q.get('limit')) || 100, offset: Number(q.get('offset')) || 0 }));
   }
   if (p[0] === 'accounting' && m === 'GET') { // the ledger behind the chart of accounts, trial balance and statements
-    needAny('coa', 'journals', 'trialbalance'); const q = url.searchParams; const from = q.get('from') || ''; const to = q.get('to') || '';
+    needAny('coa', 'journals', 'trialbalance', 'accstatement'); const q = url.searchParams; const from = q.get('from') || ''; const to = q.get('to') || '';
     const data = ledgerData(); const entries = buildEntries(data); const tb = trialBalance(data.accounts, entries, from, to);
     const acct = Number(q.get('account')) || 0; const a = acct && data.accounts.find((x) => x.id === acct);
     return send(res, 200, { accounts: data.accounts, tb, statements: statements(tb), ledger: a ? accountLedger(a, entries, from, to) : null, journals: data.journals.length });

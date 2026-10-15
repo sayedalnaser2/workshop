@@ -35,9 +35,12 @@ const ROUTES = [
   { path: 'journals', title: 'Journal Vouchers', icon: '✐', mod: 'journals' },
   { path: 'pos', title: 'Purchase Orders', icon: '✉', mod: 'pos' },
   { path: 'suppliers', title: 'Suppliers & Catalogue', icon: '⌂', mod: 'suppliers' },
+  { path: 'cashbank', title: 'Cash & Bank', icon: '⛁', mod: 'cashbank' },
+  { sub: 'Statements' },
+  { path: 'accstatement', title: 'Account Statement', icon: '≣', mod: 'accstatement' },
   { path: 'statements', title: 'Customer Statements', icon: '≣', mod: 'statements' },
   { path: 'supstatements', title: 'Supplier Statements', icon: '≣', mod: 'supstatements' },
-  { path: 'cashbank', title: 'Cash & Bank', icon: '⛁', mod: 'cashbank' },
+  { endsub: true },
   { path: 'coa', title: 'Chart of Accounts', icon: '⌥', mod: 'coa' },
   { path: 'trialbalance', title: 'Trial Balance & Reports', icon: '⚖', mod: 'trialbalance' },
   { path: 'reports', title: 'Reports & VAT', icon: '◔', mod: 'reports' },
@@ -52,19 +55,24 @@ const ROUTES = [
 
 const nav = $('#nav');
 // the menu works like an accordion: every section starts closed, opening one closes the others
-let openGroup = null;
-const showGroups = () => { for (const w of $$('.grp-wrap', nav)) { const on = w.dataset.g === openGroup; w.classList.toggle('shut', !on); $('.grp', w)?.setAttribute('aria-expanded', String(on)); } };
+let openGroup = null; let openSub = null;
+const showGroups = () => { for (const w of $$('.sub-wrap', nav)) { const on = w.dataset.s === openSub && w.closest('.grp-wrap')?.dataset.g === openGroup; w.classList.toggle('shut', !on); $('.grp', w)?.setAttribute('aria-expanded', String(on)); }
+  for (const w of $$('.grp-wrap', nav)) { const on = w.dataset.g === openGroup; w.classList.toggle('shut', !on); $('.grp', w)?.setAttribute('aria-expanded', String(on)); } };
 function buildNav() {
-  const role = S.me?.role; const allowed = ROUTES.filter((r) => r.group || canPage(S.me, r.path));
+  const role = S.me?.role; const allowed = ROUTES.filter((r) => r.group || r.sub || r.endsub || canPage(S.me, r.path));
   // gather each section with its pages; sections with no pages left disappear
   const sections = []; let cur = null;
-  for (const r of allowed) { if (r.group) { cur = { name: r.group, pages: [] }; sections.push(cur); } else if (cur) cur.pages.push(r); else sections.push({ name: '', pages: [r] }); }
+  let curSub = null;
+  for (const r of allowed) { if (r.group) { cur = { name: r.group, pages: [] }; sections.push(cur); curSub = null; } else if (r.sub) { curSub = { sub: r.sub, pages: [] }; cur?.pages.push(curSub); } else if (r.endsub) curSub = null; else if (curSub) curSub.pages.push(r); else if (cur) cur.pages.push(r); else sections.push({ name: '', pages: [r] }); }
   const link = (r) => `<a href="#/${r.path}" data-p="${r.path}"><span style="width:18px;text-align:center">${r.icon}</span>${esc(r.title)}</a>`;
-  nav.innerHTML = sections.filter((g) => g.pages.length).map((g) => (g.name ? `<div class="grp-wrap" data-g="${esc(g.name)}"><div class="grp" role="button" tabindex="0" aria-expanded="false"><span class="chev">▾</span>${esc(g.name)}</div><div class="grp-body">${g.pages.map(link).join('')}</div></div>` : g.pages.map(link).join(''))).join('');
+  nav.innerHTML = sections.filter((g) => g.pages.length).map((g) => (g.name ? `<div class="grp-wrap" data-g="${esc(g.name)}"><div class="grp" role="button" tabindex="0" aria-expanded="false"><span class="chev">▾</span>${esc(g.name)}</div><div class="grp-body">${g.pages.map((x) => (x.sub ? (x.pages.length ? `<div class="sub-wrap shut" data-s="${esc(x.sub)}"><div class="grp sub" role="button" tabindex="0" aria-expanded="false"><span class="chev">▾</span>${esc(x.sub)}</div><div class="sub-body">${x.pages.map(link).join('')}</div></div>` : '') : link(x))).join('')}</div></div>` : g.pages.map(link).join(''))).join('');
   showGroups();
   $('#meName').textContent = S.me?.name || ''; $('#meRole').textContent = ROLES[role] || ''; $('#meAvatar').textContent = (S.me?.name || '?').trim().charAt(0).toUpperCase();
 }
-nav.addEventListener('click', (e) => { const h = e.target.closest('.grp'); if (!h) return; const g = h.parentElement.dataset.g; openGroup = openGroup === g ? null : g; showGroups(); });
+nav.addEventListener('click', (e) => { const h = e.target.closest('.grp'); if (!h) return;
+  if (h.classList.contains('sub')) { const s = h.parentElement.dataset.s; openSub = openSub === s ? null : s; } // a sub-section opens and closes on its own, inside its section
+  else { const g = h.parentElement.dataset.g; openGroup = openGroup === g ? null : g; openSub = null; }
+  showGroups(); });
 nav.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('grp')) { e.preventDefault(); e.target.click(); } });
 $('#meBtn').onclick = () => {
   const w = document.createElement('div');
@@ -96,6 +104,7 @@ const PAGES = {
   pos: () => import('./pages/pos.js'),
   prices: () => import('./pages/prices.js'),
   journals: () => import('./pages/journals.js'),
+  accstatement: () => import('./pages/accstatement.js'),
   coa: () => import('./pages/coa.js'),
   trialbalance: () => import('./pages/trialbalance.js'),
   supstatements: () => import('./pages/supstatements.js'),
@@ -116,7 +125,7 @@ async function route() {
   const r = ROUTES.find((x) => !x.group && x.path === path) || ROUTES[0];
   if (!canPage(S.me, r.path)) { $('#view').innerHTML = '<div class="card"><h3>No access</h3><p class="muted">Your account (' + esc(ROLES[S.me?.role] || '') + ') does not include this page.</p><a class="btn" href="#/">Back to the dashboard</a></div>'; $$('#nav a').forEach((a) => a.classList.remove('on')); return; }
   $$('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.p === r.path));
-  { const w = $('#nav a.on')?.closest('.grp-wrap'); if (w && w.dataset.g !== openGroup) { openGroup = w.dataset.g; showGroups(); } } // going to a page opens its section (and closes the rest)
+  { const on = $('#nav a.on'); const w = on?.closest('.grp-wrap'); const sw = on?.closest('.sub-wrap'); if (w && (w.dataset.g !== openGroup || (sw?.dataset.s || null) !== openSub)) { openGroup = w.dataset.g; openSub = sw?.dataset.s || null; showGroups(); } } // going to a page opens its section (and closes the rest)
   $('#pageTitle').textContent = r.title; document.title = r.title + ' · Workshop';
   $('#side').classList.remove('open');
   const view = $('#view'); view.innerHTML = '<p class="muted">Loading…</p>';

@@ -31,6 +31,10 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 #nav .grp:hover { opacity: 1; }
 #nav .grp .chev { display: inline-block; width: 12px; transition: transform .15s; font-size: 10px; }
 #nav .grp-wrap.shut .grp-body { display: none; }
+#nav .grp.sub { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; padding: 8px 10px 8px 14px; opacity: .9; }
+#nav .sub-body a { padding-left: 34px; }
+#nav .sub-wrap.shut .sub-body { display: none; }
+#nav .sub-wrap.shut .chev { transform: rotate(-90deg); }
 #nav .grp-wrap.shut .chev { transform: rotate(-90deg); }
 .main-wrap { flex: 1; min-width: 0; }
 .topbar { display: none; align-items: center; gap: 10px; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; font-weight: 600; }

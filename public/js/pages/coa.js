@@ -44,16 +44,16 @@ export async function render(el, [id]) {
   $('#col', el).onclick = () => { open.clear(); open.add(-1); save(); draw(); };
 }
 
-async function ledger(el, id) {
+export async function ledger(el, id, opts = {}) {
   const from = sessionStorage.getItem('acc-from') || ''; const to = sessionStorage.getItem('acc-to') || '';
   const data = await api.get(`accounting?account=${id}&from=${from}&to=${to}`); const a = data.accounts.find((x) => x.id === id);
   if (!a) { el.innerHTML = '<p class="err">Account not found.</p>'; return; }
   const rows = data.ledger || []; const real = rows.filter((r) => !r.opening); const tot = real.reduce((s2, r) => ({ d: s2.d + r.debit, c: s2.c + r.credit }), { d: 0, c: 0 });
   const period = from || to ? `${from ? dmy(from) : '…'} – ${to ? dmy(to) : dmy(today())}` : 'All dates';
-  el.innerHTML = `<div class="ph noprint"><a class="btn" href="#/coa">← Chart of Accounts</a><h1>${esc(a.code)} — ${esc(a.name)}</h1>${badge(TYPES[a.type])}<span class="grow"></span>
+  el.innerHTML = `<div class="ph noprint">${opts.back === null ? '' : '<a class="btn" href="#/coa">← Chart of Accounts</a>'}<h1>${esc(a.code)} — ${esc(a.name)}</h1>${badge(TYPES[a.type])}<span class="grow"></span>
     <label class="muted">From <input id="f" type="date" value="${esc(from)}"></label> <label class="muted">to <input id="t" type="date" value="${esc(to)}"></label> <button class="btn" id="pr">Print</button></div>
     <div class="print-only">${docHeader('ACCOUNT STATEMENT', '')}<div class="meta"><div><b>${L('account', 'Account')}:</b> ${esc(a.code)} — ${esc(a.name)}</div><div><b>${L('type', 'Type')}:</b> ${esc(TYPES[a.type] || a.type)}</div><div><b>${L('period', 'Period')}:</b> ${esc(period)}</div><div><b>${L('date', 'DATE')}:</b> ${dmy(today())}</div></div></div>
     <div class="card"><table class="grid"><thead><tr><th>Date</th><th>Code</th><th>Document</th><th>Description</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr></thead><tbody>${rows.map((r) => `<tr${r.opening ? ' style="font-style:italic"' : ''}><td>${r.date === '0000-00-00' ? '' : dmy(r.date)}</td><td>${esc(a.code)}</td><td>${esc(r.source)} <span class="muted">${esc(r.ref || '')}</span></td><td>${esc(r.desc)}</td><td class="num">${r.debit ? money(r.debit, 3) : ''}</td><td class="num">${r.credit ? money(r.credit, 3) : ''}</td><td class="num">${money(r.balance, 3)}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No entries in this period.</td></tr>'}<tr><td colspan="4"><b>Total</b></td><td class="num"><b>${money(tot.d, 3)}</b></td><td class="num"><b>${money(tot.c, 3)}</b></td><td class="num"><b>${money(rows.at(-1)?.balance || 0, 3)}</b></td></tr></tbody></table></div>`;
-  for (const [k, id2] of [['acc-from', 'f'], ['acc-to', 't']]) $('#' + id2, el).onchange = (e) => { try { sessionStorage.setItem(k, e.target.value); } catch {} ledger(el, id); };
+  for (const [k, id2] of [['acc-from', 'f'], ['acc-to', 't']]) $('#' + id2, el).onchange = (e) => { try { sessionStorage.setItem(k, e.target.value); } catch {} ledger(el, id, opts); };
   $('#pr', el).onclick = () => window.print();
 }
