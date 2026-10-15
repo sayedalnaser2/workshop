@@ -318,3 +318,29 @@ test('permissions can be set per user on top of the role: pages, tables, money, 
   await call('boss', 'PUT', `/api/users/${wasim.id}`, { perms: null }); await call('boss', 'PUT', `/api/users/${amina.id}`, { perms: null });
   assert.equal((await call('wasim', 'GET', '/api/t/price_items')).status, 403); assert.equal((await call('amina', 'GET', '/api/t/payments')).status, 200);
 });
+
+test('accounting: chart is seeded, postings balance, journals must balance, protected accounts stay', async () => {
+  const d = (await call('boss', 'GET', '/api/accounting')).data; assert.ok(d.accounts.length >= 25); assert.equal(d.tb.balanced, true);
+  const sys = (k) => d.accounts.find((a) => a.sys === k);
+  assert.ok(sys('ar') && sys('sales') && sys('vat_out') && sys('ap') && sys('cash') && sys('bank'));
+  // the earlier tests made invoices and receipts, so receivables and sales have balances
+  const row = (k) => d.tb.list.find((a) => a.id === sys(k).id); assert.ok(row('sales').credit > 0); assert.ok(row('ar').debit >= row('ar').credit - 1e9);
+  assert.equal(d.statements.balanced, true);
+  // journal vouchers: must balance, two lines, detail accounts only
+  const cash = sys('cash').id; const cap = sys('capital').id; const grp = d.accounts.find((a) => a.code === '12').id;
+  const bad = (lines) => call('boss', 'POST', '/api/t/journals', { date: '2026-10-10', description: 't', lines });
+  assert.equal((await bad([{ account_id: cash, debit: 10 }, { account_id: cap, credit: 9 }])).status, 400);
+  assert.equal((await bad([{ account_id: cash, debit: 10 }])).status, 400);
+  assert.equal((await bad([{ account_id: grp, debit: 10 }, { account_id: cap, credit: 10 }])).status, 400); // a heading with accounts under it
+  const j = await bad([{ account_id: cash, debit: 50, description: 'float' }, { account_id: cap, credit: 50 }]); assert.equal(j.status, 201); assert.match(j.data.no, /^26\d{4}$/);
+  const d2 = (await call('boss', 'GET', '/api/accounting')).data; assert.equal(d2.tb.balanced, true);
+  assert.equal(d2.tb.list.find((a) => a.id === cash).debit - d.tb.list.find((a) => a.id === cash).debit, 50);
+  // the chart: built-in accounts cannot be deleted, new ones can; amina (accounts) can edit, wasim (worker) cannot read it
+  assert.equal((await call('boss', 'DELETE', `/api/t/accounts/${cash}`)).status, 400);
+  const na = await call('amina', 'POST', '/api/t/accounts', { code: '1210', name: 'Second bank', type: 'asset', parent_id: grp, active: 1 }); assert.equal(na.status, 201);
+  assert.equal((await call('amina', 'POST', '/api/t/accounts', { code: '1210', name: 'dup', type: 'asset' })).status, 400);
+  assert.equal((await call('amina', 'POST', '/api/t/accounts', { code: '9', name: 'wrong type', type: 'expense', parent_id: grp })).status, 400);
+  assert.equal((await call('wasim', 'GET', '/api/accounting')).status, 403); assert.equal((await call('wasim', 'GET', '/api/t/accounts')).status, 403);
+  assert.equal((await call('amina', 'DELETE', `/api/t/accounts/${na.data.id}`)).status, 200);
+  await call('boss', 'DELETE', `/api/t/journals/${j.data.id}`);
+});

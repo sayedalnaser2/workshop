@@ -52,6 +52,8 @@ export const SCHEMA = {
   overtime: { cols: { user_id: 'INTEGER', user_name: 'TEXT', day: 'TEXT', started: 'TEXT', ended: 'TEXT', minutes: 'REAL', task_id: 'INTEGER', note: 'TEXT', status: 'TEXT', kind: 'TEXT' }, order: 'day DESC, id DESC' },
   targets: { cols: { name: 'TEXT', metric: 'TEXT', period: 'TEXT', goal: 'REAL', prize: 'TEXT', prize_amount: 'REAL', user_id: 'INTEGER', active: 'INTEGER', note: 'TEXT' }, order: 'id' },
   target_awards: { cols: { target_id: 'INTEGER', user_id: 'INTEGER', period_key: 'TEXT', awarded_on: 'TEXT', note: 'TEXT' }, order: 'id DESC' },
+  accounts: { cols: { code: 'TEXT', name: 'TEXT', type: 'TEXT', parent_id: 'INTEGER', sys: 'TEXT', note: 'TEXT', active: 'INTEGER' }, order: 'code' },
+  journals: { cols: { no: 'TEXT', date: 'TEXT', description: 'TEXT', lines: 'JSON', note: 'TEXT' }, order: 'date DESC, id DESC' },
   notes: { cols: { text: 'TEXT', color: 'TEXT', done: 'INTEGER', pinned: 'INTEGER', audience: 'TEXT', author: 'TEXT', author_id: 'INTEGER' }, order: 'pinned DESC, id DESC' },
   attachments: { cols: { ref_type: 'TEXT', ref_key: 'TEXT', tag: 'TEXT', kind: 'TEXT', file_name: 'TEXT', file_path: 'TEXT', mime: 'TEXT', note: 'TEXT', user_name: 'TEXT', size: 'INTEGER' }, order: 'id' },
 };
@@ -105,7 +107,7 @@ export const DEFAULT_SETTINGS = {
     bank: '',
   },
   vat_rate: 10,
-  counters: { quote: 1, invoice: 1, receipt: 1, payment: 1, po: 1, credit: 1 },
+  counters: { quote: 1, invoice: 1, receipt: 1, payment: 1, po: 1, credit: 1, journal: 1 },
   approvals: { discount_pct: 10, credit_notes: true },
   purchase_vat_default: false,
   colours: ['White', 'Brown', 'Black', 'Bronze', 'Silver', 'Wood', 'Grey'],
@@ -147,7 +149,7 @@ const ym = (date) => {
  * Every kind (quote, invoice, receipt, payment, po, credit) counts on its own and starts again at 0001 on 1 January.
  */
 export function nextNumber(kind, date, consume = false) {
-  if (!['quote', 'invoice', 'receipt', 'payment', 'po', 'credit'].includes(kind)) throw new Error('bad kind');
+  if (!['quote', 'invoice', 'receipt', 'payment', 'po', 'credit', 'journal'].includes(kind)) throw new Error('bad kind');
   const c = getSetting('counters'); const yy = String(new Date().getFullYear()).slice(2);
   const was = (c.year || {})[kind];
   const n = was && was !== yy ? 1 : (c[kind] || 1); // a new year starts again at 1; a counter with no year recorded yet keeps its value

@@ -222,3 +222,15 @@ export function seedAluKitchen() {
   if (!has('general', 'frame_corner')) insertRow('kitchen_options', { kind: 'general', name: 'frame_corner', price: 0, unit: '', meta: null, note: 'Aluminium door frame: assembly, per corner', sort: next() });
   if (!db.prepare("SELECT 1 FROM kitchen_options WHERE kind='profile'").get()) for (const x of ['Slim door frame 20 mm', 'Glass door frame 25 mm', 'Handle-less frame (G-profile)']) insertRow('kitchen_options', { kind: 'profile', name: x, price: 0, unit: 'bar', meta: null, note: '', sort: next() });
 }
+
+/** The chart of accounts (assets, liabilities, owner equity, income, expenses). Adds anything missing, never changes what the owner edited. */
+export function seedChart(DEFAULT_CHART) {
+  const have = new Map(db.prepare('SELECT id, code, sys FROM accounts').all().map((a) => [a.code, a]));
+  const bySys = new Set(db.prepare("SELECT sys FROM accounts WHERE sys <> ''").all().map((a) => a.sys));
+  for (const [code, name, type, parent, sys] of DEFAULT_CHART) {
+    if (have.has(code) || (sys && bySys.has(sys))) continue;
+    const par = parent ? (have.get(parent) || db.prepare('SELECT id, code FROM accounts WHERE code=?').get(parent)) : null;
+    const row = insertRow('accounts', { code, name, type, parent_id: par ? par.id : null, sys: sys || '', note: '', active: 1 });
+    have.set(code, { id: row.id, code, sys });
+  }
+}

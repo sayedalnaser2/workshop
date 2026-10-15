@@ -27,7 +27,11 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .mebtn:hover { background: rgba(255, 255, 255, .08); }
 .mebtn b, .mebtn small { display: block; line-height: 1.25; } .mebtn small { opacity: .65; font-size: 11px; }
 #meAvatar { width: 30px; height: 30px; border-radius: 50%; background: rgba(255, 255, 255, .2); display: grid; place-items: center; font-weight: 700; flex: none; }
-#nav .grp { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .55; padding: 14px 10px 4px; }
+#nav .grp { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .7; padding: 12px 10px 4px; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; }
+#nav .grp:hover { opacity: 1; }
+#nav .grp .chev { display: inline-block; width: 12px; transition: transform .15s; font-size: 10px; }
+#nav .grp-wrap.shut .grp-body { display: none; }
+#nav .grp-wrap.shut .chev { transform: rotate(-90deg); }
 .main-wrap { flex: 1; min-width: 0; }
 .topbar { display: none; align-items: center; gap: 10px; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; font-weight: 600; }
 main { padding: 22px 26px 60px; max-width: 1500px; }

@@ -10,7 +10,8 @@ import {
 import { needsSetup, syncEmployees, authenticate, createUser, updateUser, deleteUser, listUsers, setOwnPassword, makeToken, userFromToken, cookieOf, verifyOwnPassword } from './src/auth.js';
 import { tableAccess, hasAny, hasEditAny, seesMoney } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
-import { seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets, seedBalexco, seedAluKitchen } from './src/seed.js';
+import { DEFAULT_CHART, buildEntries, trialBalance, statements, accountLedger, DEBIT_TYPES } from './public/js/accounting.js';
+import { seedChart, seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets, seedBalexco, seedAluKitchen } from './src/seed.js';
 import { isOnTask, taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated, markPresent, shiftStatus, overtimeAction, dayReport } from './src/tasks.js';
 import { targetProgress, METRICS } from './src/targets.js';
 import { exportWorkbook } from './src/exporter.js';
@@ -21,7 +22,7 @@ import { vatReport, orderVat } from './public/js/vat.js';
 import { audit, diff, labelOf, listAudit, notable } from './src/audit.js';
 import { respond, staticServer, throttleCheck, throttleFail, throttleOk, runBackup, listBackups, backupDir } from './src/web.js';
 
-syncEmployees(); seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets(); seedBalexco(); seedAluKitchen();
+syncEmployees(); seedChart(DEFAULT_CHART); seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets(); seedBalexco(); seedAluKitchen();
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DEV = process.env.WORKSHOP_DEV === '1';
@@ -137,7 +138,29 @@ function moneyRules(t, body, cur = {}) {
   }
 }
 
-const AUTO = { quotes: ['number', 'quote'], orders: ['inv', 'invoice'], receipts: ['no', 'receipt'], payments: ['no', 'payment'], purchase_orders: ['po', 'po'], credit_notes: ['no', 'credit'] };
+const ledgerData = () => ({
+  accounts: listRows('accounts'), orders: listRows('orders'), quotes: listRows('quotes'), credits: listRows('credit_notes').filter((c) => c.status === 'approved'), receipts: listRows('receipts'), payments: listRows('payments'),
+  purchases: listRows('purchases').filter((x) => !x.hidden), cash: listRows('cash_entries'), journals: listRows('journals'), settings: { vat_rate: getSetting('vat_rate'), purchase_vat_default: getSetting('purchase_vat_default'), opening: getSetting('opening') },
+});
+/** The chart is protected where postings depend on it; a journal voucher must balance. */
+function accountingRules(t, body, cur = {}) {
+  if (t === 'accounts') {
+    const m = { ...cur, ...body };
+    if (!String(m.code || '').trim() || !String(m.name || '').trim()) throw bad('An account needs a code and a name.');
+    if (!['asset', 'liability', 'equity', 'income', 'expense'].includes(m.type)) throw bad('Choose the account type.');
+    if (db.prepare('SELECT id FROM accounts WHERE lower(code)=lower(?) AND id<>?').get(String(m.code).trim(), cur.id || 0)) throw bad(`There is already an account with code ${m.code}.`);
+    if (cur.id && cur.sys && ('type' in body) && body.type !== cur.type) throw bad('The type of a built-in account cannot be changed.');
+    if (m.parent_id) { const par = getRow('accounts', Number(m.parent_id)); if (!par) throw bad('The parent account does not exist.'); if (par.type !== m.type) throw bad('An account must have the same type as its parent.'); if (cur.id && Number(m.parent_id) === cur.id) throw bad('An account cannot be its own parent.'); }
+  }
+  if (t === 'journals' && (!cur.id || 'lines' in body)) {
+    const lines = (({ ...cur, ...body }).lines || []).filter((l) => l && (Number(l.debit) || Number(l.credit)));
+    if (lines.length < 2) throw bad('A journal voucher needs at least two lines.');
+    let d = 0; let c = 0; const kids = new Set(db.prepare('SELECT DISTINCT parent_id p FROM accounts WHERE parent_id IS NOT NULL').all().map((x) => x.p));
+    for (const l of lines) { if (!l.account_id || !getRow('accounts', Number(l.account_id))) throw bad('Every line needs an account.'); if (kids.has(Number(l.account_id))) throw bad('Post to a detail account, not to a heading that has accounts under it.'); if (Number(l.debit) && Number(l.credit)) throw bad('A line is either a debit or a credit, not both.'); d += Number(l.debit) || 0; c += Number(l.credit) || 0; }
+    if (Math.abs(d - c) > 0.0005) throw bad(`The voucher does not balance: debit ${d.toFixed(3)} and credit ${c.toFixed(3)}.`);
+  }
+}
+const AUTO = { quotes: ['number', 'quote'], orders: ['inv', 'invoice'], receipts: ['no', 'receipt'], payments: ['no', 'payment'], purchase_orders: ['po', 'po'], credit_notes: ['no', 'credit'], journals: ['no', 'journal'] };
 
 
 // ------------------------------------------------------------------ approvals, credit notes, files
@@ -281,6 +304,12 @@ async function api(req, res, url) {
   if (p[0] === 'audit' && m === 'GET') {
     need(role === 'admin'); const q = url.searchParams;
     return send(res, 200, listAudit({ table: q.get('table') || '', user: Number(q.get('user')) || 0, from: q.get('from') || '', to: q.get('to') || '', q: q.get('q') || '', limit: Number(q.get('limit')) || 100, offset: Number(q.get('offset')) || 0 }));
+  }
+  if (p[0] === 'accounting' && m === 'GET') { // the ledger behind the chart of accounts, trial balance and statements
+    needAny('coa', 'journals', 'trialbalance'); const q = url.searchParams; const from = q.get('from') || ''; const to = q.get('to') || '';
+    const data = ledgerData(); const entries = buildEntries(data); const tb = trialBalance(data.accounts, entries, from, to);
+    const acct = Number(q.get('account')) || 0; const a = acct && data.accounts.find((x) => x.id === acct);
+    return send(res, 200, { accounts: data.accounts, tb, statements: statements(tb), ledger: a ? accountLedger(a, entries, from, to) : null, journals: data.journals.length });
   }
   if (p[0] === 'vat-report' && m === 'GET') {
     needAny('reports'); const q = url.searchParams;
@@ -426,7 +455,7 @@ async function api(req, res, url) {
     if (!id && m === 'POST') {
       const body = await readJson(req);
       const row = tx(() => {
-        checkRef(t, body); moneyRules(t, body);
+        checkRef(t, body); moneyRules(t, body); accountingRules(t, body);
         if (t === 'tasks') { body.status = body.status || 'todo'; body.progress = body.progress ?? 0; body.created_by = user.id; }
         if (worker && t === 'stock') { delete body.unit_cost; if (body.kind === 'leftover' && body.profile_id) { const pr = getRow('profiles', Number(body.profile_id)); body.unit_cost = pr && pr.bar_length > 0 ? Math.round((pr.price_bar / pr.bar_length) * (body.length || 0) * ((getSetting('leftover_pct') ?? 60) / 100) * 1000) / 1000 : 0; } }
         if (t === 'quotes') quoteApproval(body, null, user);
@@ -447,7 +476,7 @@ async function api(req, res, url) {
     }
     if (id && m === 'PUT') {
       const cur = getRow(t, id); if (!cur || !visible(cur)) return send(res, 404, { error: 'Not found' });
-      const body = await readJson(req); checkRef(t, body, cur); moneyRules(t, body, cur); if (worker) delete body.unit_cost;
+      const body = await readJson(req); checkRef(t, body, cur); moneyRules(t, body, cur); accountingRules(t, body, cur); if (worker) delete body.unit_cost;
       if (t === 'overtime' && 'status' in body) need(role === 'admin'); // only the admin approves overtime
       if (t === 'tasks' && 'hidden' in body) { need(role === 'admin'); body.hidden = body.hidden ? 1 : 0; } // only an admin hides or shows tasks
       if (t === 'tasks') { if (body.status === 'done' && cur.status !== 'done') { body.done_at = new Date().toISOString(); body.progress = 100; } else if (body.status && body.status !== 'done' && cur.status === 'done') body.done_at = null; }
@@ -473,6 +502,11 @@ async function api(req, res, url) {
     if (id && m === 'DELETE') {
       if (t === 'quotes') throw bad('Quotations cannot be deleted. Set the status to Rejected instead.', 403);
       const cur = getRow(t, id);
+      if (t === 'accounts') {
+        if (cur?.sys) throw bad('This is a built-in account (it receives automatic postings), so it cannot be deleted. You can rename it or switch it off.');
+        if (db.prepare('SELECT id FROM accounts WHERE parent_id=?').get(id)) throw bad('Delete or move the accounts under it first.');
+        if (buildEntries(ledgerData()).some((e) => e.account === id)) throw bad('This account already has entries, so it cannot be deleted. Switch it off instead.');
+      }
       if (t === 'tasks') { db.prepare('DELETE FROM task_logs WHERE task_id=?').run(id); db.prepare('DELETE FROM task_sessions WHERE task_id=?').run(id); }
       if (t === 'credit_notes' && cur?.status === 'approved' && user.role !== 'admin') throw bad('Only the admin can delete an approved credit note.', 403);
       deleteRow(t, id); audit(user, t, id, 'deleted', labelOf(cur), cur ? notable(cur).map((c) => ({ f: c.f, from: c.to, to: '' })) : null);

@@ -190,3 +190,17 @@ test('document numbers: two-digit year + four digits, each kind counts on its ow
   assert.equal(nextNumber('quote', null, true), `${yy}0001`); assert.equal(nextNumber('quote'), `${yy}0002`);
   assert.match(nextNumber('invoice'), /^\d{6}$/); assert.match(nextNumber('receipt'), /^\d{6}$/);
 });
+
+test('accounting engine: every document posts in balance; supplier ledger = purchases − payments', async () => {
+  const a = await import('../public/js/accounting.js'); const { supplierLedger } = a;
+  const accounts = a.DEFAULT_CHART.map((r, i) => ({ id: i + 1, code: r[0], name: r[1], type: r[2], sys: r[4] || '', parent_id: 0 }));
+  for (const x of accounts) { const c = a.DEFAULT_CHART.find((r) => r[1] === x.name); if (c[3]) x.parent_id = accounts.find((y) => y.code === c[3]).id; }
+  const data = { accounts, orders: [{ inv: 'I1', date: '2026-10-05', amount: 1100, client: 'A', vat: 100 }], receipts: [{ no: 'R1', date: '2026-10-06', amount: 600, method: 'Cash' }], payments: [{ no: 'P1', date: '2026-10-07', amount: 200, paid_to: 'Sup', category: 'Rent', method: 'Bank transfer' }, { no: 'P2', date: '2026-10-08', amount: 100, paid_to: 'Sup', category: 'Supplier payment', method: 'Cash' }], purchases: [{ date: '2026-10-02', amount: 330, vat: 30, supplier: 'Sup', invoice: 'X1' }], cash: [{ date: '2026-10-01', account: 'bank', direction: 'in', amount: 5000, category: 'Owner deposit' }], credits: [{ no: 'C1', date: '2026-10-09', net: 100, vat: 10, total: 110, client: 'A', order_inv: 'I1' }], journals: [], settings: { vat_rate: 10, opening: { cash: 100 } } };
+  const e = a.buildEntries(data); const tb = a.trialBalance(accounts, e); assert.equal(tb.balanced, true); assert.equal(tb.totalDebit, tb.totalCredit);
+  const st = a.statements(tb); assert.equal(st.balanced, true); assert.equal(st.income, 900); // 1000 sales − 100 credit note
+  const ar = accounts.find((x) => x.sys === 'ar'); assert.equal(tb.list.find((x) => x.id === ar.id).balance, 1100 - 600 - 110);
+  const ap = accounts.find((x) => x.sys === 'ap'); assert.equal(tb.list.find((x) => x.id === ap.id).balance, 330 - 100); // only the supplier payment reduces payables
+  const root = tb.list.find((x) => x.code === '1'); assert.equal(root.balance, tb.list.filter((x) => x.type === 'asset' && x.leaf).reduce((s, x) => s + x.balance, 0)); // groups roll up
+  assert.equal(a.trialBalance(accounts, e, '2026-10-06', '2026-10-06').list.find((x) => x.sys === 'cash').balance, 600); // a period
+  const l = supplierLedger('sup', data.purchases, data.payments); assert.equal(l.balance, 330 - 300); assert.equal(l.entries.length, 3);
+});

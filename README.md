@@ -76,6 +76,7 @@ This loads the price list, all `Q…` quotation sheets, orders, receipts, paymen
 | **Purchasing & money** *(new)* | PO "paid" separate from "received", hide purchases, suppliers filtered to those offering the product, a store page per supplier; money in must reference an invoice, money out goes to a supplier (or a salary linked to an employee). |
 | **Workers** *(new)* | Per-user shifts, overtime (start/stop/add, admin approves), attendance from tasks, helpers on tasks, worker-activity charts + Excel export, targets & prizes, dashboard notes. |
 | **Kitchens** *(new)* | 3D view (drag/zoom), wood or **aluminium** kitchens (framed doors, infill, profile bar cutting and pricing). |
+| **Accounts** *(new)* | One menu section with sales invoices, credit notes, receipt / payment / journal vouchers, customer and supplier statements, cash & bank, a **chart of accounts** (assets, liabilities, owner equity, income, expenses), **trial balance**, income statement and balance sheet. Invoices, receipts, vouchers, purchases and cash/bank entries post to the books automatically; journal vouchers (must balance) cover the rest. Menu sections collapse. |
 | **Settings** *(new)* | Change the logo, delete workshop photos after 3/6 months, About Us page. |
 
 The starter models/profiles use generic deductions and zero prices — edit them under **Models** and **Profiles, Glass & Accessories** to match your profile system.

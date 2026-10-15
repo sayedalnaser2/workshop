@@ -1,6 +1,28 @@
 // English → Arabic for the on-screen text. Anything not listed stays in English (the app stays fully usable).
 // Keys are the exact English text as it appears on screen (HTML entities decoded).
 const PAIRS = [
+  // accounts
+  ['Accounts', 'الحسابات'],
+  ['Sales Invoices', 'فواتير المبيعات'],
+  ['Receipt Vouchers', 'سندات القبض'],
+  ['Payment Vouchers', 'سندات الصرف'],
+  ['Journal Vouchers', 'قيود اليومية'],
+  ['Customer Statements', 'كشوف حسابات العملاء'],
+  ['Supplier Statements', 'كشوف حسابات الموردين'],
+  ['Chart of Accounts', 'دليل الحسابات'],
+  ['Trial Balance & Reports', 'ميزان المراجعة والتقارير'],
+  ['Trial Balance', 'ميزان المراجعة'],
+  ['Income Statement', 'قائمة الدخل'],
+  ['Balance Sheet', 'المركز المالي'],
+  ['Expand all', 'توسيع الكل'],
+  ['Collapse all', 'طي الكل'],
+  ['+ New account', '+ حساب جديد'],
+  ['+ Sub-account', '+ حساب فرعي'],
+  ['We owe', 'المستحق علينا'],
+  ['Debit', 'مدين'],
+  ['Credit', 'دائن'],
+  ['Category', 'التصنيف'],
+  ['Total', 'المجموع'],
   // newer screens
   ['About Us', 'من نحن'],
   ['Targets & Prizes', 'الأهداف والجوائز'],
