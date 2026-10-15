@@ -200,6 +200,7 @@ test('accounting engine: every document posts in balance; supplier ledger = purc
   const st = a.statements(tb); assert.equal(st.balanced, true); assert.equal(st.income, 900); // 1000 sales − 100 credit note
   const ar = accounts.find((x) => x.sys === 'ar'); assert.equal(tb.list.find((x) => x.id === ar.id).balance, 1100 - 600 - 110);
   const ap = accounts.find((x) => x.sys === 'ap'); assert.equal(tb.list.find((x) => x.id === ap.id).balance, 330 - 100); // only the supplier payment reduces payables
+  { const without = accounts.filter((x) => x.sys !== 'ar'); const e2 = a.buildEntries({ ...data, accounts: without }); assert.equal(a.trialBalance(without, e2).balanced, true); } // delete a built-in account: postings fall back to another account of the same kind and still balance
   const root = tb.list.find((x) => x.code === '1'); assert.equal(root.balance, tb.list.filter((x) => x.type === 'asset' && x.leaf).reduce((s, x) => s + x.balance, 0)); // groups roll up
   assert.equal(a.trialBalance(accounts, e, '2026-10-06', '2026-10-06').list.find((x) => x.sys === 'cash').balance, 600); // a period
   const l = supplierLedger('sup', data.purchases, data.payments); assert.equal(l.balance, 330 - 300); assert.equal(l.entries.length, 3);

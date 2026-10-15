@@ -149,7 +149,6 @@ function accountingRules(t, body, cur = {}) {
     if (!String(m.code || '').trim() || !String(m.name || '').trim()) throw bad('An account needs a code and a name.');
     if (!['asset', 'liability', 'equity', 'income', 'expense'].includes(m.type)) throw bad('Choose the account type.');
     if (db.prepare('SELECT id FROM accounts WHERE lower(code)=lower(?) AND id<>?').get(String(m.code).trim(), cur.id || 0)) throw bad(`There is already an account with code ${m.code}.`);
-    if (cur.id && cur.sys && ('type' in body) && body.type !== cur.type) throw bad('The type of a built-in account cannot be changed.');
     if (m.parent_id) { const par = getRow('accounts', Number(m.parent_id)); if (!par) throw bad('The parent account does not exist.'); if (par.type !== m.type) throw bad('An account must have the same type as its parent.'); if (cur.id && Number(m.parent_id) === cur.id) throw bad('An account cannot be its own parent.'); }
   }
   if (t === 'journals' && (!cur.id || 'lines' in body)) {
@@ -453,6 +452,7 @@ async function api(req, res, url) {
     if (!id && m === 'GET') return send(res, 200, worker ? listRows(t).filter(visible).map((r) => (hide ? redact(t, r) : r)) : listRows(t));
     if (id && m === 'GET') { const r = getRow(t, id); return r && visible(r) ? send(res, 200, hide ? redact(t, r) : r) : send(res, 404, { error: 'Not found' }); }
     if (!id && m === 'POST') {
+      if (t === 'accounts') need(role === 'admin'); // only the admin adds accounts to the chart
       const body = await readJson(req);
       const row = tx(() => {
         checkRef(t, body); moneyRules(t, body); accountingRules(t, body);
@@ -500,12 +500,12 @@ async function api(req, res, url) {
       return send(res, 200, saved);
     }
     if (id && m === 'DELETE') {
+      if (t === 'accounts') need(role === 'admin'); // …or deletes them
       if (t === 'quotes') throw bad('Quotations cannot be deleted. Set the status to Rejected instead.', 403);
       const cur = getRow(t, id);
       if (t === 'accounts') {
-        if (cur?.sys) throw bad('This is a built-in account (it receives automatic postings), so it cannot be deleted. You can rename it or switch it off.');
         if (db.prepare('SELECT id FROM accounts WHERE parent_id=?').get(id)) throw bad('Delete or move the accounts under it first.');
-        if (buildEntries(ledgerData()).some((e) => e.account === id)) throw bad('This account already has entries, so it cannot be deleted. Switch it off instead.');
+        if (buildEntries(ledgerData()).some((e) => e.account === id)) throw bad('This account already has entries (invoices, vouchers or journals post to it), so it cannot be deleted. Switch it off instead.');
       }
       if (t === 'tasks') { db.prepare('DELETE FROM task_logs WHERE task_id=?').run(id); db.prepare('DELETE FROM task_sessions WHERE task_id=?').run(id); }
       if (t === 'credit_notes' && cur?.status === 'approved' && user.role !== 'admin') throw bad('Only the admin can delete an approved credit note.', 403);

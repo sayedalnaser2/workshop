@@ -336,11 +336,16 @@ test('accounting: chart is seeded, postings balance, journals must balance, prot
   const d2 = (await call('boss', 'GET', '/api/accounting')).data; assert.equal(d2.tb.balanced, true);
   assert.equal(d2.tb.list.find((a) => a.id === cash).debit - d.tb.list.find((a) => a.id === cash).debit, 50);
   // the chart: built-in accounts cannot be deleted, new ones can; amina (accounts) can edit, wasim (worker) cannot read it
-  assert.equal((await call('boss', 'DELETE', `/api/t/accounts/${cash}`)).status, 400);
-  const na = await call('amina', 'POST', '/api/t/accounts', { code: '1210', name: 'Second bank', type: 'asset', parent_id: grp, active: 1 }); assert.equal(na.status, 201);
-  assert.equal((await call('amina', 'POST', '/api/t/accounts', { code: '1210', name: 'dup', type: 'asset' })).status, 400);
-  assert.equal((await call('amina', 'POST', '/api/t/accounts', { code: '9', name: 'wrong type', type: 'expense', parent_id: grp })).status, 400);
+  assert.equal((await call('boss', 'DELETE', `/api/t/accounts/${cash}`)).status, 400); // it has entries, so it stays
+  const loans = sys('loans').id; assert.equal((await call('boss', 'DELETE', `/api/t/accounts/${loans}`)).status, 200); // no lock: an unused built-in account can go
+  assert.equal((await call('boss', 'GET', '/api/accounting')).data.tb.balanced, true);
+  assert.equal((await call('amina', 'POST', '/api/t/accounts', { code: '1210', name: 'Second bank', type: 'asset', parent_id: grp, active: 1 })).status, 403); // only the admin adds…
+  const na = await call('boss', 'POST', '/api/t/accounts', { code: '1210', name: 'Second bank', type: 'asset', parent_id: grp, active: 1 }); assert.equal(na.status, 201);
+  assert.equal((await call('boss', 'POST', '/api/t/accounts', { code: '1210', name: 'dup', type: 'asset' })).status, 400);
+  assert.equal((await call('boss', 'POST', '/api/t/accounts', { code: '9', name: 'wrong type', type: 'expense', parent_id: grp })).status, 400);
+  assert.equal((await call('amina', 'PUT', `/api/t/accounts/${na.data.id}`, { name: 'Second bank (BBK)' })).status, 200); // …but accounts staff can still rename
   assert.equal((await call('wasim', 'GET', '/api/accounting')).status, 403); assert.equal((await call('wasim', 'GET', '/api/t/accounts')).status, 403);
-  assert.equal((await call('amina', 'DELETE', `/api/t/accounts/${na.data.id}`)).status, 200);
+  assert.equal((await call('amina', 'DELETE', `/api/t/accounts/${na.data.id}`)).status, 403); // …or deletes
+  assert.equal((await call('boss', 'DELETE', `/api/t/accounts/${na.data.id}`)).status, 200);
   await call('boss', 'DELETE', `/api/t/journals/${j.data.id}`);
 });

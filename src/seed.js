@@ -223,8 +223,9 @@ export function seedAluKitchen() {
   if (!db.prepare("SELECT 1 FROM kitchen_options WHERE kind='profile'").get()) for (const x of ['Slim door frame 20 mm', 'Glass door frame 25 mm', 'Handle-less frame (G-profile)']) insertRow('kitchen_options', { kind: 'profile', name: x, price: 0, unit: 'bar', meta: null, note: '', sort: next() });
 }
 
-/** The chart of accounts (assets, liabilities, owner equity, income, expenses). Adds anything missing, never changes what the owner edited. */
+/** The starting chart of accounts (assets, liabilities, owner equity, income, expenses). Only on a brand-new chart: after that the owner may rename, delete or add anything. */
 export function seedChart(DEFAULT_CHART) {
+  if (db.prepare('SELECT COUNT(*) n FROM accounts').get().n) return;
   const have = new Map(db.prepare('SELECT id, code, sys FROM accounts').all().map((a) => [a.code, a]));
   const bySys = new Set(db.prepare("SELECT sys FROM accounts WHERE sys <> ''").all().map((a) => a.sys));
   for (const [code, name, type, parent, sys] of DEFAULT_CHART) {

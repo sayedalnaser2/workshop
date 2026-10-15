@@ -31,9 +31,12 @@ const inRange = (d, from, to) => !!d && (!from || d >= from) && (!to || d <= to)
  */
 export function buildEntries(data) {
   const { accounts = [], orders = [], quotes = [], credits = [], receipts = [], payments = [], purchases = [], cash = [], journals = [], settings = {} } = data;
-  const bySys = new Map(accounts.filter((a) => a.sys).map((a) => [a.sys, a.id])); const byName = new Map(accounts.map((a) => [String(a.name).trim().toLowerCase(), a.id]));
+  const bySys = new Map(accounts.filter((a) => a.sys).map((a) => [a.sys, a.id]));
+  // if someone deleted the account an automatic posting normally goes to, use the first account of the same kind instead, so the books still balance
+  const typeOf = new Map(DEFAULT_CHART.filter((r) => r[4]).map((r) => [r[4], r[2]]));
+  const firstOf = (sys) => accounts.filter((a) => a.type === typeOf.get(sys) && a.active !== 0 && !accounts.some((c) => c.parent_id === a.id)).sort((p, q) => String(p.code).localeCompare(String(q.code), undefined, { numeric: true }))[0]?.id; const byName = new Map(accounts.map((a) => [String(a.name).trim().toLowerCase(), a.id]));
   const rate = Number(settings.vat_rate ?? 10); const assume = !!settings.purchase_vat_default; const qNo = new Map(quotes.map((q) => [q.number, q]));
-  const out = []; const A = (sys) => bySys.get(sys);
+  const out = []; const A = (sys) => bySys.get(sys) || firstOf(sys);
   const post = (date, ref, source, desc, lines) => { for (const [acc, debit, credit] of lines) if (acc && (debit || credit)) out.push({ date: date || '', ref, source, desc, account: acc, debit: r3(debit || 0), credit: r3(credit || 0) }); };
   const cashOf = (r) => A((r.account || (r.method === 'Cash' ? 'cash' : r.method ? 'bank' : '')) === 'cash' ? 'cash' : 'bank');
   const open = settings.opening || {};
