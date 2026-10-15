@@ -88,7 +88,7 @@ async function editor(el, id) {
   <div class="card" style="margin-top:14px" id="lo"></div>
   <div class="card" style="margin-top:14px" id="acc"></div>
   <div class="card" style="margin-top:14px"><div class="cols2">
-    <div><label class="field"><span>Internal notes (not printed)</span><textarea id="notes" rows="3">${esc(q.notes || '')}</textarea></label><label class="field" style="margin-top:10px"><span>Prepared by</span><input id="prepared_by" value="${esc(q.prepared_by || '')}"></label><p class="words" id="words"></p><p class="muted" id="costline"></p></div>
+    <div><label class="field"><span>Internal notes (not printed)</span><textarea id="notes" rows="3">${esc(q.notes || '')}</textarea></label><label class="field" style="margin-top:10px"><span>Prepared by</span><input id="prepared_by" value="${esc(q.prepared_by || '')}" readonly style="opacity:.8;cursor:not-allowed" title="Set automatically from the signed-in user"></label><p class="words" id="words"></p><p class="muted" id="costline"></p></div>
     <div class="totals" id="totals"></div>
   </div></div>
   <div class="sticky-actions"><button class="btn primary" id="save">Save quotation</button>

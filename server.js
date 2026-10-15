@@ -473,7 +473,7 @@ async function api(req, res, url) {
         checkRef(t, body); moneyRules(t, body); accountingRules(t, body); freezeVat(t, body);
         if (t === 'tasks') { body.status = body.status || 'todo'; body.progress = body.progress ?? 0; body.created_by = user.id; }
         if (worker && t === 'stock') { delete body.unit_cost; if (body.kind === 'leftover' && body.profile_id) { const pr = getRow('profiles', Number(body.profile_id)); body.unit_cost = pr && pr.bar_length > 0 ? Math.round((pr.price_bar / pr.bar_length) * (body.length || 0) * ((getSetting('leftover_pct') ?? 60) / 100) * 1000) / 1000 : 0; } }
-        if (t === 'quotes') quoteApproval(body, null, user);
+        if (t === 'quotes') { body.prepared_by = user.name; quoteApproval(body, null, user); } // always the signed-in user
         if (t === 'surveys') { body.surveyor = body.surveyor || user.name; body.status = body.status || 'open'; }
         if (t === 'events') body.status = body.status || 'planned';
         if (t === 'notes') { body.author = user.name; body.author_id = user.id; body.audience = body.audience || 'staff'; }
@@ -497,6 +497,7 @@ async function api(req, res, url) {
       if (t === 'tasks' && 'hidden' in body) { need(role === 'admin'); body.hidden = body.hidden ? 1 : 0; } // only an admin hides or shows tasks
       if (t === 'tasks') { if (body.status === 'done' && cur.status !== 'done') { body.done_at = new Date().toISOString(); body.progress = 100; } else if (body.status && body.status !== 'done' && cur.status === 'done') body.done_at = null; }
       if (t === 'quotes') {
+        delete body.prepared_by; // set at creation, never edited
         if (user.role !== 'admin') { delete body.approval; delete body.approved_disc; delete body.approval_note; }
         // an accepted quotation goes back to draft only with the admin's own password
         if (cur.status === 'accepted' && body.status && body.status !== 'accepted') {
