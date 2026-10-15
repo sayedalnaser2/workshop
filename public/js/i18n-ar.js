@@ -25,7 +25,8 @@ const PAIRS = [
   ['Total', 'المجموع'],
   // newer screens
   ['About Us', 'من نحن'],
-  ['Targets & Prizes', 'الأهداف والجوائز'],
+  ['Targets & Prizes', 'الأهداف والحوافز'], ['My Targets', 'أهدافي'], ['Prize', 'الحافز'], ['Prize given ✔', 'تم صرف الحافز ✔'], ['Prize value (BD, optional)', 'قيمة الحافز (دينار، اختياري)'],
+  ['Goals for the workers and the prizes they win — only the admin changes them', 'أهداف العمال والحوافز التي يحصلون عليها — المدير فقط يغيّرها'], ['Reach the goal in the period and win the prize', 'حقق الهدف خلال الفترة واحصل على الحافز'],
   ['Logo', 'الشعار'],
   ['Workshop photos', 'صور الورشة'],
   ['Use this logo', 'استخدم هذا الشعار'],
