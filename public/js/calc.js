@@ -18,19 +18,25 @@ export function priceFor(item, w, h) {
 export const r3 = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
 export const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
+/** A line carries VAT unless it was switched off (vat: false / 0). Older quotations have no flag, so every line counts. */
+export const hasVat = (i) => i.vat !== false && i.vat !== 0 && i.vat !== '0';
 export function quoteTotals(q) {
   const items = q.items || [];
-  const subtotal = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.price) || 0), 0);
+  const lineAmt = (i) => (Number(i.qty) || 0) * (Number(i.price) || 0);
+  const subtotal = items.reduce((s, i) => s + lineAmt(i), 0);
+  const vatBase = items.filter(hasVat).reduce((s, i) => s + lineAmt(i), 0); // only these lines are charged VAT
+  const exempt = subtotal - vatBase;
   const discount = Number(q.discount) || 0;
   const waived = Number(q.vat_waived) || 0;
   const discPct = subtotal ? (discount / subtotal) * 100 : 0;
   if (q.disc_mode === 'after') { // VAT on the full items total, then the discount comes off the VAT-inclusive total
-    const vat = (subtotal * (Number(q.vat_rate) || 0)) / 100; const total = subtotal + vat;
-    return { subtotal, discount, amount: subtotal, vat, waived, total, grand: total - discount - waived, discPct, after: true };
+    const vat = (vatBase * (Number(q.vat_rate) || 0)) / 100; const total = subtotal + vat;
+    return { subtotal, discount, amount: subtotal, vat, vatBase, exempt, waived, total, grand: total - discount - waived, discPct, after: true };
   }
   const amount = subtotal - discount;
-  const vat = (amount * (Number(q.vat_rate) || 0)) / 100;
-  return { subtotal, discount, amount, vat, waived, total: amount + vat, grand: amount + vat - waived, discPct, after: false };
+  const base = subtotal ? vatBase - (discount * vatBase) / subtotal : 0; // the discount is shared out over the lines, so the VAT-free ones take their share too
+  const vat = (base * (Number(q.vat_rate) || 0)) / 100;
+  return { subtotal, discount, amount, vat, vatBase: base, exempt, waived, total: amount + vat, grand: amount + vat - waived, discPct, after: false };
 }
 
 /** Discount as a percentage of the items total. */

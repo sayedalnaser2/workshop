@@ -3,7 +3,7 @@ import { openPoDialog } from '../po-dialog.js';
 import { openTaskForm, addStandardTasks } from '../task-form.js';
 import { fmtMin, variance } from '../time.js';
 import { api, $, esc, money, qty as fq, num, dmy, today, dataTable, editRow, confirmBox, toast, guard, badge, modal } from '../ui.js';
-import { quoteTotals } from '../calc.js';
+import { quoteTotals, hasVat } from '../calc.js';
 import { orderVat } from '../vat.js';
 import { printView, docHeader, L, AR, wordsBlock, termsBlock } from '../doc.js';
 import { attachmentsPanel } from '../attachments.js';
@@ -78,7 +78,7 @@ async function invoicePrint(el, id) {
   const lines = q ? (q.items || []).map((it) => {
     if (it.kind === 'note') return `<tr><td></td><td colspan="5"><b>${esc(it.desc)}</b></td></tr>`;
     n++; const a = num(it.qty) * num(it.price);
-    return `<tr><td>${n}</td><td>${esc(it.desc)}${it.w && it.h ? ` <span class="muted">${fq(it.w)} × ${fq(it.h)} cm</span>` : ''}${it.note ? `<div class="note">${esc(it.note).replace(/\n/g, '<br>')}</div>` : ''}</td><td class="n">${fq(it.qty)}</td><td class="n">${money(it.price, 3)}</td><td class="n">${money(a, 3)}</td><td class="n">${fq(lineRate)}%</td></tr>`;
+    return `<tr><td>${n}</td><td>${esc(it.desc)}${it.w && it.h ? ` <span class="muted">${fq(it.w)} × ${fq(it.h)} cm</span>` : ''}${it.note ? `<div class="note">${esc(it.note).replace(/\n/g, '<br>')}</div>` : ''}</td><td class="n">${fq(it.qty)}</td><td class="n">${money(it.price, 3)}</td><td class="n">${money(a, 3)}</td><td class="n">${hasVat(it) ? fq(lineRate) : 0}%</td></tr>`;
   }).join('') : `<tr><td>1</td><td>As per agreement / quotation ${esc(o.quote_no || '')}${o.site ? ` — ${esc(o.site)}` : ''}</td><td class="n">1</td><td class="n">${money(net, 3)}</td><td class="n">${money(net, 3)}</td><td class="n">${fq(lineRate)}%</td></tr>`;
   const myCredits = credits.filter((x) => x.order_inv === o.inv && x.status === 'approved');
   const rec = receipts.filter((r) => r.order_inv === o.inv).sort((a, b) => (a.date || '').localeCompare(b.date || ''));

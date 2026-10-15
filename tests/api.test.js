@@ -386,3 +386,16 @@ test('journal: negative debit or credit is refused; statements take a period', a
   assert.ok(part.every((r) => r.opening || r.date >= '2026-02-01'));
   await call('boss', 'DELETE', `/api/t/journals/${j1.id}`); await call('boss', 'DELETE', `/api/t/journals/${j2.id}`);
 });
+
+test('VAT is fixed when a document is made: a later rate change only affects new ones', async () => {
+  await call('boss', 'PUT', '/api/settings', { vat_rate: 10 });
+  const o1 = (await call('boss', 'POST', '/api/t/orders', { inv: 'V-OLD', date: '2026-10-01', client: 'Freeze', amount: 110 })).data; assert.equal(o1.vat, 10); // saved with the VAT of the day
+  await call('boss', 'PUT', '/api/settings', { vat_rate: 5 });
+  assert.equal((await call('boss', 'GET', `/api/t/orders/${o1.id}`)).data.vat, 10); // not recalculated
+  const o2 = (await call('boss', 'POST', '/api/t/orders', { inv: 'V-NEW', date: '2026-10-02', client: 'Freeze', amount: 105 })).data; assert.equal(o2.vat, 5); // new documents use the new rate
+  // a quotation with a VAT-free line becomes an invoice with the right VAT and amount
+  const q = (await call('amina', 'POST', '/api/t/quotes', { client: 'Mixed', date: '2026-10-03', vat_rate: 10, items: [{ desc: 'Taxed', qty: 1, price: 1000 }, { desc: 'No VAT', qty: 1, price: 200, vat: false }] })).data;
+  const inv = (await call('amina', 'POST', `/api/quotes/${q.id}/to-order`, {})).data; assert.equal(inv.amount, 1300); assert.equal(inv.vat, 100);
+  const pi = (await call('boss', 'POST', '/api/t/price_items', { name: 'Exempt item', rate: 5, type: 'fixed', unit: 'ea', vat: 0 })).data; assert.equal(pi.vat, 0);
+  await call('boss', 'PUT', '/api/settings', { vat_rate: 10 });
+});

@@ -13,11 +13,12 @@ export async function render(el) {
     { key: 'type', label: 'Pricing', type: 'select', options: TYPES },
     { key: 'rate', label: 'Rate (BD)', type: 'number' },
     { key: 'unit', label: 'Unit', hint: 'm² or ea' },
+    { key: 'vat', label: 'Charge VAT on this item', type: 'check', hint: 'Switch off for items that carry no VAT. A quotation line can still be changed.' },
     { key: 'model_id', label: 'Linked model', type: 'select', options: [['', '— none —'], ...S.models.map((m) => [m.id, `${m.name} (${m.series || ''})`])] },
     { key: 'note', label: 'Internal note', full: true },
   ];
   const open = (row) => editRow({
-    table: 'price_items', title: row ? 'Edit price item' : 'New price item', fields, row, defaults: { type: 'fixed', unit: 'ea' },
+    table: 'price_items', title: row ? 'Edit price item' : 'New price item', fields, row: row && { ...row, vat: row.vat === 0 ? 0 : 1 }, defaults: { type: 'fixed', unit: 'ea', vat: 1 },
     before: (d) => ({ ...d, model_id: d.model_id ? Number(d.model_id) : null, sort: row?.sort ?? 9999 }), onSaved: async () => { await refresh(); render(el); },
   });
   $('#new', el).onclick = () => open(null);
@@ -27,6 +28,7 @@ export async function render(el) {
     cols: [
       { key: 'name', label: 'Description' },
       { key: 'type', label: 'Pricing', render: (r) => badge(r.type === 'area' ? 'per m²' : r.type === 'length' ? 'per metre' : r.type === 'note' ? 'note' : 'fixed', r.type === 'area' || r.type === 'length' ? 'blue' : '') },
+      { key: 'vat', label: 'VAT', render: (r) => (r.type === 'note' ? '' : r.vat === 0 ? '<span class="muted">no VAT</span>' : 'VAT') },
       { key: 'rate', label: 'Rate (BD)', num: true, render: (r) => (r.type === 'note' ? '' : money(r.rate)) },
       { key: 'model_id', label: 'Model', render: (r) => esc(S.models.find((m) => m.id === r.model_id)?.name || '') },
     ],

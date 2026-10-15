@@ -1,6 +1,6 @@
 import { S, refresh } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, toast, guard, confirmBox, dataTable, badge, datalist } from '../ui.js';
-import { quoteTotals, priceFor, modelCost, amountInWords } from '../calc.js';
+import { quoteTotals, hasVat, priceFor, modelCost, amountInWords } from '../calc.js';
 import { printView, docHeader, L, wordsBlock, termsBlock, AR } from '../doc.js';
 import { elevationSVG, planSVG } from '../kitchen-draw.js';
 import { kitchenModel } from '../kitchen.js';
@@ -82,7 +82,7 @@ async function editor(el, id) {
     <label class="field"><span>Status</span><select id="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label class="field" style="grid-column: 1 / -1"><span>Heading line (printed above the items)</span><input id="title" value="${esc(q.title)}"></label>
   </div></div>
-  <div class="card" style="margin-top:14px"><div class="items-wrap"><table class="items"><thead><tr><th></th><th>Description (pick from the price list first)</th><th>Model</th><th>Width cm</th><th>Height cm</th><th>Hand / opens</th><th>Glass</th><th>Colour</th><th>Qty</th><th>Unit price</th><th class="tot">Amount</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="card" style="margin-top:14px"><div class="items-wrap"><table class="items"><thead><tr><th></th><th>Description (pick from the price list first)</th><th>Model</th><th>Width cm</th><th>Height cm</th><th>Hand / opens</th><th>Glass</th><th>Colour</th><th>Qty</th><th>Unit price</th><th title="Tick if VAT is charged on this line">VAT</th><th class="tot">Amount</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="addItem">+ Add item</button><button class="btn" id="addNote">+ Add heading / note line</button></div>
   </div>
   <div class="card" style="margin-top:14px" id="lo"></div>
@@ -108,7 +108,7 @@ async function editor(el, id) {
   const drawRows = () => {
     tbody.innerHTML = q.items.map((it, i) => {
       const isNote = it.kind === 'note';
-      if (isNote) return `<tr data-i="${i}"><td class="n">${i + 1}</td><td colspan="11"><input data-k="desc" value="${esc(it.desc)}" placeholder="Heading or note line (e.g. MAINTENANCE:)" style="font-weight:600"></td><td>${rowBtns(i)}</td></tr>`;
+      if (isNote) return `<tr data-i="${i}"><td class="n">${i + 1}</td><td colspan="12"><input data-k="desc" value="${esc(it.desc)}" placeholder="Heading or note line (e.g. MAINTENANCE:)" style="font-weight:600"></td><td>${rowBtns(i)}</td></tr>`;
       return `<tr data-i="${i}" class="${it.manual ? 'manual' : ''}">
         <td class="n">${i + 1}</td>
         <td style="min-width:300px"><input data-k="desc" list="dl-prices" value="${esc(it.desc)}" autocomplete="off">${it.kitchen_id ? `<a href="#/kitchens/${it.kitchen_id}" style="font-size:12px">🍳 open the kitchen design</a>` : ''}<div class="sub"><textarea data-k="note" rows="1" placeholder="Sub-description (e.g. W/1 – one side swing, other side fix)">${esc(it.note || '')}</textarea></div></td>
@@ -120,6 +120,7 @@ async function editor(el, id) {
         <td><select data-k="colour" style="width:92px"><option value="">(as quote)</option>${(S.settings.colours || []).map((c) => `<option ${it.colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></td>
         <td><input class="w-q" data-k="qty" type="number" step="any" value="${it.qty ?? 1}"></td>
         <td><input class="w-m price" data-k="price" type="number" step="any" value="${it.price ?? 0}" title="${it.manual ? 'Manual price' : 'Calculated from price list'}"></td>
+        <td style="text-align:center"><input type="checkbox" data-k="vat" style="width:auto" ${hasVat(it) ? 'checked' : ''} title="${hasVat(it) ? 'VAT is charged on this line' : 'No VAT on this line'}"></td>
         <td class="tot"><span data-tot>${money(num(it.qty) * num(it.price))}</span><div class="cost" data-cost></div><div class="cost" data-lo style="color:var(--ok)"></div></td>
         <td>${rowBtns(i)}</td></tr>`;
     }).join('');
@@ -153,7 +154,7 @@ async function editor(el, id) {
       <div class="row"><span>Items total</span><b id="t_sub">${money(T.subtotal)}</b></div>
       ${T.after ? '' : `<div class="row"><span>Discount <small class="muted" id="t_pct">${T.subtotal ? '(' + T.discPct.toFixed(2) + '%)' : ''}</small></span><input id="discount" type="number" step="any" value="${q.discount || 0}"></div>
       <div class="row"><span>Amount</span><b id="t_amount">${money(T.amount)}</b></div>`}
-      <div class="row"><span>VAT <input id="vat_rate" type="number" step="any" value="${q.vat_rate ?? 0}" style="width:60px"> %</span><b id="t_vat">${money(T.vat)}</b></div>
+      <div class="row"><span>VAT <input id="vat_rate" type="number" step="any" value="${q.vat_rate ?? 0}" style="width:60px"> % <small class="muted" id="t_vbase">${T.exempt > 0.0005 ? `on ${money(T.vatBase)} (${money(T.exempt)} has no VAT)` : ''}</small></span><b id="t_vat">${money(T.vat)}</b></div>
       <div class="row"><span>VAT adjustment <small class="muted">(enter VAT to waive)</small></span><input id="vat_waived" type="number" step="any" value="${q.vat_waived || 0}"></div>
       ${T.after ? `<div class="row"><span>Total with VAT</span><b id="t_total">${money(T.total)}</b></div>
       <div class="row"><span>Discount <small class="muted" id="t_pct">${T.subtotal ? '(' + T.discPct.toFixed(2) + '%)' : ''}</small></span><input id="discount" type="number" step="any" value="${q.discount || 0}"></div>` : ''}
@@ -212,7 +213,7 @@ async function editor(el, id) {
   const update2 = () => { // totals only, keep focus in the inputs
     const T = quoteTotals(q); const set = (id2, v) => { const e = $('#' + id2, el); if (e) e.textContent = v; };
     set('t_sub', money(T.subtotal)); set('t_amount', money(T.amount)); set('t_vat', money(T.vat)); set('t_total', money(T.total)); set('t_grand', money(T.grand));
-    set('t_pct', T.subtotal ? `(${T.discPct.toFixed(2)}%)` : '');
+    set('t_pct', T.subtotal ? `(${T.discPct.toFixed(2)}%)` : ''); set('t_vbase', T.exempt > 0.0005 ? `on ${money(T.vatBase)} (${money(T.exempt)} has no VAT)` : '');
     $('#dwarn', el).hidden = !(limit > 0 && T.discPct > limit + 1e-9 && !isAdmin);
     $('#words', el).textContent = T.grand > 0 ? amountInWords(T.grand) : '';
   };
@@ -224,6 +225,7 @@ async function editor(el, id) {
   tbody.addEventListener('input', (e) => {
     const tr = e.target.closest('tr[data-i]'); if (!tr) return;
     const it = q.items[Number(tr.dataset.i)]; const k = e.target.dataset.k; if (!k) return;
+    if (k === 'vat') { it.vat = e.target.checked; e.target.title = it.vat ? 'VAT is charged on this line' : 'No VAT on this line'; update(); return; }
     const v = e.target.value;
     if (['w', 'h', 'qty', 'price'].includes(k)) it[k] = v === '' ? null : num(v); else it[k] = v;
     if (k === 'price') it.manual = true;
@@ -238,7 +240,7 @@ async function editor(el, id) {
     if (k === 'desc' && it.kind !== 'note') {
       // choosing a different description replaces what no longer matches it: the model (and so hand / opening / glass) follows the new item
       const p = pi(it.desc);
-      if (p && it.pi_id !== p.id) { it.pi_id = p.id; it.model_id = p.model_id || null; it.manual = false; it.price = priceFor(p, num(it.w), num(it.h)); delete it.hand; delete it.swing; normalise(it); drawRows(); }
+      if (p && it.pi_id !== p.id) { it.pi_id = p.id; it.model_id = p.model_id || null; it.manual = false; it.vat = p.vat !== 0; /* the price item decides whether VAT applies; the box on the line can still be changed */ it.price = priceFor(p, num(it.w), num(it.h)); delete it.hand; delete it.swing; normalise(it); drawRows(); }
       else if (!p && it.pi_id) { it.pi_id = null; it.model_id = null; delete it.hand; delete it.swing; drawRows(); toast('The description no longer matches the price list, so the model was cleared'); }
       return;
     }
@@ -306,7 +308,7 @@ async function printQuote(el, id) {
     if (it.kind === 'note') return `<tr><td></td><td colspan="5"><b>${esc(it.desc)}</b></td></tr>`;
     n++;
     const opt = [it.hand && (it.hand === 'R' ? 'Right hand' : 'Left hand'), it.swing && (it.swing === 'in' ? 'opens inside' : 'opens outside')].filter(Boolean).join(' · '); const optAr = [it.hand && (it.hand === 'R' ? 'يمين' : 'يسار'), it.swing && (it.swing === 'in' ? 'يفتح للداخل' : 'يفتح للخارج')].filter(Boolean).join(' · ');
-    return `<tr><td>${n}</td><td class="n">${it.w ? fq(it.w) : ''}${it.w && it.h ? ' × ' + fq(it.h) : ''}</td><td>${esc(it.desc)}${opt ? `<div class="note">${opt} <span class="ar">${optAr}</span></div>` : ''}${it.note ? `<div class="note">${esc(it.note).replace(/\n/g, '<br>')}</div>` : ''}</td><td class="n">${fq(it.qty)}</td><td class="n">${money(it.price, 2)}</td><td class="n">${money(num(it.qty) * num(it.price), 2)}</td></tr>`;
+    return `<tr><td>${n}</td><td class="n">${it.w ? fq(it.w) : ''}${it.w && it.h ? ' × ' + fq(it.h) : ''}</td><td>${esc(it.desc)}${hasVat(it) ? '' : ' ‡'}${opt ? `<div class="note">${opt} <span class="ar">${optAr}</span></div>` : ''}${it.note ? `<div class="note">${esc(it.note).replace(/\n/g, '<br>')}</div>` : ''}</td><td class="n">${fq(it.qty)}</td><td class="n">${money(it.price, 2)}</td><td class="n">${money(num(it.qty) * num(it.price), 2)}</td></tr>`;
   }).join('');
   // kitchens on this quotation come with their drawings
   const kids = [...new Set((q.items || []).map((i) => i.kitchen_id).filter(Boolean))];
@@ -318,6 +320,7 @@ async function printQuote(el, id) {
     ${q.title ? `<div class="banner">${esc(q.title)}</div>` : ''}
     <table class="items-print"><thead><tr><th>#</th><th class="n">${L('size', 'Size (W × H cm)')}</th><th>${L('description', 'Description')}</th><th class="n">${L('qty', 'Qty')}</th><th class="n">${L('unit', 'Unit')}</th><th class="n">${L('amount', 'Amount')}</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="tot"><div><span>${L('total', 'Total')}</span><span>${money(T.subtotal, 2)}</span></div>${T.after ? `${q.vat_rate ? `<div><span>${L('vat', 'VAT')} ${fq(q.vat_rate)}%</span><span>${money(T.vat, 2)}</span></div>` : ''}${T.waived ? `<div><span>${L('vatAdj', 'VAT adjustment')}</span><span>- ${money(T.waived, 2)}</span></div>` : ''}${T.discount ? `<div><span>${L('total', 'Total with VAT')}</span><span>${money(T.total, 2)}</span></div><div><span>${L('disc', 'Disc')} ${T.discPct.toFixed(2)}%</span><span>- ${money(T.discount, 2)}</span></div>` : ''}` : `${T.discount ? `<div><span>${L('disc', 'Disc')} ${T.discPct.toFixed(2)}%</span><span>- ${money(T.discount, 2)}</span></div><div><span>${L('amount', 'Amount')}</span><span>${money(T.amount, 2)}</span></div>` : ''}${q.vat_rate ? `<div><span>${L('vat', 'VAT')} ${fq(q.vat_rate)}%</span><span>${money(T.vat, 2)}</span></div>` : ''}${T.waived ? `<div><span>${L('vatAdj', 'VAT adjustment')}</span><span>- ${money(T.waived, 2)}</span></div>` : ''}`}<div class="g"><span>${L('grand', 'Grand Amount BD')}</span><span>${money(T.grand, 2)}</span></div></div>
+    ${T.exempt > 0.0005 && q.vat_rate ? `<p style="font-size:11px;margin:4px 0">‡ ${L('noVat', 'Not subject to VAT')} — VAT is charged on BD ${money(T.vatBase, 2)}</p>` : ''}
     ${wordsBlock(T.grand)}
     <div class="sign"><div>${L('prepared', 'Prepared')} ${esc(q.prepared_by || '')}</div><div>${L('custSign', 'Cust. Sign')}</div></div>
     ${termsBlock()}${drawings}`;

@@ -72,7 +72,7 @@ export async function exportWorkbook() {
     ws.getCell(foot, 10).value = { formula: `SUMPRODUCT(I16:I${foot - 2},J16:J${foot - 2})`, result: T.subtotal };
     ws.getCell(foot + 1, 8).value = 'Disc'; ws.getCell(foot + 1, 10).value = q.discount || 0;
     ws.getCell(foot + 2, 8).value = 'Amount'; ws.getCell(foot + 2, 10).value = { formula: `J${foot}-J${foot + 1}`, result: T.amount };
-    ws.getCell(foot + 3, 8).value = q.vat_rate; ws.getCell(foot + 3, 10).value = { formula: `J${foot + 2}*H${foot + 3}%`, result: T.vat };
+    ws.getCell(foot + 3, 8).value = q.vat_rate; ws.getCell(foot + 3, 10).value = T.exempt > 0.0005 ? T.vat : { formula: `J${foot + 2}*H${foot + 3}%`, result: T.vat }; // with VAT-free lines the figure is a value, not rate × total
     ws.getCell(foot + 4, 10).value = q.vat_waived || 0;
     ws.getCell(foot + 5, 8).value = 'Grand Amount'; ws.getCell(foot + 5, 10).value = { formula: `J${foot + 2}+J${foot + 3}-J${foot + 4}`, result: T.grand };
     ws.getCell(foot + 9, 2).value = 'Prepared \\\\'; ws.getCell(foot + 9, 4).value = q.prepared_by || '';

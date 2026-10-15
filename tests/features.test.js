@@ -221,3 +221,13 @@ test('customer and supplier statements by period: earlier entries become a broug
   const cut = customerLedger('A', orders, receipts, [], '', '2026-02-15'); assert.equal(cut.balance, 60); assert.equal(cut.entries.length, 2); // up to a date
   const s = supplierLedger('S', [{ supplier: 's', date: '2026-01-02', amount: 200 }], [{ paid_to: 'S', date: '2026-02-02', amount: 50, no: 'P1' }], '2026-02-01'); assert.equal(s.opening, 200); assert.equal(s.balance, 150);
 });
+
+test('VAT per line: only lines with VAT are taxed, the discount is shared over the lines, old quotations are unchanged', async () => {
+  const { quoteTotals, hasVat } = await import('../public/js/calc.js');
+  const items = [{ qty: 1, price: 1000 }, { qty: 2, price: 100, vat: false }]; // 1000 with VAT, 200 without
+  const t = quoteTotals({ items, vat_rate: 10 }); assert.equal(t.subtotal, 1200); assert.equal(t.vat, 100); assert.equal(t.vatBase, 1000); assert.equal(t.exempt, 200); assert.equal(t.grand, 1300);
+  const d = quoteTotals({ items, vat_rate: 10, discount: 120 }); assert.ok(Math.abs(d.vat - 90) < 1e-9); assert.ok(Math.abs(d.grand - (1200 - 120 + 90)) < 1e-9); // 10% off: VAT base 900
+  const a = quoteTotals({ items, vat_rate: 10, discount: 120, disc_mode: 'after' }); assert.equal(a.vat, 100); assert.equal(a.grand, 1200 + 100 - 120); // discount after VAT: VAT on the full VATable total
+  const old = [{ qty: 3, price: 100 }]; assert.equal(quoteTotals({ items: old, vat_rate: 10 }).vat, 30); assert.equal(hasVat(old[0]), true); // no flag = VAT as before
+  assert.equal(hasVat({ vat: false }), false); assert.equal(hasVat({ vat: 0 }), false); assert.equal(hasVat({ vat: true }), true);
+});

@@ -18,11 +18,11 @@ import { exportWorkbook } from './src/exporter.js';
 import { exportActivity } from './src/activity-export.js';
 import { purgeOldPhotos, photoStats } from './src/retention.js';
 import { quoteTotals, approvalFor, discountPct } from './public/js/calc.js';
-import { vatReport, orderVat } from './public/js/vat.js';
+import { vatReport, orderVat, vatIn } from './public/js/vat.js';
 import { audit, diff, labelOf, listAudit, notable } from './src/audit.js';
 import { respond, staticServer, throttleCheck, throttleFail, throttleOk, runBackup, listBackups, backupDir } from './src/web.js';
 
-syncEmployees(); seedChart(DEFAULT_CHART); seedBankAccounts(); seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets(); seedBalexco(); seedAluKitchen();
+syncEmployees(); seedChart(DEFAULT_CHART); seedBankAccounts(); freezeAllVat(); seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets(); seedBalexco(); seedAluKitchen();
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DEV = process.env.WORKSHOP_DEV === '1';
@@ -138,6 +138,20 @@ function moneyRules(t, body, cur = {}) {
   }
 }
 
+/**
+ * VAT is fixed on a document when it is made: changing the VAT rate (or an item's price or VAT setting) later only affects
+ * new quotations, invoices and purchases. Anything saved without a VAT figure gets the one that applies right now.
+ */
+function freezeVat(t, body) {
+  const rate = Number(getSetting('vat_rate') ?? 10);
+  if (t === 'orders' && (body.vat == null || body.vat === '')) { const q = body.quote_no ? db.prepare('SELECT * FROM quotes WHERE number=?').get(body.quote_no) : null; const qn = q ? new Map([[q.number, { ...q, items: JSON.parse(q.items || '[]') }]]) : new Map(); body.vat = orderVat({ ...body, vat: null }, qn, rate); }
+  if (t === 'purchases' && (body.vat == null || body.vat === '') && getSetting('purchase_vat_default')) body.vat = vatIn(Number(body.amount) || 0, rate);
+  return body;
+}
+export function freezeAllVat() { // old records: pin the figure they would have shown today
+  for (const o of listRows('orders').filter((x) => x.vat == null || x.vat === '')) updateRow('orders', o.id, { vat: freezeVat('orders', { ...o }).vat });
+  if (getSetting('purchase_vat_default')) for (const p of listRows('purchases').filter((x) => x.vat == null || x.vat === '')) updateRow('purchases', p.id, { vat: freezeVat('purchases', { ...p }).vat });
+}
 const ledgerData = () => ({
   banks: listRows('bank_accounts'), accounts: listRows('accounts'), orders: listRows('orders'), quotes: listRows('quotes'), credits: listRows('credit_notes').filter((c) => c.status === 'approved'), receipts: listRows('receipts'), payments: listRows('payments'),
   purchases: listRows('purchases').filter((x) => !x.hidden), cash: listRows('cash_entries'), journals: listRows('journals'), settings: { vat_rate: getSetting('vat_rate'), purchase_vat_default: getSetting('purchase_vat_default'), opening: getSetting('opening') },
@@ -456,7 +470,7 @@ async function api(req, res, url) {
       if (t === 'accounts') need(role === 'admin'); // only the admin adds accounts to the chart
       const body = await readJson(req);
       const row = tx(() => {
-        checkRef(t, body); moneyRules(t, body); accountingRules(t, body);
+        checkRef(t, body); moneyRules(t, body); accountingRules(t, body); freezeVat(t, body);
         if (t === 'tasks') { body.status = body.status || 'todo'; body.progress = body.progress ?? 0; body.created_by = user.id; }
         if (worker && t === 'stock') { delete body.unit_cost; if (body.kind === 'leftover' && body.profile_id) { const pr = getRow('profiles', Number(body.profile_id)); body.unit_cost = pr && pr.bar_length > 0 ? Math.round((pr.price_bar / pr.bar_length) * (body.length || 0) * ((getSetting('leftover_pct') ?? 60) / 100) * 1000) / 1000 : 0; } }
         if (t === 'quotes') quoteApproval(body, null, user);
