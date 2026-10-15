@@ -211,3 +211,13 @@ test('page modules load and render without throwing (catches broken syntax / str
   const { readdirSync } = await import('node:fs'); const { spawnSync } = await import('node:child_process');
   for (const f of readdirSync(new URL('../public/js/pages/', import.meta.url))) { const r = spawnSync(process.execPath, ['--check', new URL('../public/js/pages/' + f, import.meta.url).pathname]); assert.equal(r.status, 0, `${f}: ${r.stderr}`); }
 });
+
+test('customer and supplier statements by period: earlier entries become a brought-forward balance', async () => {
+  const { customerLedger, supplierLedger } = await import('../public/js/accounting.js');
+  const orders = [{ inv: 'I1', date: '2026-01-10', client: 'A', amount: 100 }, { inv: 'I2', date: '2026-03-10', client: 'A', amount: 50 }];
+  const receipts = [{ no: 'R1', date: '2026-02-01', order_inv: 'I1', amount: 40 }, { no: 'R2', date: '2026-03-15', order_inv: 'I2', amount: 10 }];
+  const all = customerLedger('a', orders, receipts, []); assert.equal(all.balance, 100); assert.equal(all.entries.length, 4);
+  const p = customerLedger('A', orders, receipts, [], '2026-03-01', '2026-03-31'); assert.equal(p.opening, 60); assert.equal(p.entries.length, 2); assert.equal(p.balance, 100); assert.equal(p.entries[0].bal, 110);
+  const cut = customerLedger('A', orders, receipts, [], '', '2026-02-15'); assert.equal(cut.balance, 60); assert.equal(cut.entries.length, 2); // up to a date
+  const s = supplierLedger('S', [{ supplier: 's', date: '2026-01-02', amount: 200 }], [{ paid_to: 'S', date: '2026-02-02', amount: 50, no: 'P1' }], '2026-02-01'); assert.equal(s.opening, 200); assert.equal(s.balance, 150);
+});

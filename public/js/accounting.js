@@ -88,25 +88,46 @@ export function statements(tb) {
   return { income, expenses, profit, assets, liabilities, equity, equityWithProfit: r3(equity + profit), balanced: Math.abs(assets - (liabilities + equity + profit)) < 0.0005 };
 }
 
-/** One account's ledger (running balance) from the entries. */
+/** One account's ledger between two dates. With a start date, the first row is the balance brought forward from before it. */
 export function accountLedger(account, entries, from = '', to = '') {
-  const debitNormal = DEBIT_TYPES.has(account.type); const rows = []; let bal = 0;
-  for (const e of entries.filter((x) => x.account === account.id).sort((a, b) => (a.date || '').localeCompare(b.date || ''))) {
-    if (e.date !== '0000-00-00' && !within(e.date, from, to)) continue;
-    bal += debitNormal ? e.debit - e.credit : e.credit - e.debit; rows.push({ ...e, balance: r3(bal) });
+  const debitNormal = DEBIT_TYPES.has(account.type); const sign = (e) => (debitNormal ? e.debit - e.credit : e.credit - e.debit);
+  const mine = entries.filter((x) => x.account === account.id).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const before = from ? mine.filter((e) => e.date === '0000-00-00' || (e.date && e.date < from)) : [];
+  let bal = r3(before.reduce((t, e) => t + sign(e), 0)); const rows = [];
+  if (from && before.length) rows.push({ opening: true, date: from, source: '', ref: '', desc: 'Balance brought forward', debit: 0, credit: 0, balance: bal });
+  for (const e of mine) {
+    if (before.includes(e)) continue; if (!within(e.date, from, to)) continue;
+    bal = r3(bal + sign(e)); rows.push({ ...e, balance: bal });
   }
   return rows;
 }
 
-const norm = (s) => String(s || '').trim().toUpperCase();
-/** What we owe a supplier: purchases (supplier invoices) raise it, payment vouchers to them lower it. Pure so it can be tested. */
-export function supplierLedger(supplier, purchases, payments) {
-  const key = norm(supplier); const entries = [];
-  for (const p of purchases) if (norm(p.supplier) === key && !p.hidden) entries.push({ date: p.date, desc: `Purchase ${p.invoice || p.pv || ''}${p.order_inv ? ' – ' + p.order_inv : ''}${p.note ? ' – ' + p.note : ''}`.trim(), debit: 0, credit: Number(p.amount) || 0, k: 0 });
-  for (const v of payments) if (norm(v.paid_to) === key) entries.push({ date: v.date, desc: `Payment voucher ${v.no}${v.method ? ' (' + v.method + (v.ref ? ' ' + v.ref : '') + ')' : ''}`, debit: Number(v.amount) || 0, credit: 0, k: 1 });
-  entries.sort((a, b) => (a.date || '').localeCompare(b.date || '') || a.k - b.k);
-  let bal = 0; for (const e of entries) { bal += e.credit - e.debit; e.bal = Math.round(bal * 1000) / 1000; }
-  const debit = entries.reduce((s, e) => s + e.debit, 0); const credit = entries.reduce((s, e) => s + e.credit, 0);
-  return { entries, debit, credit, balance: Math.round((credit - debit) * 1000) / 1000 };
-}
 
+const norm = (s) => String(s || '').trim().toUpperCase();
+/** A running statement between two dates: everything before `from` is rolled into an opening balance. sign: +1 raises the balance. */
+function periodStatement(all, from, to) {
+  const sorted = [...all].sort((a, b) => (a.date || '').localeCompare(b.date || '') || a.k - b.k);
+  let bal = 0; const entries = []; let opening = 0;
+  for (const e of sorted) {
+    if (from && (e.date || '') < from) { bal += e.delta; opening = bal; continue; }
+    if (to && (e.date || '') > to) continue;
+    bal += e.delta; entries.push({ ...e, bal: r3(bal) });
+  }
+  const debit = entries.reduce((t, e) => t + e.debit, 0); const credit = entries.reduce((t, e) => t + e.credit, 0);
+  return { opening: r3(opening), entries, debit: r3(debit), credit: r3(credit), balance: r3(bal) };
+}
+/** What we owe a supplier: purchases (supplier invoices) raise it, payment vouchers to them lower it. Optional period. */
+export function supplierLedger(supplier, purchases, payments, from = '', to = '') {
+  const key = norm(supplier); const all = [];
+  for (const p of purchases) if (norm(p.supplier) === key && !p.hidden) all.push({ date: p.date, desc: `Purchase ${p.invoice || p.pv || ''}${p.order_inv ? ' – ' + p.order_inv : ''}${p.note ? ' – ' + p.note : ''}`.trim(), debit: 0, credit: Number(p.amount) || 0, delta: Number(p.amount) || 0, k: 0 });
+  for (const v of payments) if (norm(v.paid_to) === key) all.push({ date: v.date, desc: `Payment voucher ${v.no}${v.method ? ' (' + v.method + (v.ref ? ' ' + v.ref : '') + ')' : ''}`, debit: Number(v.amount) || 0, credit: 0, delta: -(Number(v.amount) || 0), k: 1 });
+  return periodStatement(all, from, to);
+}
+/** What a customer owes: invoices raise it; receipts and approved credit notes lower it. Optional period. */
+export function customerLedger(client, orders, receipts, credits, from = '', to = '') {
+  const key = norm(client || '—'); const mine = orders.filter((o) => norm(o.client || '—') === key); const invs = new Set(mine.map((o) => o.inv)); const all = [];
+  for (const o of mine) all.push({ date: o.date, desc: `Invoice ${o.inv}${o.site ? ' – ' + o.site : ''}`, debit: Number(o.amount) || 0, credit: 0, delta: Number(o.amount) || 0, k: 0 });
+  for (const r of receipts) if (invs.has(r.order_inv)) all.push({ date: r.date, desc: `Receipt ${r.no} (${r.order_inv})`, debit: 0, credit: Number(r.amount) || 0, delta: -(Number(r.amount) || 0), k: 1 });
+  for (const c of credits) if (invs.has(c.order_inv)) all.push({ date: c.date, desc: `Credit note ${c.no} (${c.order_inv})${c.reason ? ' – ' + c.reason : ''}`, debit: 0, credit: Number(c.total) || 0, delta: -(Number(c.total) || 0), k: 2 });
+  return periodStatement(all, from, to);
+}

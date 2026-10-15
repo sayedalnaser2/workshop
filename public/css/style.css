@@ -252,7 +252,10 @@ table.mini { width: 100%; border-collapse: collapse; } .mini th { font-size: 11p
   .qhead, .cols2, .cols3, .form { grid-template-columns: 1fr; }
   .doc { width: 100%; padding: 8mm; min-height: 0; }
 }
+
+.print-only { display: none; }
 @media print {
+  .print-only { display: block !important; }
   body { background: #fff; }
   #side, .topbar, .printbar, .sticky-actions, #toasts, .noprint { display: none !important; }
   #app, .main-wrap, main { display: block; padding: 0; margin: 0; max-width: none; }

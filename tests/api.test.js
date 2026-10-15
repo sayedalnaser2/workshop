@@ -373,3 +373,16 @@ test('several bank accounts: the original one exists, new ones get their own cha
   assert.ok(!(await call('boss', 'GET', '/api/t/accounts')).data.some((a) => a.id === b3.coa_id)); // its empty chart account went too
   assert.equal((await call('boss', 'GET', '/api/accounting')).data.tb.balanced, true);
 });
+
+test('journal: negative debit or credit is refused; statements take a period', async () => {
+  const d = (await call('boss', 'GET', '/api/accounting')).data; const cash = d.accounts.find((a) => a.sys === 'cash').id; const cap = d.accounts.find((a) => a.sys === 'capital').id;
+  const neg = await call('boss', 'POST', '/api/t/journals', { date: '2026-10-10', description: 'neg', lines: [{ account_id: cash, debit: -10 }, { account_id: cap, credit: -10 }] });
+  assert.equal(neg.status, 400); assert.match(neg.data.error, /negative/i);
+  // an account statement from a date: the first row is the balance brought forward and balances continue from it
+  const j1 = (await call('boss', 'POST', '/api/t/journals', { date: '2026-01-05', description: 'early', lines: [{ account_id: cash, debit: 70 }, { account_id: cap, credit: 70 }] })).data;
+  const j2 = (await call('boss', 'POST', '/api/t/journals', { date: '2026-03-05', description: 'later', lines: [{ account_id: cash, debit: 30 }, { account_id: cap, credit: 30 }] })).data;
+  const all = (await call('boss', 'GET', `/api/accounting?account=${cap}`)).data.ledger; const part = (await call('boss', 'GET', `/api/accounting?account=${cap}&from=2026-02-01`)).data.ledger;
+  assert.equal(all.at(-1).balance, part.at(-1).balance); assert.equal(part[0].opening, true); assert.ok(part[0].balance >= 70);
+  assert.ok(part.every((r) => r.opening || r.date >= '2026-02-01'));
+  await call('boss', 'DELETE', `/api/t/journals/${j1.id}`); await call('boss', 'DELETE', `/api/t/journals/${j2.id}`);
+});

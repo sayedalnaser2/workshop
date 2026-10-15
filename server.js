@@ -156,7 +156,7 @@ function accountingRules(t, body, cur = {}) {
     const lines = (({ ...cur, ...body }).lines || []).filter((l) => l && (Number(l.debit) || Number(l.credit)));
     if (lines.length < 2) throw bad('A journal voucher needs at least two lines.');
     let d = 0; let c = 0; const kids = new Set(db.prepare('SELECT DISTINCT parent_id p FROM accounts WHERE parent_id IS NOT NULL').all().map((x) => x.p));
-    for (const l of lines) { if (!l.account_id || !getRow('accounts', Number(l.account_id))) throw bad('Every line needs an account.'); if (kids.has(Number(l.account_id))) throw bad('Post to a detail account, not to a heading that has accounts under it.'); if (Number(l.debit) && Number(l.credit)) throw bad('A line is either a debit or a credit, not both.'); d += Number(l.debit) || 0; c += Number(l.credit) || 0; }
+    for (const l of lines) { if (!l.account_id || !getRow('accounts', Number(l.account_id))) throw bad('Every line needs an account.'); if (kids.has(Number(l.account_id))) throw bad('Post to a detail account, not to a heading that has accounts under it.'); if (Number(l.debit) < 0 || Number(l.credit) < 0) throw bad('Debit and credit cannot be negative.'); if (Number(l.debit) && Number(l.credit)) throw bad('A line is either a debit or a credit, not both.'); d += Number(l.debit) || 0; c += Number(l.credit) || 0; }
     if (Math.abs(d - c) > 0.0005) throw bad(`The voucher does not balance: debit ${d.toFixed(3)} and credit ${c.toFixed(3)}.`);
   }
 }
