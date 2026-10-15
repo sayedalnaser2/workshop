@@ -44,3 +44,20 @@ export function listAudit({ table = '', user = 0, from = '', to = '', q = '', li
   const tables = db.prepare('SELECT DISTINCT tbl FROM audit_log ORDER BY tbl').all().map((r) => r.tbl);
   return { total, rows, tables };
 }
+
+/** Adds `_upd` (when, who, what) to rows read through the API so the screens can show "last changed" on hover. */
+export function withUpd(table, rows) {
+  if (SKIP.has(table) || !rows) return rows;
+  const list = Array.isArray(rows) ? rows : [rows];
+  if (!list.length) return rows;
+  const last = new Map();
+  try {
+    for (const a of db.prepare('SELECT row_id, ts, user_name, action, changes FROM audit_log WHERE id IN (SELECT MAX(id) FROM audit_log WHERE tbl=? AND row_id IS NOT NULL GROUP BY row_id)').all(table)) last.set(a.row_id, a);
+  } catch { return rows; }
+  const mk = (r) => {
+    const a = last.get(r.id);
+    let ch = []; try { ch = a?.changes ? JSON.parse(a.changes).slice(0, 4) : []; } catch {}
+    return { ...r, _upd: a ? { ts: a.ts, by: a.user_name || '', action: a.action, ch } : { ts: r.created_at || '', by: '', action: 'created', ch: [] } };
+  };
+  return Array.isArray(rows) ? list.map(mk) : mk(rows);
+}

@@ -1,6 +1,6 @@
 import { S, refresh } from '../app.js';
-import { accountChoices, primaryBank, CASH } from '../banks.js';
-import { api, $, $$, esc, money, dmy, today, num, dataTable, editRow, confirmBox, toast, guard, datalist, badge, formHTML, readForm, REF_LABEL } from '../ui.js';
+import { accountChoices, accountLabel, primaryBank, CASH } from '../banks.js';
+import { api, $, $$, esc, money, dmy, today, num, dataTable, editRow, confirmBox, toast, guard, datalist, badge, formHTML, readForm, REF_LABEL, tipText } from '../ui.js';
 import { amountInWords } from '../calc.js';
 import { printView, docHeader, L, wordsBlock, AR } from '../doc.js';
 
@@ -68,10 +68,21 @@ async function form(el, pre) {
 async function print(el, id) {
   const p = await api.get(`t/payments/${id}`);
   const lines = p.lines?.length ? p.lines : [{ text: p.category || 'Payment', amount: p.amount }];
+  const u = p._upd || {}; const created = p.created_at ? new Date(String(p.created_at).replace(' ', 'T') + 'Z') : null;
+  const two = (n) => String(n).padStart(2, '0'); const stamp = (d) => (d && !Number.isNaN(d.getTime()) ? `${two(d.getDate())}/${two(d.getMonth() + 1)}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}` : '');
+  const changed = u.ts ? new Date(String(u.ts).replace(' ', 'T') + 'Z') : null;
+  const row = (en, ar, v) => (v ? `<div><b>${en} <span class="ar">${ar}</span></b> ${esc(v)}</div>` : '');
   const html = `${docHeader('PAYMENT VOUCHER', AR.voucher)}
-    <div class="meta"><div><b>${L('date', 'DATE')}:</b> ${dmy(p.date)}</div><div><b>${L('no', 'VOUCHER NO')}:</b> ${esc(p.no)}</div><div><b>${L('paidBy', 'PAID BY')}:</b> ${esc(p.method || '')}${p.ref ? ` — ${esc(REF_LABEL[p.method] || 'Ref')} <b>${esc(p.ref)}</b>` : ''}</div><div style="grid-column:1/-1"><b>${L('paidTo', 'PAID TO MR / MISS')}:</b> ${esc(p.paid_to)}</div></div>
+    <div class="meta"><div><b>${L('date', 'DATE')}:</b> ${dmy(p.date)}</div><div><b>${L('no', 'VOUCHER NO')}:</b> ${esc(p.no)}</div><div style="grid-column:1/-1"><b>${L('paidTo', 'PAID TO MR / MISS')}:</b> ${esc(p.paid_to)}</div></div>
+    <div class="amt"><span>${L('amount', 'Amount')}</span><span>BD ${money(p.amount, 3)}</span></div>
     ${wordsBlock(p.amount)}
     <table><thead><tr><th>${L('description', 'PARTICULARS')}</th><th class="n">${L('debit', 'DEBIT (BD)')}</th></tr></thead><tbody>${lines.map((l) => `<tr><td>${esc(l.text)}</td><td class="n">${money(l.amount, 3)}</td></tr>`).join('')}<tr><td><b>${L('total', 'TOTAL')}</b></td><td class="n"><b>${money(p.amount, 3)}</b></td></tr></tbody></table>
-    <div class="sign" style="margin-top:60px"><div>${L('prepared', 'PREPARED BY')}</div><div>APPROVED BY <span class="ar">اعتمده</span></div><div>${L('received', 'RECEIVED BY')}</div></div>`;
-  printView(el, { back: '#/payments', html });
+    <div class="details"><h4>Payment details <span class="ar">تفاصيل الدفع</span></h4>
+      ${row('Voucher no.', 'رقم السند', p.no)}${row('Date', 'التاريخ', dmy(p.date))}${row('Paid to', 'المدفوع له', p.paid_to)}${row('Category', 'البند', p.category)}
+      ${row('Paid by', 'طريقة الدفع', p.method)}${p.ref ? row(REF_LABEL[p.method] || 'Reference', 'المرجع', p.ref) : ''}${row('Paid from', 'مدفوع من', p.account ? accountLabel(p.account, S.bank_accounts) : '')}${row('Amount', 'المبلغ', 'BD ' + money(p.amount, 3))}
+      ${row('Status', 'الحالة', p.done ? 'Done / settled' : 'Pending')}${row('Note', 'ملاحظة', p.note)}
+      ${row('Created', 'أُنشئ', stamp(created))}${row('Last changed', 'آخر تعديل', changed && u.action !== 'created' ? `${stamp(changed)}${u.by ? ' — ' + u.by : ''}` : '')}
+    </div>
+    <div class="sign" style="margin-top:50px"><div>${L('prepared', 'PREPARED BY')}</div><div>APPROVED BY <span class="ar">اعتمده</span></div><div>${L('received', 'RECEIVED BY')}</div></div>`;
+  printView(el, { back: '#/payments', html, cls: 'voucher' });
 }

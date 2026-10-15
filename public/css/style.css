@@ -189,6 +189,16 @@ table.mini { width: 100%; border-collapse: collapse; } .mini th { font-size: 11p
 .doc th .ar { opacity: .9; }
 .doc .ar-title { text-align: center; font-size: 17px; margin: -4px 0 10px; direction: rtl; }
 .doc .ar-line, .doc .ar-terms { direction: rtl; text-align: right; }
+/* payment voucher: a clearer, larger face and a details block at the bottom */
+.doc.voucher { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", "Noto Naskh Arabic", Arial, sans-serif; font-size: 13.5px; line-height: 1.65; }
+.doc.voucher h2 { font-weight: 700; letter-spacing: .12em; }
+.doc.voucher .ar-line { font-size: 16px; font-weight: 600; line-height: 1.9; margin: 2px 0 12px; }
+.doc.voucher .amt { display: flex; justify-content: space-between; align-items: center; border: 2px solid #111; border-radius: 6px; padding: 8px 14px; margin: 10px 0; font-size: 18px; font-weight: 700; }
+.doc.voucher .details { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid #999; margin-top: 22px; }
+.doc.voucher .details div { padding: 5px 10px; border-bottom: 1px solid #ddd; }
+.doc.voucher .details div:nth-child(odd) { border-right: 1px solid #ddd; }
+.doc.voucher .details b { display: inline-block; min-width: 120px; color: #333; font-weight: 600; }
+.doc.voucher .details h4 { grid-column: 1/-1; margin: 0; padding: 5px 10px; background: #eef1f6; border-bottom: 1px solid #999; }
 .doc .ar-terms { margin-top: 8px; border-top: 1px dashed #bbb; padding-top: 6px; }
 .doc .stamp, .doc .stamp-note { text-align: center; border: 2px solid #c0392b; color: #c0392b; font-weight: 800; letter-spacing: .06em; padding: 6px; margin: 8px 0; transform: rotate(-2deg); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; }

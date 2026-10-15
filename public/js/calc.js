@@ -175,12 +175,12 @@ function arBelow1000(n) {
 /** A whole number in Arabic words (masculine), up to billions. */
 export function arabicWords(n) {
   if (n === 0) return 'صفر';
-  const scales = [[1e9, 'مليار', 'ملياران', 'مليارات'], [1e6, 'مليون', 'مليونان', 'ملايين'], [1e3, 'ألف', 'ألفان', 'آلاف']];
+  const scales = [[1e9, 'مليار', 'ملياران', 'مليارات', 'ملياراً'], [1e6, 'مليون', 'مليونان', 'ملايين', 'مليوناً'], [1e3, 'ألف', 'ألفان', 'آلاف', 'ألفاً']];
   const parts = [];
-  for (const [v, one, two, many] of scales) {
+  for (const [v, one, two, many, acc] of scales) {
     if (n >= v) {
       const c = Math.floor(n / v); n %= v;
-      parts.push(c === 1 ? one : c === 2 ? two : c <= 10 ? `${arBelow1000(c)} ${many}` : `${arBelow1000(c)} ${one}`);
+      parts.push(c === 1 ? one : c === 2 ? two : c <= 10 ? `${arBelow1000(c)} ${many}` : `${arBelow1000(c).replace(/مائتان$/, 'مائتا')} ${c % 100 === 0 || n === 0 ? one : acc}`);
     }
   }
   if (n) parts.push(arBelow1000(n));
@@ -192,7 +192,9 @@ function arCount(n, f) {
   if (n === 1) return f.one; if (n === 2) return f.two;
   if (r === 1) return `${arabicWords(n - 1)} و${f.one}`;
   if (r === 2) return `${arabicWords(n - 2)} و${f.two}`;
-  return `${arabicWords(n)} ${r >= 3 && r <= 10 ? f.few : r === 0 ? f.gen : f.acc}`;
+  // 200, 2,000, 2,000,000: the "-ان" ending drops before the counted noun (مائتا دينار، ألفا دينار)
+  const w = arabicWords(n); const w2 = r === 0 ? w.replace(/(مائتان|ألفان|مليونان|ملياران)$/, (m) => m.slice(0, -1)) : w;
+  return `${w2} ${r >= 3 && r <= 10 ? f.few : r === 0 ? f.gen : f.acc}`;
 }
 const BHD = { one: 'دينار بحريني واحد', two: 'ديناران بحرينيان', few: 'دنانير بحرينية', acc: 'ديناراً بحرينياً', gen: 'دينار بحريني' };
 const FILS = { one: 'فلس واحد', two: 'فلسان', few: 'فلوس', acc: 'فلساً', gen: 'فلس' };

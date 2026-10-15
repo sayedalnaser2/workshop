@@ -45,6 +45,9 @@ test('Arabic amount in words', () => {
   assert.equal(amountInWordsAr(1), 'فقط دينار بحريني واحد لا غير');
   assert.match(amountInWordsAr(345.5), /ثلاثمائة وخمسة وأربعون ديناراً بحرينياً وخمسمائة فلس/);
   assert.match(amountInWordsAr(3), /ثلاثة دنانير/);
+  assert.match(amountInWordsAr(200), /مائتا دينار/);
+  assert.match(amountInWordsAr(2000), /ألفا دينار/);
+  assert.match(amountInWordsAr(12500), /اثنا عشر ألفاً وخمسمائة دينار/);
   assert.match(amountInWordsAr(1500000), /مليون وخمسمائة ألف/);
 });
 

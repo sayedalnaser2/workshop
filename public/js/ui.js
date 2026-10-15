@@ -127,7 +127,7 @@ export function dataTable(el, { cols, rows, search = [], page = 100, onRow, acti
     const list = view(); const pages = Math.max(1, Math.ceil(list.length / page)); pg = Math.min(pg, pages - 1);
     head.innerHTML = `<tr>${cols.map((c) => `<th class="${c.num ? 'num' : ''} ${sortKey === c.key ? (dir > 0 ? 'asc' : 'desc') : ''}" data-k="${c.key}">${esc(c.label)}</th>`).join('')}${actions ? '<th></th>' : ''}</tr>`;
     const slice = list.slice(pg * page, pg * page + page);
-    body.innerHTML = slice.length ? slice.map((r, i) => `<tr data-i="${i}" class="${onRow ? 'click' : ''}">${cols.map((c) => `<td class="${c.num ? 'num' : ''} ${c.class || ''}">${c.render ? c.render(r) : esc(r[c.key])}</td>`).join('')}${actions ? `<td class="act">${actions(r)}</td>` : ''}</tr>`).join('') : `<tr><td colspan="${cols.length + 1}" class="empty">${esc(empty)}</td></tr>`;
+    body.innerHTML = slice.length ? slice.map((r, i) => `<tr data-i="${i}"${tip(r)} class="${onRow ? 'click' : ''}">${cols.map((c) => `<td class="${c.num ? 'num' : ''} ${c.class || ''}">${c.render ? c.render(r) : esc(r[c.key])}</td>`).join('')}${actions ? `<td class="act">${actions(r)}</td>` : ''}</tr>`).join('') : `<tr><td colspan="${cols.length + 1}" class="empty">${esc(empty)}</td></tr>`;
     tf.innerHTML = foot ? foot(list) : '';
     $('.count', el).textContent = `${list.length} ${list.length === 1 ? 'row' : 'rows'}`;
     pager.innerHTML = pages > 1 ? `<button class="btn sm" data-p="-1" ${pg === 0 ? 'disabled' : ''}>‹ Prev</button><span>Page ${pg + 1} of ${pages}</span><button class="btn sm" data-p="1" ${pg >= pages - 1 ? 'disabled' : ''}>Next ›</button>` : '';
@@ -161,6 +161,17 @@ export function requireRef(d, root) {
   if (!l) d.ref = '';
   return d;
 }
+/** Hover text "Last changed 15/10/2026 14:32 by Ali — status: draft → sent" for a row read through the API. */
+export function tipText(r) {
+  const u = r?._upd; if (!u || !u.ts) return '';
+  let ar = false; try { ar = localStorage.getItem('lang') === 'ar'; } catch {}
+  const d = new Date(String(u.ts).replace(' ', 'T') + 'Z'); const two = (n) => String(n).padStart(2, '0');
+  const when = Number.isNaN(d.getTime()) ? u.ts : `${two(d.getDate())}/${two(d.getMonth() + 1)}/${d.getFullYear()} ${two(d.getHours())}:${two(d.getMinutes())}`;
+  const act = ar ? { created: 'أُنشئ', updated: 'عُدّل', deleted: 'حُذف', approved: 'اعتُمد', rejected: 'رُفض' }[u.action] || u.action : { created: 'Created', updated: 'Last changed', deleted: 'Deleted', approved: 'Approved', rejected: 'Rejected' }[u.action] || u.action;
+  const what = (u.ch || []).map((c) => `${String(c.f).replace(/_/g, ' ')}: ${c.from === '' || c.from == null ? '—' : c.from} → ${c.to === '' || c.to == null ? '—' : c.to}`).join('\n');
+  return `${act} ${when}${u.by ? (ar ? ' بواسطة ' : ' by ') + u.by : ''}${what ? '\n' + what : ''}`;
+}
+export const tip = (r) => { const t = tipText(r); return t ? ` title="${esc(t)}"` : ''; };
 export const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
 export const iconBtn = (act, label, cls = '') => `<button class="btn sm ${cls}" data-act="${act}">${label}</button>`;
 

@@ -29,7 +29,7 @@ export const wordsBlock = (n) => (n > 0 ? `<p><b>${L('words', 'Amount in words')
 /** Optional Arabic terms from Settings, printed under the English ones. */
 export const termsBlock = (lines = S.settings.terms, ar = S.settings.terms_ar) => `<div class="terms">${(lines || []).map((t) => `<div>${esc(t)}</div>`).join('')}${(ar || []).length ? `<div class="ar-terms">${ar.map((t) => `<div>${esc(t)}</div>`).join('')}</div>` : ''}</div>`;
 /** Wrap printable HTML in the toolbar + sheet. */
-export function printView(el, { back, backLabel = '← Back', html, extraButtons = '' }) {
-  el.innerHTML = `<div class="printbar"><a class="btn" href="${back}">${backLabel}</a><button class="btn primary" id="doPrint">Print / Save as PDF</button>${extraButtons}</div><div class="doc" data-noi18n>${html}${docFooter()}</div>`;
+export function printView(el, { back, backLabel = '← Back', html, extraButtons = '', cls = '' }) {
+  el.innerHTML = `<div class="printbar"><a class="btn" href="${back}">${backLabel}</a><button class="btn primary" id="doPrint">Print / Save as PDF</button>${extraButtons}</div><div class="doc ${cls}" data-noi18n>${html}${docFooter()}</div>`;
   el.querySelector('#doPrint').onclick = () => window.print();
 }

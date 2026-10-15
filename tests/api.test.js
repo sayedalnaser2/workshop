@@ -399,3 +399,13 @@ test('VAT is fixed when a document is made: a later rate change only affects new
   const pi = (await call('boss', 'POST', '/api/t/price_items', { name: 'Exempt item', rate: 5, type: 'fixed', unit: 'ea', vat: 0 })).data; assert.equal(pi.vat, 0);
   await call('boss', 'PUT', '/api/settings', { vat_rate: 10 });
 });
+
+test('purchase orders keep a payment log (part payments) and rows carry their last change for hover text', async () => {
+  const po = (await call('boss', 'POST', '/api/t/purchase_orders', { date: '2026-10-05', supplier: 'Part Co', status: 'received', lines: [], total: 500 })).data;
+  const log = [{ date: '2026-10-06', amount: 200, method: 'Cash', no: 'X1' }];
+  const part = (await call('boss', 'PUT', `/api/t/purchase_orders/${po.id}`, { pay_log: log, paid: 0 })).data; assert.deepEqual(part.pay_log, log); assert.equal(part.paid, 0);
+  const got = (await call('boss', 'GET', `/api/t/purchase_orders/${po.id}`)).data;
+  assert.equal(got._upd.action, 'updated'); assert.ok(got._upd.by); assert.ok(got._upd.ch.some((c) => c.f === 'pay_log'));
+  const list = (await call('boss', 'GET', '/api/t/purchase_orders')).data; assert.ok(list.find((r) => r.id === po.id)._upd.ts);
+  await call('boss', 'DELETE', `/api/t/purchase_orders/${po.id}`);
+});

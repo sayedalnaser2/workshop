@@ -19,7 +19,7 @@ import { exportActivity } from './src/activity-export.js';
 import { purgeOldPhotos, photoStats } from './src/retention.js';
 import { quoteTotals, approvalFor, discountPct } from './public/js/calc.js';
 import { vatReport, orderVat, vatIn } from './public/js/vat.js';
-import { audit, diff, labelOf, listAudit, notable } from './src/audit.js';
+import { audit, diff, labelOf, listAudit, notable, withUpd } from './src/audit.js';
 import { respond, staticServer, throttleCheck, throttleFail, throttleOk, runBackup, listBackups, backupDir } from './src/web.js';
 
 syncEmployees(); seedChart(DEFAULT_CHART); seedBankAccounts(); freezeAllVat(); seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets(); seedBalexco(); seedAluKitchen();
@@ -464,8 +464,8 @@ async function api(req, res, url) {
     const worker = role === 'worker'; const hide = worker && !seesMoney(user); // workers see no prices or costs unless they were given a money page
     // a worker's calendar only holds the jobs they are on
     const visible = (r) => (!(worker && t === 'events') || (r.team || []).map(Number).includes(user.id)) && (!(worker && t === 'notes') || ['all', 'workers'].includes(r.audience || 'all'));
-    if (!id && m === 'GET') return send(res, 200, worker ? listRows(t).filter(visible).map((r) => (hide ? redact(t, r) : r)) : listRows(t));
-    if (id && m === 'GET') { const r = getRow(t, id); return r && visible(r) ? send(res, 200, hide ? redact(t, r) : r) : send(res, 404, { error: 'Not found' }); }
+    if (!id && m === 'GET') return send(res, 200, withUpd(t, worker ? listRows(t).filter(visible).map((r) => (hide ? redact(t, r) : r)) : listRows(t)));
+    if (id && m === 'GET') { const r = getRow(t, id); return r && visible(r) ? send(res, 200, withUpd(t, hide ? redact(t, r) : r)) : send(res, 404, { error: 'Not found' }); }
     if (!id && m === 'POST') {
       if (t === 'accounts') need(role === 'admin'); // only the admin adds accounts to the chart
       const body = await readJson(req);
