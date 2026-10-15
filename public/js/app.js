@@ -52,19 +52,20 @@ const ROUTES = [
 ];
 
 const nav = $('#nav');
-const collapsed = (() => { try { return new Set(JSON.parse(localStorage.getItem('nav-collapsed') || '[]')); } catch { return new Set(); } })();
-const saveCollapsed = () => { try { localStorage.setItem('nav-collapsed', JSON.stringify([...collapsed])); } catch {} };
+// the menu works like an accordion: every section starts closed, opening one closes the others
+let openGroup = null;
+const showGroups = () => { for (const w of $$('.grp-wrap', nav)) { const on = w.dataset.g === openGroup; w.classList.toggle('shut', !on); $('.grp', w)?.setAttribute('aria-expanded', String(on)); } };
 function buildNav() {
   const role = S.me?.role; const allowed = ROUTES.filter((r) => r.group || canPage(S.me, r.path));
   // gather each section with its pages; sections with no pages left disappear
   const sections = []; let cur = null;
   for (const r of allowed) { if (r.group) { cur = { name: r.group, pages: [] }; sections.push(cur); } else if (cur) cur.pages.push(r); else sections.push({ name: '', pages: [r] }); }
   const link = (r) => `<a href="#/${r.path}" data-p="${r.path}"><span style="width:18px;text-align:center">${r.icon}</span>${esc(r.title)}</a>`;
-  nav.innerHTML = sections.filter((g) => g.pages.length).map((g) => (g.name ? `<div class="grp-wrap" data-g="${esc(g.name)}"><div class="grp" role="button" tabindex="0" aria-expanded="${!collapsed.has(g.name)}"><span class="chev">▾</span>${esc(g.name)}</div><div class="grp-body">${g.pages.map(link).join('')}</div></div>` : g.pages.map(link).join(''))).join('');
-  for (const w of $$('.grp-wrap', nav)) w.classList.toggle('shut', collapsed.has(w.dataset.g));
+  nav.innerHTML = sections.filter((g) => g.pages.length).map((g) => (g.name ? `<div class="grp-wrap" data-g="${esc(g.name)}"><div class="grp" role="button" tabindex="0" aria-expanded="false"><span class="chev">▾</span>${esc(g.name)}</div><div class="grp-body">${g.pages.map(link).join('')}</div></div>` : g.pages.map(link).join(''))).join('');
+  showGroups();
   $('#meName').textContent = S.me?.name || ''; $('#meRole').textContent = ROLES[role] || ''; $('#meAvatar').textContent = (S.me?.name || '?').trim().charAt(0).toUpperCase();
 }
-nav.addEventListener('click', (e) => { const h = e.target.closest('.grp'); if (!h) return; const w = h.parentElement; const g = w.dataset.g; if (collapsed.has(g)) collapsed.delete(g); else collapsed.add(g); w.classList.toggle('shut', collapsed.has(g)); h.setAttribute('aria-expanded', String(!collapsed.has(g))); saveCollapsed(); });
+nav.addEventListener('click', (e) => { const h = e.target.closest('.grp'); if (!h) return; const g = h.parentElement.dataset.g; openGroup = openGroup === g ? null : g; showGroups(); });
 nav.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList?.contains('grp')) { e.preventDefault(); e.target.click(); } });
 $('#meBtn').onclick = () => {
   const w = document.createElement('div');
@@ -116,7 +117,7 @@ async function route() {
   const r = ROUTES.find((x) => !x.group && x.path === path) || ROUTES[0];
   if (!canPage(S.me, r.path)) { $('#view').innerHTML = '<div class="card"><h3>No access</h3><p class="muted">Your account (' + esc(ROLES[S.me?.role] || '') + ') does not include this page.</p><a class="btn" href="#/">Back to the dashboard</a></div>'; $$('#nav a').forEach((a) => a.classList.remove('on')); return; }
   $$('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.p === r.path));
-  { const on = $('#nav a.on'); const w = on?.closest('.grp-wrap'); if (w && w.classList.contains('shut')) { /* keep the section the person chose; just make sure the current page is visible */ w.classList.remove('shut'); collapsed.delete(w.dataset.g); saveCollapsed(); $('.grp', w)?.setAttribute('aria-expanded', 'true'); } }
+  { const w = $('#nav a.on')?.closest('.grp-wrap'); if (w && w.dataset.g !== openGroup) { openGroup = w.dataset.g; showGroups(); } } // going to a page opens its section (and closes the rest)
   $('#pageTitle').textContent = r.title; document.title = r.title + ' · Workshop';
   $('#side').classList.remove('open');
   const view = $('#view'); view.innerHTML = '<p class="muted">Loading…</p>';
