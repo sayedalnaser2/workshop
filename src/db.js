@@ -29,7 +29,7 @@ export const SCHEMA = {
   payments: { cols: { no: 'TEXT', date: 'TEXT', paid_to: 'TEXT', amount: 'REAL', done: 'INTEGER', category: 'TEXT', lines: 'JSON', note: 'TEXT', account: 'TEXT', employee_id: 'INTEGER', method: 'TEXT', ref: 'TEXT' }, order: 'date DESC, id DESC' },
   purchases: { cols: { date: 'TEXT', pv: 'TEXT', invoice: 'TEXT', supplier: 'TEXT', amount: 'REAL', order_inv: 'TEXT', note: 'TEXT', vat: 'REAL', hidden: 'INTEGER' }, order: 'date DESC, id DESC' },
   employees: { cols: { name: 'TEXT', salary: 'REAL', active: 'INTEGER', note: 'TEXT', user_id: 'INTEGER', role: 'TEXT', nationality: 'TEXT', id_no: 'TEXT', passport_no: 'TEXT', phone: 'TEXT', join_date: 'TEXT', left_date: 'TEXT', permit_expiry: 'TEXT', iban: 'TEXT', emergency: 'TEXT', address: 'TEXT' }, order: 'name' },
-  profiles: { cols: { code: 'TEXT', name: 'TEXT', series: 'TEXT', bar_length: 'REAL', price_bar: 'REAL', weight_m: 'REAL', color: 'TEXT', min_qty: 'REAL', face_w: 'REAL', use: 'TEXT' }, order: 'series, name' },
+  profiles: { cols: { code: 'TEXT', name: 'TEXT', series: 'TEXT', bar_length: 'REAL', price_bar: 'REAL', weight_m: 'REAL', color: 'TEXT', min_qty: 'REAL', face_w: 'REAL', perimeter: 'REAL', use: 'TEXT' }, order: 'series, name' },
   accessories: { cols: { code: 'TEXT', name: 'TEXT', unit: 'TEXT', price: 'REAL', min_qty: 'REAL' }, order: 'name' },
   glass_types: { cols: { name: 'TEXT', price_m2: 'REAL', thickness: 'TEXT', min_qty: 'REAL' }, order: 'name' },
   models: { cols: { name: 'TEXT', series: 'TEXT', kind: 'TEXT', category: 'TEXT', def_w: 'REAL', def_h: 'REAL', spec: 'JSON', note: 'TEXT' }, order: 'category, name' },
