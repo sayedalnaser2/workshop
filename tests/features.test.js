@@ -267,3 +267,15 @@ test('kitchens: door directions, L-corner, slots in tall units, appliance gaps, 
   const b = scene({ runs: [{ cabinets: [{ type: 'gap', w: 60, h: 85, d: 60, appliance: 'fridge' }, { type: 'base', w: 60, h: 72, d: 56, doors: 1, dir: 'down' }, tall, { type: 'corner', w: 90, h: 72, d: 56, doors: 2 }] }] }, { '0|1': 1, '0|3': 1 });
   assert.ok(b.length > 20 && b.every((x) => x.corners.flat(2).every(Number.isFinite)));
 });
+
+test('kitchens: a door can be added to any unit, in any place, without disturbing the rest', async () => {
+  const { addSlot, slotsFromCab, layoutSlots, slotHeights, cabinetParts } = await import('../public/js/kitchen.js');
+  const base = { type: 'base', w: 60, h: 72, d: 56, doors: 2, drawers: 0 };
+  assert.deepEqual(slotsFromCab(base).map((x) => [x.k, x.n, x.h]), [['door', 2, 72]]); // a plain unit becomes one door slot of full height
+  const withDrawer = addSlot(base, 'drawer', 'top'); assert.deepEqual(withDrawer.map((x) => x.k), ['door', 'drawer']); assert.equal(Math.round(withDrawer.reduce((a, x) => a + x.h, 0) * 10) / 10, 72); assert.equal(withDrawer[1].h, 18); // the drawer takes 18 cm, the door keeps the rest
+  const mid = addSlot({ ...base, slots: withDrawer }, 'door', 'middle'); assert.equal(mid.length, 3); assert.equal(mid[1].k, 'door'); assert.equal(Math.round(mid.reduce((a, x) => a + x.h, 0) * 10) / 10, 72);
+  const bottom = addSlot({ ...base, slots: mid }, 'open', 'bottom'); assert.equal(bottom[0].k, 'open'); assert.equal(Math.round(bottom.reduce((a, x) => a + x.h, 0) * 10) / 10, 72);
+  const cab = { ...base, slots: mid }; assert.ok(layoutSlots(cab)); assert.equal(layoutSlots({ type: 'gap', slots: mid }), null);
+  const p = cabinetParts(cab); assert.equal(p.panels.filter((x) => x.label === 'Divider').length, 2); assert.ok(p.hw.hinges >= 4); // the doors of the layout get hinges
+  assert.deepEqual(slotHeights([{ k: 'door', h: 40 }, { k: 'door' }], 100), [40, 60]);
+});

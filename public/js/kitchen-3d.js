@@ -1,6 +1,6 @@
 // 3D view of a kitchen: cabinets become boxes, a small painter's-algorithm renderer draws them on a canvas.
 // scene() is pure (tested); draw3D() needs a canvas. All sizes in cm; x = right, y = up, z = towards the viewer (the back wall is z = 0).
-import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, slotsOf, zonesOf, shelfCount, shelfGap, hasSkirt } from './kitchen.js';
+import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, layoutSlots, zonesOf, shelfCount, shelfGap, hasSkirt } from './kitchen.js';
 import { colourHex, stoneHex } from './drawings.js';
 
 /** Where each run stands: { x, z, rot } with rot 0/90/180/270. Run 1 = back wall, 2 = left wall, 3 = right wall, islands in front. */
@@ -52,7 +52,7 @@ const shade = (hex, f) => { const n = parseInt(String(hex).replace('#', ''), 16)
 
 /** The doors and drawers of a cabinet that can be opened on their own: [{ key, label }]. */
 export function frontsOf(c) {
-  const t = CAB_TYPES[c.type] || CAB_TYPES.base; const out = []; const slots = t.tall ? slotsOf(c) : null;
+  const t = CAB_TYPES[c.type] || CAB_TYPES.base; const out = []; const slots = layoutSlots(c);
   if (slots) { slots.forEach((sl, i) => { if (['door', 'glass', 'drawer'].includes(sl.k)) out.push({ key: 's' + i, label: `${sl.k === 'drawer' ? 'Drawer' : 'Door'} ${i + 1}` }); }); return out; }
   const nd = Math.round(+c.drawers || 0); const nf = t.corner ? 2 : Math.round(+c.doors || 0);
   for (let i = 0; i < nd; i++) out.push({ key: 'd' + i, label: 'Drawer ' + (i + 1) });
@@ -141,7 +141,7 @@ export function scene(spec, open = {}) {
       if (t.hood) { put(u, u + w, 0, d, y0, y0 + 10, STEEL, 'carcass'); put(u + w * .3, u + w * .7, 0, Math.min(d * .5, 24), y0 + 10, y0 + h, STEEL, 'carcass'); u += w; continue; }
       const cabOp = +open[`${ri}|${ci}`] || 0;
       const fOpen = (k) => { const x = open[`${ri}|${ci}|${k}`]; return Math.max(0, Math.min(1, +(x === undefined ? cabOp : x) || 0)); }; // one drawer or door on its own, else the whole cabinet
-      const fronts = frontsOf(c); const slots = t.tall ? slotsOf(c) : null;
+      const fronts = frontsOf(c); const slots = layoutSlots(c);
       const op = Math.max(cabOp, ...fronts.map((f) => fOpen(f.key)), 0);
       const dir = c.dir && DIRS[c.dir] ? c.dir : 'auto';
       const doors = t.corner ? 2 : Math.round(+c.doors || 0); const drawers = Math.round(+c.drawers || 0); const glazed = Math.min(doors, Math.round(+c.glazed || 0));

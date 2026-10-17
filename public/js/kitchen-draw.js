@@ -1,5 +1,5 @@
 // SVG drawings for kitchens: front elevation, plan view with countertop, and sheet cut layouts.
-import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, slotsOf, zonesOf, shelfCount, shelfGap, hasSkirt } from './kitchen.js';
+import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, layoutSlots, zonesOf, shelfCount, shelfGap, hasSkirt } from './kitchen.js';
 import { colourHex, glassHex, stoneHex, lighten } from './drawings.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -30,7 +30,7 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
       if (t.gap) { out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="none" stroke="${INK}" stroke-dasharray="4 3" stroke-width="1"/><text x="${x + w / 2}" y="${yTop + h / 2}" font-size="10" text-anchor="middle" fill="currentColor">appliance</text>`; x += w; continue; }
       out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="${FILL}" stroke="${INK}" stroke-width="1.2"/>`;
       const doors = t.corner ? 1 : Math.max(0, Math.round(+c.doors || 0)); const drawers = Math.max(0, Math.round(+c.drawers || 0)); const glazed = Math.min(doors, Math.round(+c.glazed || 0));
-      const zn = zonesOf(c); const f = h / (+c.h || 1); const dir = c.dir && DIRS[c.dir] ? c.dir : 'auto'; const slots = t.tall ? slotsOf(c) : null;
+      const zn = zonesOf(c); const f = h / (+c.h || 1); const dir = c.dir && DIRS[c.dir] ? c.dir : 'auto'; const slots = layoutSlots(c);
       // the dashed opening symbol: its point is on the handle side; sliding doors get an arrow
       const sym = (gx, zy, dw, zh, dr, left) => {
         const dash = `fill="none" stroke="${INK}" stroke-width=".6" stroke-dasharray="3 3"`;

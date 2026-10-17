@@ -31,6 +31,30 @@ export function hasSkirt(cab) {
 /** How many floating shelves one shelf unit stacks above each other, and the clear space between them (cm). */
 export const shelfCount = (cab) => Math.max(1, Math.min(12, Math.round(+cab.stack || 1)));
 export const shelfGap = (cab) => (Number.isFinite(+cab.stack_gap) && cab.stack_gap !== '' && cab.stack_gap !== undefined ? Math.max(0, +cab.stack_gap) : 30);
+/** Door layout slots apply to every unit except appliance gaps, shelves, hoods and L-corners. */
+export const layoutSlots = (cab) => { const t = CAB_TYPES[cab.type] || CAB_TYPES.base; return t.gap || t.shelf || t.hood || t.corner ? null : slotsOf(cab); };
+/** The doors, drawers and open space of a plain cabinet written as slots (bottom to top), so one can be added, moved or resized without redoing the rest. */
+export function slotsFromCab(cab) {
+  const H = +cab.h || 0; const doors = Math.max(0, Math.round(+cab.doors || 0)); const drawers = Math.max(0, Math.round(+cab.drawers || 0)); const zn = zonesOf(cab); const out = [];
+  if (doors) out.push({ k: Math.round(+cab.glazed || 0) >= doors ? 'glass' : 'door', h: Math.round(zn.doors.h * 10) / 10, n: doors, dir: cab.dir || 'auto' });
+  for (let i = 0; i < drawers; i++) out.push({ k: 'drawer', h: Math.round((zn.drawers.h / drawers) * 10) / 10, n: 1 });
+  if (!out.length) out.push({ k: 'open', h: H, n: 1 });
+  return out;
+}
+/** Heights of every slot with the empty ones sharing what is left. */
+export function slotHeights(slots, H) { const fixed = slots.reduce((a, x) => a + (+x.h > 0 ? +x.h : 0), 0); const free = slots.filter((x) => !(+x.h > 0)).length; return slots.map((x) => (+x.h > 0 ? +x.h : Math.max(0, (H - fixed) / (free || 1)))); }
+/** Add a slot at the bottom, middle or top; the others shrink in proportion so the unit keeps its height. pos: 'bottom' | 'middle' | 'top'. */
+export function addSlot(cab, kind, pos = 'top') {
+  const H = +cab.h || 0; const cur = (Array.isArray(cab.slots) && cab.slots.length ? cab.slots : slotsFromCab(cab)).map((x) => ({ ...x }));
+  const hs = slotHeights(cur, H); cur.forEach((x, i) => { x.h = hs[i]; });
+  const want = APPLIANCES[kind] ? APPLIANCES[kind][1] : kind === 'drawer' ? 18 : Math.round((H / (cur.length + 1)) * 10) / 10;
+  const nh = Math.min(want, Math.max(5, H * 0.7)); const sum = cur.reduce((a, x) => a + x.h, 0); const k = sum > 0 ? Math.max(0, H - nh) / sum : 1;
+  cur.forEach((x) => { x.h = Math.round(x.h * k * 10) / 10; });
+  const slot = { k: kind, h: Math.round(nh * 10) / 10, n: 1, dir: 'auto' }; const at = pos === 'bottom' ? 0 : pos === 'top' ? cur.length : Math.floor(cur.length / 2) + (cur.length % 2 ? 1 : 0);
+  cur.splice(at, 0, slot);
+  const total = cur.reduce((a, x) => a + x.h, 0); if (cur.length && Math.abs(total - H) > 0.05) cur[cur.length - 1 === at ? Math.max(0, at - 1) : cur.length - 1].h = Math.round((cur[cur.length - 1 === at ? Math.max(0, at - 1) : cur.length - 1].h + (H - total)) * 10) / 10;
+  return cur;
+}
 /** Slots of a tall unit, defaulting to two doors on top of each other if none are set. */
 export const slotsOf = (cab) => (Array.isArray(cab.slots) && cab.slots.length ? cab.slots.map((x) => ({ k: x.k || 'door', h: +x.h || 0, n: Math.max(1, Math.round(+x.n || 1)), dir: x.dir || 'auto' })) : null);
 export const DEFAULT_STYLE = {
@@ -84,10 +108,10 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   else if (type.tall) { add(`${tag}Top`, W - 2 * t, dd, 1, 'carcass', W - 2 * t); }
   else add(`${tag}Top rail`, W - 2 * t, 8, 2, 'carcass', 0);
   add(`${tag}Back`, W - 0.4, H - 0.4, 1, 'back', 0);
-  const nShelf = type.tall && slotsOf(cab) ? 0 : shelves;
+  const nShelf = layoutSlots(cab) ? 0 : shelves;
   add(`${tag}Shelf`, W - 2 * t - 0.2, dd - 2, nShelf, 'carcass', W - 2 * t - 0.2);
   // drawers share the height with doors only on mixed cabinets; here a cabinet is either doors or drawers (or a stack above doors)
-  const zn = zonesOf(cab); const slots = type.tall ? slotsOf(cab) : null; const dir = cab.dir && DIRS[cab.dir] ? cab.dir : 'auto';
+  const zn = zonesOf(cab); const slots = layoutSlots(cab); const dir = cab.dir && DIRS[cab.dir] ? cab.dir : 'auto';
   // hardware for a run of n doors of height dh that open in direction dr
   const doorHw = (n, dw, dh, dr) => {
     if (dr === 'shutter') { hw.shutters += n; return; } // the shutter kit has its own handle strip
