@@ -94,7 +94,15 @@ async function editor(el, id, tab) {
   let model = kitchenModel(k.spec); let dirty = false; let view = sessionStorage.getItem('kv') || 'elev';
   const spec = k.spec; const TABS = worker ? [['sheet', 'Production sheet'], ['view3d', '3D view']] : [['design', 'Design'], ['view3d', '3D view'], ['cuts', 'Cut list & boards'], ['counter', 'Countertop'], ['price', 'Price'], ['proposal', 'Customer page'], ['sheet', 'Production sheet']];
   el.innerHTML = `<div id="kit"></div>`; const root = $('#kit', el);
-  const touch = () => { dirty = true; model = kitchenModel(spec); const b = $('#save', root); if (b) b.textContent = 'Save changes ●'; };
+  // undo / redo of every change made to the kitchen (the picture, the table, the panel): snapshots of the whole design; quick successive edits (a drag, typing) count as one step
+  const hist = { undo: [], redo: [], cur: JSON.stringify(k.spec || {}), at: 0, after: null };
+  const touch = () => {
+    dirty = true; model = kitchenModel(spec); const b = $('#save', root); if (b) b.textContent = 'Save changes ●';
+    const now = JSON.stringify(spec); if (now !== hist.cur) { if (Date.now() - hist.at > 700 || !hist.undo.length) { hist.undo.push(hist.cur); if (hist.undo.length > 60) hist.undo.shift(); } hist.at = Date.now(); hist.cur = now; hist.redo.length = 0; }
+    hist.after?.();
+  };
+  const restore = (snap) => { const o = JSON.parse(snap); for (const key of Object.keys(spec)) delete spec[key]; Object.assign(spec, o); hist.cur = snap; hist.at = 0; dirty = true; model = kitchenModel(spec); const b = $('#save', root); if (b) b.textContent = 'Save changes ●'; };
+  const stepBack = (dir) => { const from = dir < 0 ? hist.undo : hist.redo; if (!from.length) return false; (dir < 0 ? hist.redo : hist.undo).push(hist.cur); restore(from.pop()); return true; };
   const head = () => `<div class="ph"><a class="btn" href="#/kitchens">← Kitchens</a><h1>${esc(k.name)}</h1>${badge(k.status || 'draft', k.status === 'approved' ? 'ok' : '')}<span class="sub">${[k.client, k.order_inv].filter(Boolean).map(esc).join(' · ')}</span><span class="grow"></span>${worker ? '' : '<button class="btn primary" id="save">Save</button>'}</div>
     <div class="tbar"><div class="seg">${TABS.map(([t, l]) => `<button data-tab="${t}" class="${t === tab ? 'on' : ''}">${l}</button>`).join('')}</div></div><div id="pane"></div>`;
   const draw = () => {
@@ -191,7 +199,7 @@ async function editor(el, id, tab) {
     const canEdit = !worker; let edit = canEdit && view3d.edit === true;
     pane.innerHTML = `<div class="k3stage" id="stage"><canvas id="c3"></canvas>
       <div class="k3tl"><div class="k3bar">${canEdit ? `<button class="btn sm" id="editBtn" title="Switch editing on to drag cabinets into position and add new ones">✎ Edit</button>` : ''}<span class="muted" id="k3hint"></span></div><div class="k3bar" id="k3add" hidden></div></div>
-      <div class="k3tr"><div class="k3bar"><button class="btn sm" data-oc="1">Open all</button><button class="btn sm" data-oc="0">Close all</button><button class="btn sm" data-p="front">Front</button><button class="btn sm" data-p="corner">Corner</button><button class="btn sm" data-p="top">From above</button><button class="btn sm" data-z="1.5" title="Zoom in">＋</button><button class="btn sm" data-z="0.67" title="Zoom out">－</button><button class="btn sm" data-zreset title="Back to the whole kitchen">Reset</button><button class="btn sm" id="fs" title="Full screen, for showing the customer">⛶</button></div></div>
+      <div class="k3tr"><div class="k3bar">${canEdit ? '<button class="btn sm" id="undoBtn" title="Go back one step (Ctrl+Z)">↶ Back</button><button class="btn sm" id="redoBtn" title="Redo (Ctrl+Y)">↷</button>' : ''}<button class="btn sm" data-oc="1">Open all</button><button class="btn sm" data-oc="0">Close all</button><button class="btn sm" data-p="front">Front</button><button class="btn sm" data-p="corner">Corner</button><button class="btn sm" data-p="top">From above</button><button class="btn sm" data-z="1.5" title="Zoom in">＋</button><button class="btn sm" data-z="0.67" title="Zoom out">－</button><button class="btn sm" data-zreset title="Back to the whole kitchen">Reset</button><button class="btn sm" id="fs" title="Full screen, for showing the customer">⛶</button></div></div>
       <div class="k3panel" id="k3p" hidden></div></div>`;
     const stage = $('#stage', pane); const cv = $('#c3', pane); const key = (r) => `${r.ri}|${r.ci}`;
     const tgt = (view3d.open ||= {}); const cur = (view3d.cur ||= {}); let raf = 0;
@@ -329,6 +337,12 @@ async function editor(el, id, tab) {
     $('[data-zreset]', pane).onclick = () => { v.zoom = 1; v.panX = 0; v.panY = 0; go(); };
     $$('[data-oc]', pane).forEach((b) => (b.onclick = () => { spec.runs.forEach((run, ri) => run.cabinets.forEach((_, ci) => { for (const k2 of Object.keys(tgt)) if (k2.startsWith(`${ri}|${ci}|`)) delete tgt[k2]; tgt[`${ri}|${ci}`] = Number(b.dataset.oc); })); animate(); panel(); }));
     $$('[data-p]', pane).forEach((b) => (b.onclick = () => { Object.assign(v, { front: { yaw: 0, pitch: 0.08 }, corner: { yaw: -0.55, pitch: 0.45 }, top: { yaw: 0, pitch: 1.5 } }[b.dataset.p]); go(); }));
+    const updUndo = () => { const u = $('#undoBtn', pane); const r = $('#redoBtn', pane); if (u) u.disabled = !hist.undo.length; if (r) r.disabled = !hist.redo.length; };
+    const stepTo = (dir) => { if (!stepBack(dir)) return; if (view3d.sel && !spec.runs[view3d.sel.ri]?.cabinets[view3d.sel.ci]) view3d.sel = null; refresh3(); updUndo(); toast(dir < 0 ? 'Went back one step' : 'Redone', 'ok'); };
+    $('#undoBtn', pane)?.addEventListener('click', () => stepTo(-1)); $('#redoBtn', pane)?.addEventListener('click', () => stepTo(1));
+    hist.after = () => { if (cv.isConnected) updUndo(); }; updUndo();
+    const keys = (e) => { if (!cv.isConnected) { document.removeEventListener('keydown', keys); return; } if (!(e.ctrlKey || e.metaKey) || e.target.closest?.('input,textarea,select')) return; const kk = e.key.toLowerCase(); if (kk === 'z' && !e.shiftKey) { e.preventDefault(); stepTo(-1); } else if (kk === 'y' || (kk === 'z' && e.shiftKey)) { e.preventDefault(); stepTo(1); } };
+    document.addEventListener('keydown', keys);
     drawAddBar(); panel(); animate();
   }
 
