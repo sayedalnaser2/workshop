@@ -19,6 +19,7 @@ export function placeRuns(spec) {
   });
 }
 
+const dark = (hex, f) => { const n = parseInt(String(hex).replace('#', ''), 16); if (Number.isNaN(n)) return hex; const c = (sh) => Math.max(0, Math.min(255, Math.round(((n >> sh) & 255) * f))); return '#' + [16, 8, 0].map((sh) => c(sh).toString(16).padStart(2, '0')).join(''); };
 const shade = (hex, f) => { const n = parseInt(String(hex).replace('#', ''), 16); const c = (s) => Math.max(0, Math.min(255, Math.round(((n >> s) & 255) * f))); return `rgb(${c(16)},${c(8)},${c(0)})`; };
 
 /** The doors and drawers of a cabinet that can be opened on their own: [{ key, label }]. */
@@ -27,7 +28,7 @@ export function frontsOf(c) {
   if (slots) { slots.forEach((sl, i) => { if (['door', 'glass', 'drawer'].includes(sl.k)) out.push({ key: 's' + i, label: `${sl.k === 'drawer' ? 'Drawer' : 'Door'} ${i + 1}` }); }); return out; }
   const nd = Math.round(+c.drawers || 0); const nf = t.corner ? 2 : Math.round(+c.doors || 0);
   for (let i = 0; i < nd; i++) out.push({ key: 'd' + i, label: 'Drawer ' + (i + 1) });
-  for (let i = 0; i < nf; i++) out.push({ key: 'f' + i, label: 'Door ' + (i + 1) });
+  if (c.dir === 'slide' && nf > 1) out.push({ key: 'f0', label: 'Sliding doors' }); else for (let i = 0; i < nf; i++) out.push({ key: 'f' + i, label: 'Door ' + (i + 1) });
   return out;
 }
 
@@ -58,20 +59,30 @@ export function scene(spec, open = {}) {
     const putDoors = (ua, ub, ya, yb, n, dir, glazedN, keyOf, foOf, d, t) => {
       const dw = (ub - ua) / n;
       for (let i = 0; i < n; i++) {
-        curFront = keyOf(i); const fo = foOf(i);
+        const sliding = dir === 'slide' && n > 1; // sliding doors share one state: the back door runs behind the front one
+        curFront = keyOf(sliding ? 0 : i); const fo = foOf(sliding ? 0 : i);
         const a = ua + i * dw; const b = a + dw; const gl = i < glazedN;
         const left = dir === 'right' ? false : dir === 'left' ? true : n === 1 || i % 2 === 0; // handle side opposite the hinge
         let sw = null; let du = 0; let vz = 0;
+        if (dir === 'shutter') { // a roller shutter (tambour): horizontal slats that roll up into the top of the cabinet
+          const full = yb - ya - .4; const vis = Math.max(5, full * (1 - Math.min(1, fo) * .93)); const nS = Math.max(2, Math.round(vis / 3)); const sh = vis / nS;
+          for (let q = 0; q < nS; q++) put(a + .2, b - .2, d, d + 1.2, yb - .2 - (q + 1) * sh + .15, yb - .2 - q * sh - .15, gl ? '#bfe0f2' : q % 2 ? dark(alu ? frame : door, .92) : alu ? frame : door, 'front');
+          put(a + 4, b - 4, d + 1.2, d + 2.6, yb - .2 - vis, yb - .2 - vis + 2.2, STEEL, 'handle'); put(a + .2, b - .2, d, d + 2.4, yb - 3.2, yb - .2, STEEL, 'handle');
+          continue;
+        }
         if (dir === 'up') sw = fo > 0 ? { ax: 'h', hy: yb, hv: d, a: fo * 1.6, sgn: -1 } : null;
         else if (dir === 'down') sw = fo > 0 ? { ax: 'h', hy: ya, hv: d, a: fo * 1.6, sgn: 1 } : null;
-        else if (dir === 'slide') { vz = (i % 2) * 2.4 + 0.2; du = fo * dw * (n === 1 ? 0.5 : i % 2 === 0 ? 1 : 0); }
+        else if (dir === 'slide') { // two doors run on two tracks and swap sides; a single door slides along its own width
+          vz = (i % 2) * 2.6 + 0.2;
+          du = n === 1 ? fo * dw * 0.9 * (left ? 1 : -1) : i % 2 === 0 ? fo * dw : 0;
+        }
         else if (fo > 0) sw = { hu: left ? a + .2 : b - .2, hv: d, a: fo * 1.75, side: left ? 1 : -1 };
         put(a + .2 + du, b - .2 + du, d + vz, d + vz + 1.8, ya + .2, yb - .2, gl ? '#bfe0f2' : alu ? frame : door, gl ? 'glass' : 'front', sw);
         if (alu && !gl) { const fw = Math.min(style.frame_w || 4.5, dw / 3); put(a + .2 + fw + du, b - .2 - fw + du, d + vz + 1.8, d + vz + 2.2, ya + .2 + fw, yb - .2 - fw, door, 'infill', sw); }
         const hy = yb - (yb - ya) * (t.wall ? .8 : .25); const hz = d + vz + 1.8;
         if (dir === 'up') put((a + b) / 2 - 6, (a + b) / 2 + 6, hz, hz + 1.4, ya + 2.5, ya + 3.7, STEEL, 'handle', sw);
         else if (dir === 'down') put((a + b) / 2 - 6, (a + b) / 2 + 6, hz, hz + 1.4, yb - 3.7, yb - 2.5, STEEL, 'handle', sw);
-        else if (dir === 'slide') put(i % 2 === 0 || n === 1 ? b - 4 + du : a + 3 + du, (i % 2 === 0 || n === 1 ? b - 4 : a + 3) + 1.2 + du, hz, hz + 1.4, (ya + yb) / 2 - 6, (ya + yb) / 2 + 6, STEEL, 'handle', sw);
+        else if (dir === 'slide') { const hx = (n === 1 ? !left : i % 2 === 1) ? a + 3 : b - 4; put(hx + du, hx + 1.2 + du, hz, hz + 1.4, (ya + yb) / 2 - 6, (ya + yb) / 2 + 6, STEEL, 'handle'); }
         else { const hx = left ? b - 4 : a + 3; put(hx, hx + 1.2, hz, hz + 1.4, (t.tall && !t.wall ? ya + (yb - ya) * .5 : hy) - 6, (t.tall && !t.wall ? ya + (yb - ya) * .5 : hy) + 6, STEEL, 'handle', sw); }
       }
       curFront = null;
@@ -162,10 +173,21 @@ export function scene(spec, open = {}) {
       }
       curFront = null;
       const ytop = y0 + h;
-      if (t.counter) put(u, u + w, 0, d + over, ytop, ytop + ct, top, 'top');
+      if (t.counter && t.sink) { // a sink: the top has a real opening, and the stainless bowl sits in it
+        const hu0 = u + w * .1; const hu1 = u + w * .9; const hv0 = d * .16; const hv1 = d * .8;
+        put(u, u + w, 0, hv0, ytop, ytop + ct, top, 'top'); put(u, u + w, hv1, d + over, ytop, ytop + ct, top, 'top'); put(u, hu0, hv0, hv1, ytop, ytop + ct, top, 'top'); put(hu1, u + w, hv0, hv1, ytop, ytop + ct, top, 'top');
+        const bw = (hu1 - hu0) * .52; const gap = (hu1 - hu0) - 2 * bw; const depthB = Math.max(1, ct);
+        for (const [b0, b1] of [[hu0, hu0 + bw], [hu1 - bw, hu1]]) { // two bowls side by side, or one wide bowl on a narrow cabinet
+          if (w < 70 && b0 !== hu0) continue;
+          const x0 = b0; const x1 = w < 70 ? hu1 : b1;
+          put(x0, x1, hv0, hv1, ytop - 0.01, ytop + .25, '#b9c0c9', 'acc'); put(x0 + 2.2, x1 - 2.2, hv0 + 2.2, hv1 - 2.2, ytop + .25, ytop + .6, '#8e98a4', 'acc');
+          const cx = (x0 + x1) / 2; const cv = (hv0 + hv1) / 2; put(cx - 1.6, cx + 1.6, cv - 1.6, cv + 1.6, ytop + .6, ytop + .9, '#454c55', 'acc');
+          if (w < 70) break;
+        }
+        void gap; void depthB;
+      } else if (t.counter) put(u, u + w, 0, d + over, ytop, ytop + ct, top, 'top');
       // accessories
       const accs = c.acc || [];
-      if (t.sink) { put(u + w * .12, u + w * .88, d * .2, d * .8, ytop + ct, ytop + ct + .5, '#b8c0ca', 'acc'); put(u + w * .16, u + w * .84, d * .26, d * .74, ytop + ct + .5, ytop + ct + .8, '#8b95a0', 'acc'); }
       if (t.sink || accs.includes('tap')) { const tx = u + w * .5; put(tx - 1.5, tx + 1.5, 3, 6, ytop + ct, ytop + ct + 22, '#d7dbe0', 'acc'); put(tx - 1.2, tx + 1.2, 3, 20, ytop + ct + 20, ytop + ct + 23, '#d7dbe0', 'acc'); }
       if (t.hob) { put(u + w * .08, u + w * .92, d * .15, d * .85, ytop + ct, ytop + ct + .6, '#1d2026', 'acc'); for (const [dx, dy] of [[.3, .3], [.7, .3], [.3, .68], [.7, .68]]) { const r = Math.min(w, d) * .11; put(u + w * dx - r, u + w * dx + r, d * dy - r, d * dy + r, ytop + ct + .6, ytop + ct + 1.2, '#4a5058', 'acc'); } }
       if (accs.includes('lights') && t.wall) put(u + 3, u + w - 3, d * .55, d * .7, y0 - .8, y0, '#fff2b0', 'acc');
@@ -190,15 +212,15 @@ export function draw3D(canvas, boxes, view = {}) {
   if (view.bounds) { mn[0] = view.bounds.mn[0]; mn[2] = view.bounds.mn[2]; mx[0] = view.bounds.mx[0]; mx[1] = view.bounds.mx[1]; mx[2] = view.bounds.mx[2]; } // a fixed frame while a cabinet is being dragged
   canvas._bounds = { mn: [...mn], mx: [...mx] };
   const cx = (mn[0] + mx[0]) / 2; const cy = mx[1] / 2; const cz = (mn[2] + mx[2]) / 2; const size = Math.max(mx[0] - mn[0], mx[1], mx[2] - mn[2], 100);
-  const yaw = view.yaw ?? -0.55; const pitch = view.pitch ?? 0.45; const dist = size * 1.5 / (view.zoom || 1); const f = Math.min(W, H) * 1.05;
+  const yaw = view.yaw ?? -0.55; const pitch = view.pitch ?? 0.45; const dist = size * 1.5; const f = Math.min(W, H) * 1.05 * (view.zoom || 1); const panX = view.panX || 0; const panY = view.panY || 0;
   const cyw = Math.cos(yaw); const syw = Math.sin(yaw); const cp = Math.cos(pitch); const sp = Math.sin(pitch);
   const rot = (X, Y, Z) => { // orbit: turn by yaw around the vertical axis, then tilt by pitch; depth grows away from the viewer
     const x1 = X * cyw - Z * syw; const zz = X * syw + Z * cyw;
     return [x1, Y * cp - zz * sp, -(Y * sp + zz * cp)];
   };
-  canvas._cam = { cx, cy, cz, yaw, pitch, dist, f, W, H };
+  canvas._cam = { cx, cy, cz, yaw, pitch, dist, f, W, H, panX, panY };
   const cam = (x, y, z) => { const r = rot(x - cx, y - cy, z - cz); return [r[0], r[1], r[2] + dist]; };
-  const proj = ([x, y, z]) => [W / 2 + (x * f) / z, H / 2 - (y * f) / z];
+  const proj = ([x, y, z]) => [W / 2 + panX + (x * f) / z, H / 2 + panY - (y * f) / z];
   // the floor and the back wall give the kitchen some context
   const quad = (pts, fill, stroke) => { const p = pts.map((q) => proj(cam(...q))); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); } };
   const pad = 40; const fx0 = mn[0] - pad; const fx1 = mx[0] + pad; const fz1 = mx[2] + pad;
@@ -236,7 +258,7 @@ export function pick3D(canvas, x, y) {
 /** The point on the horizontal plane y = planeY under a canvas point (world x, z), or null when the ray misses it. Call after draw3D. */
 export function unproject(canvas, sx, sy, planeY = 0) {
   const c = canvas._cam; if (!c) return null;
-  const dx = (sx - c.W / 2) / c.f; const dy = -(sy - c.H / 2) / c.f; const cp = Math.cos(c.pitch); const sp = Math.sin(c.pitch); const cyw = Math.cos(c.yaw); const syw = Math.sin(c.yaw);
+  const dx = (sx - c.W / 2 - (c.panX || 0)) / c.f; const dy = -(sy - c.H / 2 - (c.panY || 0)) / c.f; const cp = Math.cos(c.pitch); const sp = Math.sin(c.pitch); const cyw = Math.cos(c.yaw); const syw = Math.sin(c.yaw);
   // a point on the ray at depth z (camera space): (dx*z, dy*z, z); the camera sits at z = dist, so world offsets use z - dist
   const at = (z) => { const xc = dx * z; const yc = dy * z; const zc = z - c.dist; const Y = yc * cp - zc * sp; const zz = -yc * sp - zc * cp; const X = xc * cyw + zz * syw; const Z = -xc * syw + zz * cyw; return [c.cx + X, c.cy + Y, c.cz + Z]; };
   const p1 = at(1); const p2 = at(2); const dY = p2[1] - p1[1]; if (Math.abs(dY) < 1e-9) return null;

@@ -19,7 +19,7 @@ export const APPLIANCES = { fridge: ['Fridge', 180], freezer: ['Freezer', 85], d
 /** What a slot of a tall unit can hold, from the floor up. */
 export const SLOT_KINDS = { door: 'Door', glass: 'Glass door', drawer: 'Drawer', open: 'Open niche', ...Object.fromEntries(['fridge', 'freezer', 'oven', 'micro', 'coffee'].map((k) => [k, APPLIANCES[k][0]])) };
 /** Opening directions for doors. auto = French doors in pairs, a single door hinged on the left. */
-export const DIRS = { auto: 'Automatic', left: 'Hinged left', right: 'Hinged right', up: 'Lifts up', down: 'Folds down', slide: 'Sliding' };
+export const DIRS = { auto: 'Automatic', left: 'Hinged left', right: 'Hinged right', up: 'Lifts up', down: 'Folds down', slide: 'Sliding', shutter: 'Roller shutter (rolls up)' };
 /** Accessories that can be added to a cabinet. visual = drawn in the 3D view. */
 export const ACCESSORIES = { tap: ['Tap / mixer', true], bin: ['Pull-out waste bin', false], cutlery: ['Cutlery tray', false], pullout: ['Pull-out basket', false], lights: ['LED light strip', true], rail: ['Rail with hooks', true], spice: ['Spice rack', false], lazy: ['Lazy-susan carousel', false], soft: ['Soft-close set', false] };
 /** Slots of a tall unit, defaulting to two doors on top of each other if none are set. */
@@ -52,7 +52,7 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   const doors = Math.max(0, Math.round(+cab.doors || 0)); const drawers = Math.max(0, Math.round(+cab.drawers || 0));
   const shelves = Math.max(0, Math.round(+cab.shelves || 0)); const glazed = Math.min(doors, Math.max(0, Math.round(+cab.glazed || 0)));
   const type = CAB_TYPES[cab.type] || CAB_TYPES.base;
-  const panels = []; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0 }; const glass = []; const frames = []; const appliances = []; const acc = {};
+  const panels = []; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0, shutters: 0 }; const glass = []; const frames = []; const appliances = []; const acc = {};
   const alu = s.kind === 'aluminium'; const fw = +s.frame_w || 4.5;
   if (type.gap) { if (cab.appliance) appliances.push({ k: cab.appliance, w: W, h: H, d: D }); return { panels, hw, glass, frames, appliances, acc }; }
   if (!(W > 0 && H > 0 && D > 0)) return { panels, hw, glass, frames, appliances, acc };
@@ -80,6 +80,7 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   const zn = zonesOf(cab); const slots = type.tall ? slotsOf(cab) : null; const dir = cab.dir && DIRS[cab.dir] ? cab.dir : 'auto';
   // hardware for a run of n doors of height dh that open in direction dr
   const doorHw = (n, dw, dh, dr) => {
+    if (dr === 'shutter') { hw.shutters += n; return; } // the shutter kit has its own handle strip
     if (dr === 'slide') { hw.tracks += 1; hw.handles += n; return; }
     if (dr === 'up') { hw.lifts += n; hw.handles += n; hw.handleLen += n * dw; return; }
     if (dr === 'down') { hw.hinges += n * 2; hw.handles += n; hw.handleLen += n * dw; return; }
@@ -92,8 +93,8 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
       const hh = sl.h > 0 ? sl.h : Math.max(0, (H - used) / (slots.filter((x) => !(x.h > 0)).length || 1));
       if (sl.k === 'door' || sl.k === 'glass') {
         const n = sl.n; const dw = (W - g) / n - g / 2; const gl = sl.k === 'glass' ? n : 0;
-        front(`${tag}Door ${i + 1}`, dw, hh - g, n, gl); doorHw(n, dw, hh - g, sl.dir);
-        for (let q = 0; q < gl; q++) glass.push({ w: r1(alu ? dw - 2 * fw + 1.2 : dw - 8), h: r1(alu ? hh - g - 2 * fw + 1.2 : hh - g - 8), qty: 1 });
+        if (sl.dir !== 'shutter') front(`${tag}Door ${i + 1}`, dw, hh - g, n, gl); doorHw(n, dw, hh - g, sl.dir);
+        for (let q = 0; q < (sl.dir === 'shutter' ? 0 : gl); q++) glass.push({ w: r1(alu ? dw - 2 * fw + 1.2 : dw - 8), h: r1(alu ? hh - g - 2 * fw + 1.2 : hh - g - 8), qty: 1 });
       } else if (sl.k === 'drawer') { front(`${tag}Drawer front ${i + 1}`, W - g, hh - g, 1); hw.slides += 1; hw.handles += 1; hw.handleLen += W - g; }
       else if (sl.k !== 'open') appliances.push({ k: sl.k, w: r1(W - 2 * t), h: r1(hh), d: r1(dd) });
     });
@@ -103,7 +104,7 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   if (type.corner) { // an L-shaped corner: two narrow doors, one on the front and one on the side that faces the room
     const dw = Math.max(0, W - D - g); const dl = Math.max(0, D - g); const dh = H - g;
     front(`${tag}Corner door (front)`, dw, dh, 1); front(`${tag}Corner door (side)`, Math.max(0, W - D - g), dh, 1);
-    doorHw(2, dw, dh, dir === 'slide' ? 'auto' : dir);
+    doorHw(2, dw, dh, ['slide', 'shutter'].includes(dir) ? 'auto' : dir);
     add(`${tag}Side (return)`, W - D, H, 1, 'carcass', H); add(`${tag}Inner back`, D, H, 1, 'back', 0); add(`${tag}Bottom (return leg)`, D - t, W - D, 1, 'carcass', 0);
     if (type.wall) add(`${tag}Top (return leg)`, D - t, W - D, 1, 'carcass', 0);
     hw.pins += 0; void dl;
@@ -115,8 +116,8 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
     }
     if (doors > 0) {
       const dh = zn.doors.h - g; const dw = zn.doors.w / doors - g;
-      front(`${tag}Door`, dw, dh, doors, glazed); doorHw(doors, dw, dh, dir);
-      for (let i = 0; i < glazed; i++) glass.push({ w: r1(alu ? dw - 2 * fw + 1.2 : dw - 8), h: r1(alu ? dh - 2 * fw + 1.2 : dh - 8), qty: 1 });
+      if (dir !== 'shutter') front(`${tag}Door`, dw, dh, doors, glazed); doorHw(doors, dw, dh, dir);
+      for (let i = 0; i < (dir === 'shutter' ? 0 : glazed); i++) glass.push({ w: r1(alu ? dw - 2 * fw + 1.2 : dw - 8), h: r1(alu ? dh - 2 * fw + 1.2 : dh - 8), qty: 1 });
     }
   }
   if (type.wall) hw.hangers += 2; else hw.legs += type.tall ? 0 : 4;
@@ -174,7 +175,7 @@ export function packBars(frames, barLen = 600, fw = 4.5, kerf = 0.5) {
 export function kitchenModel(spec) {
   const style = { ...DEFAULT_STYLE, ...(spec.style || {}) }; const counter = { ...DEFAULT_COUNTER, ...(spec.counter || {}) };
   const runs = spec.runs || [];
-  const panels = { carcass: [], back: [], door: [] }; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0 }; const glass = []; const frames = []; const appliances = []; const accessories = {};
+  const panels = { carcass: [], back: [], door: [] }; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0, shutters: 0 }; const glass = []; const frames = []; const appliances = []; const accessories = {};
   const meters = { base: 0, wall: 0, tall: 0, units: 0, base_n: 0, wall_n: 0, tall_n: 0 };
   let edge = 0;
   for (const run of runs) for (const cab of run.cabinets || []) {
@@ -239,7 +240,7 @@ export function priceKitchen(model, opts) {
   const drw = o('drawer', style.drawer); add('Hardware', `Drawer sets — ${style.drawer || 'not chosen'}`, hw.slides, 'sets', drw?.price);
   const handle = o('handle', style.handle);
   if (handle && /m$/i.test(handle.unit || '')) add('Hardware', `Handles — ${style.handle}`, hw.handleLen / 100, 'm', handle.price); else add('Hardware', `Handles — ${style.handle || 'not chosen'}`, hw.handles, 'pcs', handle?.price);
-  add('Hardware', 'Sliding door tracks', hw.tracks, 'sets', gen('slide_track')); add('Hardware', 'Lift-up mechanisms', hw.lifts, 'pcs', gen('lift_up'));
+  add('Hardware', 'Roller shutter sets (slats, track, handle strip)', hw.shutters, 'sets', gen('shutter')); add('Hardware', 'Sliding door tracks', hw.tracks, 'sets', gen('slide_track')); add('Hardware', 'Lift-up mechanisms', hw.lifts, 'pcs', gen('lift_up'));
   for (const [k, n] of Object.entries(model.accessories || {})) add('Accessories', ACCESSORIES[k]?.[0] || k, n, 'pcs', gen('acc_' + k));
   for (const a of model.appliances || []) if (a.k !== 'hood') { /* appliances are bought by the customer: space only */ } else add('Accessories', 'Cooker hood fitting', 1, 'pcs', gen('acc_hood'));
   add('Hardware', 'Legs', hw.legs, 'pcs', gen('leg')); add('Hardware', 'Wall hangers', hw.hangers, 'pcs', gen('hanger')); add('Hardware', 'Shelf pins', hw.pins, 'pcs', gen('pin'));

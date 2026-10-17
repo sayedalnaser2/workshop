@@ -191,7 +191,7 @@ async function editor(el, id, tab) {
     const canEdit = !worker; let edit = canEdit && view3d.edit === true;
     pane.innerHTML = `<div class="k3stage" id="stage"><canvas id="c3"></canvas>
       <div class="k3tl"><div class="k3bar">${canEdit ? `<button class="btn sm" id="editBtn" title="Switch editing on to drag cabinets into position and add new ones">✎ Edit</button>` : ''}<span class="muted" id="k3hint"></span></div><div class="k3bar" id="k3add" hidden></div></div>
-      <div class="k3tr"><div class="k3bar"><button class="btn sm" data-oc="1">Open all</button><button class="btn sm" data-oc="0">Close all</button><button class="btn sm" data-p="front">Front</button><button class="btn sm" data-p="corner">Corner</button><button class="btn sm" data-p="top">From above</button><button class="btn sm" id="fs" title="Full screen, for showing the customer">⛶</button></div></div>
+      <div class="k3tr"><div class="k3bar"><button class="btn sm" data-oc="1">Open all</button><button class="btn sm" data-oc="0">Close all</button><button class="btn sm" data-p="front">Front</button><button class="btn sm" data-p="corner">Corner</button><button class="btn sm" data-p="top">From above</button><button class="btn sm" data-z="1.5" title="Zoom in">＋</button><button class="btn sm" data-z="0.67" title="Zoom out">－</button><button class="btn sm" data-zreset title="Back to the whole kitchen">Reset</button><button class="btn sm" id="fs" title="Full screen, for showing the customer">⛶</button></div></div>
       <div class="k3panel" id="k3p" hidden></div></div>`;
     const stage = $('#stage', pane); const cv = $('#c3', pane); const key = (r) => `${r.ri}|${r.ci}`;
     const tgt = (view3d.open ||= {}); const cur = (view3d.cur ||= {}); let raf = 0;
@@ -242,7 +242,7 @@ async function editor(el, id, tab) {
       const ri = v.selected ? v.selected.ri : 0; const arr = spec.runs[ri].cabinets; const at = v.selected ? v.selected.ci + 1 : arr.length;
       arr.splice(at, 0, base); view3d.sel = { ri, ci: at }; touch(); refresh3();
     };
-    const drawAddBar = () => { const bar = $('#k3add', pane); bar.hidden = !edit; if (edit) bar.innerHTML = `<span class="muted">Add after the selected one:</span>${ADD.map(([k2, l]) => `<button class="btn sm" data-add="${k2}">${l}</button>`).join('')}<label class="muted" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="moveRun"> move the whole run</label>`; $('#editBtn', pane)?.classList.toggle('primary', edit); const hint = $('#k3hint', pane); hint.textContent = edit ? 'Drag a cabinet to move it along its run (or into another run) · Shift+drag moves the whole run' : 'Drag to turn · scroll or pinch to zoom · click a cabinet to select it; click a door or drawer to open or close it'; cv.style.cursor = edit ? 'move' : 'grab'; };
+    const drawAddBar = () => { const bar = $('#k3add', pane); bar.hidden = !edit; if (edit) bar.innerHTML = `<span class="muted">Add after the selected one:</span>${ADD.map(([k2, l]) => `<button class="btn sm" data-add="${k2}">${l}</button>`).join('')}<label class="muted" style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="moveRun"> move the whole run</label>`; $('#editBtn', pane)?.classList.toggle('primary', edit); const hint = $('#k3hint', pane); hint.textContent = edit ? 'Drag a cabinet to move it along its run (or into another run) · Shift+drag moves the whole run' : 'Drag to turn · scroll or pinch to zoom (right-drag to move the picture) · click a cabinet to select it; click a door or drawer to open or close it'; cv.style.cursor = edit ? 'move' : 'grab'; };
     $('#editBtn', pane)?.addEventListener('click', () => { edit = !edit; view3d.edit = edit; drawAddBar(); panel(); });
     $('#k3add', pane).addEventListener('click', (e) => { const b = e.target.closest('[data-add]'); if (b) addCab(b.dataset.add); });
     $('#fs', pane).onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else stage.requestFullscreen?.(); };
@@ -273,12 +273,13 @@ async function editor(el, id, tab) {
       if (el2.matches('[data-none]')) { view3d.sel = null; refresh3(); }
     });
     // mouse / touch: a short press selects, a drag turns the view, two fingers pinch to zoom; in Edit mode a drag moves the cabinet under the pointer
-    const pts = new Map(); let drag = null; let pinch = 0; let mv = null;
+    const pts = new Map(); let drag = null; let pinch = 0; let mv = null; let lastMid = null; let pan = null;
     const at = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * (cv.width / r.width), (e.clientY - r.top) * (cv.height / r.height)]; };
     const uvOf = (pl, x, z) => ({ 0: [x - pl.x, z - pl.z], 90: [z - pl.z, x - pl.x], 180: [pl.x - x, pl.z - z], 270: [pl.z - z, pl.x - x] }[pl.rot] || [x - pl.x, z - pl.z]);
     const planeOf = (c) => { const t = kindOf(c); const y0 = t.wall ? (Number.isFinite(+c.y) && c.y !== '' && c.y !== undefined ? +c.y : spec.style.wall_height ?? 140) : t.tall ? 0 : spec.style.plinth ?? 10; return y0 + (+c.h || 0) / 2; };
     cv.onpointerdown = (e) => {
       cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (e.button === 1 || e.button === 2) { pan = { x: e.clientX, y: e.clientY, px: v.panX || 0, py: v.panY || 0 }; cv.style.cursor = 'grabbing'; return; }
       if (pts.size > 1) { drag = null; mv = null; const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); return; }
       const [x, y] = at(e); const hit = edit ? pick3D(cv, x, y) : null;
       if (hit) { view3d.sel = { ri: hit.ri, ci: hit.ci }; v.selected = view3d.sel; const c = cabOf(hit); const pl = placeRuns(spec)[hit.ri]; const p0 = unproject(cv, x, y, planeOf(c)); const [u0] = p0 ? uvOf(pl, p0.x, p0.z) : [0];
@@ -288,7 +289,8 @@ async function editor(el, id, tab) {
     };
     cv.onpointermove = (e) => {
       if (pts.has(e.pointerId)) pts.set(e.pointerId, [e.clientX, e.clientY]);
-      if (pts.size === 2) { const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) { v.zoom = Math.max(0.4, Math.min(4, v.zoom * (d / pinch))); go(); } pinch = d; return; }
+      if (pan) { const sc = cv.width / cv.getBoundingClientRect().width; v.panX = pan.px + (e.clientX - pan.x) * sc; v.panY = pan.py + (e.clientY - pan.y) * sc; go(); return; }
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); const mx = (a[0] + b[0]) / 2; const my = (a[1] + b[1]) / 2; const sc = cv.width / cv.getBoundingClientRect().width; if (pinch) { if (lastMid) { v.panX = (v.panX || 0) + (mx - lastMid[0]) * sc; v.panY = (v.panY || 0) + (my - lastMid[1]) * sc; } zoomBy(d / pinch); } lastMid = [mx, my]; pinch = d; return; }
       if (mv) {
         if (!mv.moved && Math.abs(e.clientX - mv.x) + Math.abs(e.clientY - mv.y) < 5) return;
         if (!mv.moved) { mv.moved = true; v.bounds = cv._bounds; } // keep the frame still while moving
@@ -296,11 +298,13 @@ async function editor(el, id, tab) {
         if (mv.whole) { const run = spec.runs[mv.ri]; const base = mv.pl; run.place = { x: Math.round((base.x + p.x - mv.p0.x) / 5) * 5, z: Math.round((base.z + p.z - mv.p0.z) / 5) * 5, rot: base.rot }; changed(); return; }
         // which run is the pointer over? (inside a run's footprint, in run coordinates)
         const pls = placeRuns(spec); let ri = view3d.sel.ri;
-        spec.runs.forEach((rn, i) => { if (i === view3d.sel.ri) return; const [uu, vv] = uvOf(pls[i], p.x, p.z); const len = rn.cabinets.reduce((a, q) => a + (+q.w || 0), 0); const dep = Math.max(...rn.cabinets.map((q) => +q.d || 0), 40); if (uu > -10 && uu < len + 10 && vv > -5 && vv < dep + 10) ri = i; });
+        const movingWall = !!(CAB_TYPES[mv.c.type] || {}).wall; const isWallRun = (rn) => rn.cabinets.length > 0 && rn.cabinets.every((q) => (CAB_TYPES[q.type] || {}).wall);
+        spec.runs.forEach((rn, i) => { if (i === view3d.sel.ri || !rn.cabinets.length || isWallRun(rn) !== movingWall) return; const [uu, vv] = uvOf(pls[i], p.x, p.z); const len = rn.cabinets.reduce((a, q) => a + (+q.w || 0), 0); const dep = Math.max(...rn.cabinets.map((q) => +q.d || 0), 40); if (uu > -10 && uu < len + 10 && vv > -5 && vv < dep + 10) ri = i; });
         const [uu] = uvOf(pls[ri], p.x, p.z); const w = +mv.c.w || 0; const center = ri === view3d.sel.ri ? mv.start + w / 2 + (uu - mv.u0) : uu;
         const from = spec.runs[view3d.sel.ri].cabinets; const idx = from.indexOf(mv.c); if (idx >= 0) from.splice(idx, 1);
         const dest = spec.runs[ri].cabinets; let acc = 0; let pos = 0; for (const q of dest) { if (acc + (+q.w || 0) / 2 < center) pos++; acc += +q.w || 0; }
-        dest.splice(pos, 0, mv.c); view3d.sel = { ri, ci: pos }; v.selected = view3d.sel; if (ri !== mv.ri) { mv.ri = ri; mv.pl = pls[ri]; mv.start = center - w / 2; mv.u0 = uu; }
+        const moved = ri !== view3d.sel.ri || pos !== idx; dest.splice(pos, 0, mv.c); view3d.sel = { ri, ci: pos }; if (moved) { for (const k2 of Object.keys(tgt)) delete tgt[k2]; for (const k2 of Object.keys(cur)) delete cur[k2]; } v.selected = view3d.sel; // open/closed states are kept per position, so they restart
+        if (ri !== mv.ri) { mv.ri = ri; mv.pl = pls[ri]; mv.start = center - w / 2; mv.u0 = uu; }
         changed(); return;
       }
       if (drag) { const dx = e.clientX - drag.x; const dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true; if (drag.moved) { v.yaw = drag.yaw + dx * 0.008; v.pitch = Math.max(0.02, Math.min(1.5, drag.pitch + dy * 0.006)); go(); } return; }
@@ -308,13 +312,20 @@ async function editor(el, id, tab) {
       if ((h?.ri) !== (old?.ri) || (h?.ci) !== (old?.ci)) go();
     };
     cv.onpointerup = (e) => {
-      pts.delete(e.pointerId);
+      pts.delete(e.pointerId); lastMid = null;
+      if (pan) { pan = null; drag = null; pinch = 0; cv.style.cursor = edit ? 'move' : 'grab'; return; }
       if (mv) { const was = mv; mv = null; delete v.bounds; if (was.moved) { panel(); go(); } else go(); drag = null; pinch = 0; return; }
       if (drag && !drag.moved) { const [x, y] = at(e); const hit = pick3D(cv, x, y); view3d.sel = hit && { ri: hit.ri, ci: hit.ci }; v.selected = view3d.sel; if (!edit && hit && ['front', 'glass', 'infill', 'handle', 'tray'].includes(hit.kind)) hit.front ? setFront(hit, hit.front, effOpen(hit, hit.front) > 0.5 ? 0 : 1) : setOpen(hit, (tgt[key(hit)] || 0) > 0.5 ? 0 : 1); panel(); go(); }
       drag = null; pinch = 0;
     };
+    cv.onpointercancel = (e) => { pan = null; mv = null; drag = null; pts.delete(e.pointerId); pinch = 0; delete v.bounds; go(); };
     cv.onpointerleave = () => { if (v.hover) { v.hover = null; go(); } };
-    cv.onwheel = (e) => { e.preventDefault(); v.zoom = Math.max(0.4, Math.min(4, v.zoom * (e.deltaY < 0 ? 1.1 : 0.9))); go(); };
+    const ZMIN = 0.3; const ZMAX = 25;
+    const zoomBy = (r, sx, sy) => { const z0 = v.zoom || 1; const z1 = Math.max(ZMIN, Math.min(ZMAX, z0 * r)); const k = z1 / z0; const cx = sx ?? cv.width / 2; const cy = sy ?? cv.height / 2; v.panX = (v.panX || 0) + (cx - cv.width / 2 - (v.panX || 0)) * (1 - k); v.panY = (v.panY || 0) + (cy - cv.height / 2 - (v.panY || 0)) * (1 - k); v.zoom = z1; go(); };
+    cv.onwheel = (e) => { e.preventDefault(); const [x, y] = at(e); zoomBy(e.deltaY < 0 ? 1.18 : 1 / 1.18, x, y); };
+    cv.oncontextmenu = (e) => e.preventDefault();
+    $$('[data-z]', pane).forEach((b2) => (b2.onclick = () => zoomBy(Number(b2.dataset.z))));
+    $('[data-zreset]', pane).onclick = () => { v.zoom = 1; v.panX = 0; v.panY = 0; go(); };
     $$('[data-oc]', pane).forEach((b) => (b.onclick = () => { spec.runs.forEach((run, ri) => run.cabinets.forEach((_, ci) => { for (const k2 of Object.keys(tgt)) if (k2.startsWith(`${ri}|${ci}|`)) delete tgt[k2]; tgt[`${ri}|${ci}`] = Number(b.dataset.oc); })); animate(); panel(); }));
     $$('[data-p]', pane).forEach((b) => (b.onclick = () => { Object.assign(v, { front: { yaw: 0, pitch: 0.08 }, corner: { yaw: -0.55, pitch: 0.45 }, top: { yaw: 0, pitch: 1.5 } }[b.dataset.p]); go(); }));
     drawAddBar(); panel(); animate();
@@ -331,7 +342,7 @@ async function editor(el, id, tab) {
       ${model.profile ? `<div class="card" style="margin-bottom:14px"><div style="display:flex;gap:8px;align-items:center"><h3 style="margin:0">Door frames — ${esc(sty.profile || 'profile not chosen')}</h3><span class="grow"></span><span class="muted">${model.profile.bars.length} bar(s) of ${sty.bar_len} cm · ${fq(Math.round(model.profile.metres * 100) / 100)} m of profile · ${model.profile.corners} corners</span></div>
         <table class="grid" style="margin-top:8px"><thead><tr><th>Door / front</th><th class="num">Size cm</th><th class="num">Qty</th></tr></thead><tbody>${group(model.frames.map((f) => ({ ...f, edge: 0 }))).map(t).join('')}</tbody></table>
         <details style="margin-top:8px"><summary style="cursor:pointer">Cutting plan for the bars</summary>${model.profile.bars.map((b, i) => `<p style="margin:6px 0"><b>Bar ${i + 1}</b> — ${b.items.map((x) => fq(x.len)).join(' + ')} <span class="muted">(offcut ${fq(b.free)} cm)</span></p>`).join('')}${model.profile.unfit.length ? `<p class="err">${model.profile.unfit.length} piece(s) are longer than a bar.</p>` : ''}</details></div>` : ''}
-      <div class="cols2" style="align-items:start"><div class="card"><h3>Hardware</h3><table class="grid"><tbody><tr><td>Hinges ${sty.hinge ? `<span class="muted">${esc(sty.hinge)}</span>` : ''}</td><td class="num">${hw.hinges}</td></tr><tr><td>Drawer sets ${sty.drawer ? `<span class="muted">${esc(sty.drawer)}</span>` : ''}</td><td class="num">${hw.slides}</td></tr><tr><td>Handles ${sty.handle ? `<span class="muted">${esc(sty.handle)}</span>` : ''}</td><td class="num">${hw.handles} <span class="muted">(${fq(Math.round(hw.handleLen) / 100)} m)</span></td></tr><tr><td>Plinth legs</td><td class="num">${hw.legs}</td></tr><tr><td>Wall hangers</td><td class="num">${hw.hangers}</td></tr>${hw.tracks ? `<tr><td>Sliding door tracks</td><td class="num">${hw.tracks}</td></tr>` : ''}${hw.lifts ? `<tr><td>Lift-up mechanisms</td><td class="num">${hw.lifts}</td></tr>` : ''}<tr><td>Shelf pins</td><td class="num">${hw.pins}</td></tr></tbody></table></div>
+      <div class="cols2" style="align-items:start"><div class="card"><h3>Hardware</h3><table class="grid"><tbody><tr><td>Hinges ${sty.hinge ? `<span class="muted">${esc(sty.hinge)}</span>` : ''}</td><td class="num">${hw.hinges}</td></tr><tr><td>Drawer sets ${sty.drawer ? `<span class="muted">${esc(sty.drawer)}</span>` : ''}</td><td class="num">${hw.slides}</td></tr><tr><td>Handles ${sty.handle ? `<span class="muted">${esc(sty.handle)}</span>` : ''}</td><td class="num">${hw.handles} <span class="muted">(${fq(Math.round(hw.handleLen) / 100)} m)</span></td></tr><tr><td>Plinth legs</td><td class="num">${hw.legs}</td></tr><tr><td>Wall hangers</td><td class="num">${hw.hangers}</td></tr>${hw.shutters ? `<tr><td>Roller shutter sets</td><td class="num">${hw.shutters}</td></tr>` : ''}${hw.tracks ? `<tr><td>Sliding door tracks</td><td class="num">${hw.tracks}</td></tr>` : ''}${hw.lifts ? `<tr><td>Lift-up mechanisms</td><td class="num">${hw.lifts}</td></tr>` : ''}<tr><td>Shelf pins</td><td class="num">${hw.pins}</td></tr></tbody></table></div>
       <div class="card"><h3>Glazed doors</h3>${model.glass.length ? `<table class="grid"><thead><tr><th>Glass (${esc(sty.glass || '—')})</th><th class="num">Size</th><th class="num">Qty</th></tr></thead><tbody>${model.glass.map((g) => `<tr><td>Door glass</td><td class="num">${g.w} × ${g.h}</td><td class="num">${g.qty}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No glazed doors.</p>'}</div></div>
       ${(model.appliances.length || Object.keys(model.accessories).length) ? `<div class="cols2" style="align-items:start;margin-top:14px"><div class="card"><h3>Appliance spaces</h3>${model.appliances.length ? `<table class="grid"><thead><tr><th>Appliance</th><th class="num">Opening W × H × D cm</th></tr></thead><tbody>${model.appliances.map((a2) => `<tr><td>${esc((APPLIANCES[a2.k] || [a2.k === 'hood' ? 'Cooker hood' : a2.k])[0])}</td><td class="num">${fq(a2.w)} × ${fq(a2.h)} × ${fq(a2.d)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">None.</p>'}</div><div class="card"><h3>Accessories</h3>${Object.keys(model.accessories).length ? `<table class="grid"><tbody>${Object.entries(model.accessories).map(([k2, n]) => `<tr><td>${esc(ACCESSORIES[k2]?.[0] || k2)}</td><td class="num">${n}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">None added.</p>'}</div></div>` : ''}`;
   }

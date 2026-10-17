@@ -44,7 +44,9 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
         if (dr === 'down') return `<line x1="${gx + dw / 2 - 8}" y1="${zy + 6}" x2="${gx + dw / 2 + 8}" y2="${zy + 6}" stroke="${INK}" stroke-width="2"/>`;
         const hx = left ? gx + dw - 6 : gx + 6; return `<line x1="${hx}" y1="${zy + zh * (wall ? 0.75 : 0.25)}" x2="${hx}" y2="${zy + zh * (wall ? 0.9 : 0.4)}" stroke="${INK}" stroke-width="2"/>`;
       };
-      const doorSet = (gx0, zy, zw, zh, n, dr, gl, wall) => { for (let i = 0; i < n; i++) { const dw = zw / n; const gx = gx0 + i * dw; const left = dr === 'right' ? false : dr === 'left' ? true : n === 1 || i % 2 === 0;
+      const doorSet = (gx0, zy, zw, zh, n, dr, gl, wall) => { for (let i = 0; i < n; i++) { const dw = zw / n; const gx = gx0 + i * dw;
+        if (dr === 'shutter') { const lines = Math.max(3, Math.round((zh - 4) / 7)); out += `<rect x="${gx + 2}" y="${zy + 2}" width="${dw - 4}" height="${zh - 4}" fill="${FILL2}" stroke="${INK}" stroke-width=".8"/>` + Array.from({ length: lines }, (_, q) => `<line x1="${gx + 3}" y1="${zy + 2 + ((q + 1) * (zh - 4)) / (lines + 1)}" x2="${gx + dw - 3}" y2="${zy + 2 + ((q + 1) * (zh - 4)) / (lines + 1)}" stroke="${INK}" stroke-width=".4" opacity=".55"/>`).join('') + `<rect x="${gx + dw * .3}" y="${zy + zh - 9}" width="${dw * .4}" height="3" fill="${INK}"/><path d="M${gx + dw / 2 - 5} ${zy + zh / 2 + 3} L${gx + dw / 2} ${zy + zh / 2 - 4} L${gx + dw / 2 + 5} ${zy + zh / 2 + 3}" fill="none" stroke="${INK}" stroke-width="1.2"/>`; continue; }
+        const left = dr === 'right' ? false : dr === 'left' ? true : n === 1 || i % 2 === 0;
         out += `<rect x="${gx + 2}" y="${zy + 2}" width="${dw - 4}" height="${zh - 4}" fill="${i < gl ? GLASS : FILL2}" stroke="${INK}" stroke-width=".8"/>${handle(gx, zy, dw, zh, dr, left, wall)}`;
         if (n === 1 || dr === 'up' || dr === 'down' || dr === 'slide') out += sym(gx, zy, dw, zh, dr, left); } };
       if (slots) {
@@ -57,7 +59,7 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
       } else if (t.corner) {
         const dwA = Math.max(0, (+c.w || 0) - (+c.d || 0)) * f; const right = (c.side || 'right') !== 'left';
         out += `<rect x="${right ? x + w - (+c.d || 0) * f : x}" y="${yTop}" width="${(+c.d || 0) * f}" height="${h}" fill="${FILL2_}" fill-opacity=".5" stroke="${INK}" stroke-dasharray="3 2" stroke-width=".6"/>`;
-        doorSet(right ? x : x + w - dwA, yTop, dwA, h, 1, dir === 'slide' ? 'auto' : dir, glazed, t.wall);
+        doorSet(right ? x : x + w - dwA, yTop, dwA, h, 1, ['slide', 'shutter'].includes(dir) ? 'auto' : dir, glazed, t.wall);
       } else if (t.shelf) { out += ''; } else if (t.hood) {
         out += `<rect x="${x + w * .3}" y="${yTop - 40}" width="${w * .4}" height="${40 + h * .87}" fill="#c9ced6" stroke="${INK}" stroke-width=".8"/><rect x="${x}" y="${yTop + h * .87}" width="${w}" height="${h * .13}" fill="#aab2bc" stroke="${INK}" stroke-width=".8"/>`;
       } else if (t.gap) { /* drawn above */ } else {
@@ -66,7 +68,7 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
         if (doors) { const z = zn.doors; doorSet(x + z.x * f, yTop + (+c.h - z.y - z.h) * f, z.w * f, z.h * f, doors, dir, glazed, t.wall); }
       }
       if (t.shelf) out += `<rect x="${x}" y="${yTop}" width="${w}" height="${Math.max(3, h)}" fill="#d9c9a8" stroke="${INK}" stroke-width="1"/>`;
-      if (t.sink) out += `<ellipse cx="${x + w / 2}" cy="${yTop - ct * k - 3}" rx="${w * .28}" ry="2.5" fill="none" stroke="${INK}" stroke-width="1"/>`;
+      if (t.sink) { const cx = x + w / 2; const ty = yTop - ct * k; out += `<path d="M${x + w * .12} ${ty} L${x + w * .12} ${ty + 4} L${x + w * .88} ${ty + 4} L${x + w * .88} ${ty}" fill="#b9c0c9" stroke="${INK}" stroke-width="1"/><path d="M${cx} ${ty} L${cx} ${ty - 16} Q${cx} ${ty - 22} ${cx - 8} ${ty - 22}" fill="none" stroke="${INK}" stroke-width="2"/>`; }
       if (t.counter) out += `<rect x="${x - 1}" y="${yTop - ct * k}" width="${w + 2}" height="${ct * k}" fill="${TOP}"/>`;
       if (!t.wall && !t.tall) out += `<rect x="${x}" y="${yTop + h}" width="${w}" height="${style.plinth * k}" fill="#8b95a3"/>`;
       out += `<text x="${x + w / 2}" y="${base + 14 + (bottom === 0 ? 0 : 0)}" font-size="10" text-anchor="middle" fill="currentColor">${+c.w || 0}</text>`;

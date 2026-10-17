@@ -242,6 +242,8 @@ test('kitchens: door directions, L-corner, slots in tall units, appliance gaps, 
   assert.equal(mk({ type: 'base', doors: 1, dir: 'slide' }).hw.tracks, 1); assert.equal(mk({ type: 'base', doors: 1, dir: 'slide' }).hw.hinges, 0);
   assert.equal(mk({ type: 'base', doors: 2, dir: 'up' }).hw.lifts, 2);
   assert.equal(mk({ type: 'base', doors: 2 }).hw.hinges, 4);
+  const sh = mk({ type: 'base', doors: 2, dir: 'shutter' }); assert.equal(sh.hw.shutters, 2); assert.equal(sh.hw.hinges, 0); assert.equal(sh.panels.filter((p) => p.mat === 'door').length, 0); // a shutter is a kit, not door panels
+  assert.deepEqual(frontsOf({ type: 'base', doors: 2, dir: 'slide' }).map((f) => f.key), ['f0']); // sliding doors share one state
   assert.equal(mk({ type: 'base', doors: 0, drawers: 0 }).panels.filter((p) => p.mat === 'door').length, 0); // no doors: stays open
   const tall = { type: 'tall', w: 60, h: 210, d: 58, slots: [{ k: 'door', h: 70 }, { k: 'oven', h: 60 }, { k: 'door', h: 80, n: 2 }] };
   const tp = cabinetParts(tall); assert.equal(tp.appliances[0].k, 'oven'); assert.equal(tp.panels.filter((p) => p.label === 'Divider').length, 2);
