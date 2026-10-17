@@ -6,11 +6,24 @@ export const CAB_TYPES = {
   drawers: { label: 'Drawer base',   w: 60, h: 72,  d: 56, doors: 0, drawers: 3, shelves: 0, counter: true },
   sink:    { label: 'Sink base',     w: 90, h: 72,  d: 56, doors: 2, drawers: 0, shelves: 0, counter: true, sink: 1 },
   hob:     { label: 'Hob base',      w: 60, h: 72,  d: 56, doors: 0, drawers: 2, shelves: 0, counter: true, hob: 1 },
-  corner:  { label: 'Corner base',   w: 90, h: 72,  d: 56, doors: 1, drawers: 0, shelves: 1, counter: true, corner: 1 },
+  corner:  { label: 'Corner base (L-shaped)', w: 90, h: 72, d: 56, doors: 2, drawers: 0, shelves: 1, counter: true, corner: 1 },
   wall:    { label: 'Wall cabinet',  w: 60, h: 70,  d: 32, doors: 1, drawers: 0, shelves: 1, wall: true },
+  wall_corner: { label: 'Corner wall cabinet (L-shaped)', w: 60, h: 70, d: 32, doors: 2, drawers: 0, shelves: 1, wall: true, corner: 1 },
+  hood:    { label: 'Cooker hood',   w: 60, h: 75,  d: 45, doors: 0, drawers: 0, shelves: 0, wall: true, hood: 1 },
+  shelf:   { label: 'Floating shelf', w: 80, h: 4,   d: 25, doors: 0, drawers: 0, shelves: 0, wall: true, shelf: 1 },
   tall:    { label: 'Tall unit',     w: 60, h: 210, d: 58, doors: 2, drawers: 0, shelves: 4, tall: true },
   gap:     { label: 'Appliance gap', w: 60, h: 85,  d: 60, doors: 0, drawers: 0, shelves: 0, gap: true },
 };
+/** Appliances that stand in a gap (cab.appliance) or fill a slot of a tall unit. h = usual opening height cm. */
+export const APPLIANCES = { fridge: ['Fridge', 180], freezer: ['Freezer', 85], dishwasher: ['Dishwasher', 82], washer: ['Washing machine', 85], oven: ['Built-in oven', 60], micro: ['Microwave', 38], coffee: ['Coffee machine', 45], cooker: ['Free-standing cooker', 85] };
+/** What a slot of a tall unit can hold, from the floor up. */
+export const SLOT_KINDS = { door: 'Door', glass: 'Glass door', drawer: 'Drawer', open: 'Open niche', ...Object.fromEntries(['fridge', 'freezer', 'oven', 'micro', 'coffee'].map((k) => [k, APPLIANCES[k][0]])) };
+/** Opening directions for doors. auto = French doors in pairs, a single door hinged on the left. */
+export const DIRS = { auto: 'Automatic', left: 'Hinged left', right: 'Hinged right', up: 'Lifts up', down: 'Folds down', slide: 'Sliding' };
+/** Accessories that can be added to a cabinet. visual = drawn in the 3D view. */
+export const ACCESSORIES = { tap: ['Tap / mixer', true], bin: ['Pull-out waste bin', false], cutlery: ['Cutlery tray', false], pullout: ['Pull-out basket', false], lights: ['LED light strip', true], rail: ['Rail with hooks', true], spice: ['Spice rack', false], lazy: ['Lazy-susan carousel', false], soft: ['Soft-close set', false] };
+/** Slots of a tall unit, defaulting to two doors on top of each other if none are set. */
+export const slotsOf = (cab) => (Array.isArray(cab.slots) && cab.slots.length ? cab.slots.map((x) => ({ k: x.k || 'door', h: +x.h || 0, n: Math.max(1, Math.round(+x.n || 1)), dir: x.dir || 'auto' })) : null);
 export const DEFAULT_STYLE = {
   kind: 'wood', profile: '', infill: '', frame_w: 4.5, bar_len: 600, carcass: '', door: '', back: '', door_colour: '', handle: '', hinge: '', drawer: '', glass: '', profile_in: '', profile_out: '',
   t: 1.8, back_t: 0.6, plinth: 10, wall_height: 140, sheet_w: 244, sheet_h: 122, kerf: 0.3, gap: 0.4,
@@ -39,9 +52,10 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   const doors = Math.max(0, Math.round(+cab.doors || 0)); const drawers = Math.max(0, Math.round(+cab.drawers || 0));
   const shelves = Math.max(0, Math.round(+cab.shelves || 0)); const glazed = Math.min(doors, Math.max(0, Math.round(+cab.glazed || 0)));
   const type = CAB_TYPES[cab.type] || CAB_TYPES.base;
-  const panels = []; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0 }; const glass = []; const frames = [];
+  const panels = []; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0 }; const glass = []; const frames = []; const appliances = []; const acc = {};
   const alu = s.kind === 'aluminium'; const fw = +s.frame_w || 4.5;
-  if (type.gap || !(W > 0 && H > 0 && D > 0)) return { panels, hw, glass, frames };
+  if (type.gap) { if (cab.appliance) appliances.push({ k: cab.appliance, w: W, h: H, d: D }); return { panels, hw, glass, frames, appliances, acc }; }
+  if (!(W > 0 && H > 0 && D > 0)) return { panels, hw, glass, frames, appliances, acc };
   const add = (label, w, h, qty, mat, edge = 0) => { if (qty > 0 && w > 0 && h > 0) panels.push({ label, w: r1(w), h: r1(h), qty, mat, edge: r1(edge) }); };
   // an aluminium kitchen: every door / drawer front is a profile frame with an infill panel (or glass) set in it
   const front = (label, w, h, qty, glazedQty = 0) => {
@@ -51,29 +65,63 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   };
   const tag = cab.label ? `${cab.label} · ` : '';
   const dd = D - b - 1; // depth of horizontal panels (back sits behind them)
+  for (const a of cab.acc || []) if (ACCESSORIES[a]) acc[a] = (acc[a] || 0) + 1;
+  if (type.shelf) { add(`${tag}Floating shelf board`, W, D, 1, 'carcass', W + 2 * (D - 2)); hw.hangers += 2; return { panels, hw, glass, frames, appliances, acc }; }
+  if (type.hood) { hw.hangers += 2; appliances.push({ k: 'hood', w: W, h: H, d: D }); return { panels, hw, glass, frames, appliances, acc }; }
   add(`${tag}Side`, dd + b + 1 > D ? D : D, H, 2, 'carcass', H); // sides: front edge banded
   add(`${tag}Bottom`, W - 2 * t, dd, 1, 'carcass', W - 2 * t);
   if (type.wall) add(`${tag}Top`, W - 2 * t, dd, 1, 'carcass', W - 2 * t);
   else if (type.tall) { add(`${tag}Top`, W - 2 * t, dd, 1, 'carcass', W - 2 * t); }
   else add(`${tag}Top rail`, W - 2 * t, 8, 2, 'carcass', 0);
   add(`${tag}Back`, W - 0.4, H - 0.4, 1, 'back', 0);
-  add(`${tag}Shelf`, W - 2 * t - 0.2, dd - 2, shelves, 'carcass', W - 2 * t - 0.2);
+  const nShelf = type.tall && slotsOf(cab) ? 0 : shelves;
+  add(`${tag}Shelf`, W - 2 * t - 0.2, dd - 2, nShelf, 'carcass', W - 2 * t - 0.2);
   // drawers share the height with doors only on mixed cabinets; here a cabinet is either doors or drawers (or a stack above doors)
-  const zn = zonesOf(cab);
-  if (drawers > 0) {
-    const dh = r1(zn.drawers.h / drawers);
-    for (let i = 0; i < drawers; i++) front(`${tag}Drawer front ${i + 1}`, zn.drawers.w - g, dh - g, 1);
-    hw.slides += drawers; hw.handles += drawers; hw.handleLen += drawers * (zn.drawers.w - g);
+  const zn = zonesOf(cab); const slots = type.tall ? slotsOf(cab) : null; const dir = cab.dir && DIRS[cab.dir] ? cab.dir : 'auto';
+  // hardware for a run of n doors of height dh that open in direction dr
+  const doorHw = (n, dw, dh, dr) => {
+    if (dr === 'slide') { hw.tracks += 1; hw.handles += n; return; }
+    if (dr === 'up') { hw.lifts += n; hw.handles += n; hw.handleLen += n * dw; return; }
+    if (dr === 'down') { hw.hinges += n * 2; hw.handles += n; hw.handleLen += n * dw; return; }
+    hw.hinges += n * hingesFor(dh); hw.handles += n; hw.handleLen += n * dh;
+  };
+  if (slots) { // a tall unit built from slots stacked from the floor up: doors, drawers, appliances, open niches
+    const used = slots.reduce((a, x) => a + x.h, 0);
+    for (let i = 0; i < slots.length - 1; i++) add(`${tag}Divider`, W - 2 * t, dd, 1, 'carcass', W - 2 * t);
+    slots.forEach((sl, i) => {
+      const hh = sl.h > 0 ? sl.h : Math.max(0, (H - used) / (slots.filter((x) => !(x.h > 0)).length || 1));
+      if (sl.k === 'door' || sl.k === 'glass') {
+        const n = sl.n; const dw = (W - g) / n - g / 2; const gl = sl.k === 'glass' ? n : 0;
+        front(`${tag}Door ${i + 1}`, dw, hh - g, n, gl); doorHw(n, dw, hh - g, sl.dir);
+        for (let q = 0; q < gl; q++) glass.push({ w: r1(alu ? dw - 2 * fw + 1.2 : dw - 8), h: r1(alu ? hh - g - 2 * fw + 1.2 : hh - g - 8), qty: 1 });
+      } else if (sl.k === 'drawer') { front(`${tag}Drawer front ${i + 1}`, W - g, hh - g, 1); hw.slides += 1; hw.handles += 1; hw.handleLen += W - g; }
+      else if (sl.k !== 'open') appliances.push({ k: sl.k, w: r1(W - 2 * t), h: r1(hh), d: r1(dd) });
+    });
+    hw.legs += 0; hw.pins += 0;
+    return { panels, hw, glass, frames, appliances, acc };
   }
-  if (doors > 0) {
-    const dh = zn.doors.h - g; const dw = zn.doors.w / doors - g;
-    front(`${tag}Door`, dw, dh, doors, glazed);
-    hw.hinges += doors * hingesFor(dh); hw.handles += doors; hw.handleLen += doors * dh;
-    for (let i = 0; i < glazed; i++) glass.push({ w: r1(alu ? dw - 2 * fw + 1.2 : dw - 8), h: r1(alu ? dh - 2 * fw + 1.2 : dh - 8), qty: 1 });
+  if (type.corner) { // an L-shaped corner: two narrow doors, one on the front and one on the side that faces the room
+    const dw = Math.max(0, W - D - g); const dl = Math.max(0, D - g); const dh = H - g;
+    front(`${tag}Corner door (front)`, dw, dh, 1); front(`${tag}Corner door (side)`, Math.max(0, W - D - g), dh, 1);
+    doorHw(2, dw, dh, dir === 'slide' ? 'auto' : dir);
+    add(`${tag}Side (return)`, W - D, H, 1, 'carcass', H); add(`${tag}Inner back`, D, H, 1, 'back', 0); add(`${tag}Bottom (return leg)`, D - t, W - D, 1, 'carcass', 0);
+    if (type.wall) add(`${tag}Top (return leg)`, D - t, W - D, 1, 'carcass', 0);
+    hw.pins += 0; void dl;
+  } else {
+    if (drawers > 0) {
+      const dh = r1(zn.drawers.h / drawers);
+      for (let i = 0; i < drawers; i++) front(`${tag}Drawer front ${i + 1}`, zn.drawers.w - g, dh - g, 1);
+      hw.slides += drawers; hw.handles += drawers; hw.handleLen += drawers * (zn.drawers.w - g);
+    }
+    if (doors > 0) {
+      const dh = zn.doors.h - g; const dw = zn.doors.w / doors - g;
+      front(`${tag}Door`, dw, dh, doors, glazed); doorHw(doors, dw, dh, dir);
+      for (let i = 0; i < glazed; i++) glass.push({ w: r1(alu ? dw - 2 * fw + 1.2 : dw - 8), h: r1(alu ? dh - 2 * fw + 1.2 : dh - 8), qty: 1 });
+    }
   }
   if (type.wall) hw.hangers += 2; else hw.legs += type.tall ? 0 : 4;
-  hw.pins += shelves * 4;
-  return { panels, hw, glass, frames };
+  hw.pins += nShelf * 4;
+  return { panels, hw, glass, frames, appliances, acc };
 }
 
 /** Guillotine-style shelf packing of rectangles onto sheets. Pieces may rotate. Returns the sheets with positions. */
@@ -126,13 +174,13 @@ export function packBars(frames, barLen = 600, fw = 4.5, kerf = 0.5) {
 export function kitchenModel(spec) {
   const style = { ...DEFAULT_STYLE, ...(spec.style || {}) }; const counter = { ...DEFAULT_COUNTER, ...(spec.counter || {}) };
   const runs = spec.runs || [];
-  const panels = { carcass: [], back: [], door: [] }; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0 }; const glass = []; const frames = [];
+  const panels = { carcass: [], back: [], door: [] }; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0 }; const glass = []; const frames = []; const appliances = []; const accessories = {};
   const meters = { base: 0, wall: 0, tall: 0, units: 0, base_n: 0, wall_n: 0, tall_n: 0 };
   let edge = 0;
   for (const run of runs) for (const cab of run.cabinets || []) {
     const type = CAB_TYPES[cab.type] || CAB_TYPES.base; const p = cabinetParts(cab, style);
     for (const x of p.panels) { panels[x.mat].push(x); edge += x.edge * x.qty; }
-    for (const k of Object.keys(hw)) hw[k] += p.hw[k]; glass.push(...p.glass); frames.push(...p.frames);
+    for (const k of Object.keys(hw)) hw[k] += p.hw[k]; glass.push(...p.glass); frames.push(...p.frames); appliances.push(...p.appliances); for (const [k, n] of Object.entries(p.acc)) accessories[k] = (accessories[k] || 0) + n;
     const w = (+cab.w || 0) / 100; if (type.gap) continue;
     meters.units++; if (type.wall) { meters.wall += w; meters.wall_n++; } else if (type.tall) { meters.tall += w; meters.tall_n++; } else { meters.base += w; meters.base_n++; }
   }
@@ -142,7 +190,7 @@ export function kitchenModel(spec) {
     sheets[mat] = { ...pk, area: panels[mat].reduce((a, p) => a + p.w * p.h * p.qty, 0) / 10000 };
   }
   const profile = style.kind === 'aluminium' ? packBars(frames, +style.bar_len || 600, +style.frame_w || 4.5) : null;
-  return { style, counter, panels, hw, glass, frames, profile, sheets, meters, edge_m: edge / 100, tops: counterTops(runs, counter, style) };
+  return { style, counter, panels, hw, glass, frames, appliances, accessories, profile, sheets, meters, edge_m: edge / 100, tops: counterTops(runs, counter, style) };
 }
 
 /** Countertop pieces: one per unbroken stretch of base cabinets in each run. */
@@ -156,14 +204,16 @@ export function counterTops(runs, c, style = DEFAULT_STYLE) {
       if (!type.counter) { close(); continue; }
       if (!cur) cur = { run: ri, runName: run.name, len: 0, depth: 0, from: 0, island: !!run.island, over: run.island ? +run.overhang || 0 : 0 };
       cur.len += +cab.w || 0; cur.depth = Math.max(cur.depth, +cab.d || 0);
+      if (type.corner) cur.leg = (cur.leg || 0) + Math.max(0, (+cab.w || 0) - (+cab.d || 0)); // the return leg of an L-shaped corner
       if (type.sink) sinks += type.sink; if (type.hob) hobs += type.hob; if (type.corner) corners++;
     }
     close();
   });
   // an island stands free: no splash back, and a seating overhang on the far side
   const out = pieces.map((p) => ({ ...p, len: r1(p.len + 2 * (+c.side || 0)), depth: r1(p.depth + (+c.front || 0) + p.over), splash: c.splash_h > 0 && !p.island ? r1(p.len) : 0 }));
-  const area = out.reduce((a, p) => a + (p.len * p.depth + p.splash * c.splash_h) / 10000, 0);
-  const slabsPieces = []; for (const p of out) { slabsPieces.push({ w: p.len, h: p.depth, qty: 1, label: `${p.runName || 'Run'} top` }); if (p.splash) slabsPieces.push({ w: p.splash, h: c.splash_h, qty: 1, label: 'Splash' }); }
+  const legArea = (p) => (p.leg ? p.leg * (p.depth - p.over) : 0);
+  const area = out.reduce((a, p) => a + (p.len * p.depth + p.splash * c.splash_h + legArea(p)) / 10000, 0);
+  const slabsPieces = []; for (const p of out) { slabsPieces.push({ w: p.len, h: p.depth, qty: 1, label: `${p.runName || 'Run'} top` }); if (p.leg) slabsPieces.push({ w: r1(p.depth), h: r1(p.leg), qty: 1, label: `${p.runName || 'Run'} corner leg` }); if (p.splash) slabsPieces.push({ w: p.splash, h: c.splash_h, qty: 1, label: 'Splash' }); }
   const slabs = packSheets(slabsPieces, c.slab_w, c.slab_h, 0.5);
   const run_m = out.reduce((a, p) => a + p.len, 0) / 100;
   const polish_m = out.reduce((a, p) => a + (p.island ? 2 * p.len + 2 * p.depth : p.len + 2 * p.depth + (p.splash ? p.splash : 0)) / 100, 0);
@@ -189,6 +239,9 @@ export function priceKitchen(model, opts) {
   const drw = o('drawer', style.drawer); add('Hardware', `Drawer sets — ${style.drawer || 'not chosen'}`, hw.slides, 'sets', drw?.price);
   const handle = o('handle', style.handle);
   if (handle && /m$/i.test(handle.unit || '')) add('Hardware', `Handles — ${style.handle}`, hw.handleLen / 100, 'm', handle.price); else add('Hardware', `Handles — ${style.handle || 'not chosen'}`, hw.handles, 'pcs', handle?.price);
+  add('Hardware', 'Sliding door tracks', hw.tracks, 'sets', gen('slide_track')); add('Hardware', 'Lift-up mechanisms', hw.lifts, 'pcs', gen('lift_up'));
+  for (const [k, n] of Object.entries(model.accessories || {})) add('Accessories', ACCESSORIES[k]?.[0] || k, n, 'pcs', gen('acc_' + k));
+  for (const a of model.appliances || []) if (a.k !== 'hood') { /* appliances are bought by the customer: space only */ } else add('Accessories', 'Cooker hood fitting', 1, 'pcs', gen('acc_hood'));
   add('Hardware', 'Legs', hw.legs, 'pcs', gen('leg')); add('Hardware', 'Wall hangers', hw.hangers, 'pcs', gen('hanger')); add('Hardware', 'Shelf pins', hw.pins, 'pcs', gen('pin'));
   const glassArea = model.glass.reduce((a, g) => a + (g.w * g.h * g.qty) / 10000, 0); add('Glass', `Glazed doors — ${style.glass || 'glass'}`, glassArea, 'm²', o('glass', style.glass)?.price);
   const top = counter.material ? o('marble', `${counter.material}|${counter.thickness}`) || o('marble', counter.material) : null; const ct = model.tops;
@@ -206,6 +259,8 @@ const classOf = (c) => { const t = CAB_TYPES[c.type] || CAB_TYPES.base; return t
 /** Two neighbouring cabinets built as one wider cabinet: one carcass instead of two (fewer panels, quicker to make, cheaper). Returns { cab } or { error }. */
 export function mergeCabinets(a, b) {
   if (!a || !b) return { error: 'There is no cabinet next to this one.' };
+  const odd = (x) => { const t = CAB_TYPES[x.type] || {}; return t.shelf || t.hood || t.corner || slotsOf(x); };
+  if (odd(a) || odd(b)) return { error: 'Corner units, shelves, hoods and tall units with slots cannot be joined.' };
   if (classOf(a) !== classOf(b) || classOf(a) === 'gap') return { error: 'Only two cabinets of the same kind (both base, both wall or both tall) can be joined.' };
   const da = Math.round(+a.doors || 0); const db = Math.round(+b.doors || 0); const ra = Math.round(+a.drawers || 0); const rb = Math.round(+b.drawers || 0);
   const special = [a, b].find((x) => (CAB_TYPES[x.type] || {}).sink || (CAB_TYPES[x.type] || {}).hob || (CAB_TYPES[x.type] || {}).corner);

@@ -1,5 +1,5 @@
 // SVG drawings for kitchens: front elevation, plan view with countertop, and sheet cut layouts.
-import { CAB_TYPES, DEFAULT_STYLE, zonesOf } from './kitchen.js';
+import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, slotsOf, zonesOf } from './kitchen.js';
 import { colourHex, glassHex, stoneHex, lighten } from './drawings.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -13,11 +13,11 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
   const dh = colourHex(style.door_colour); const FILL2 = dh || FILL2_; const FILL = dh ? lighten(dh, .35) : FILL_; const GLASS = style.glass ? glassHex(style.glass) : GLASS_; const TOP = stoneHex(spec.counter?.material);
   const widest = Math.max(...runs.map((r) => r.cabinets.reduce((a, c) => a + (+c.w || 0), 0)), 100);
   const k = Math.min(2.4, (maxW - 60) / widest); const padL = 34;
-  const floorOf = (t) => (t.wall ? style.wall_height : t.tall || t.gap ? 0 : style.plinth); // cm from the floor to the carcass bottom
+  const floorOf = (t, c = {}) => (t.wall ? (c.y !== undefined && c.y !== '' && Number.isFinite(+c.y) ? +c.y : style.wall_height) : t.tall || t.gap ? 0 : style.plinth); // cm from the floor to the carcass bottom
   let y0 = 0; let out = '';
   for (const run of runs) {
     // each run only gets the height it needs: a row of wall units is drawn without the empty wall below it
-    const ext = run.cabinets.map((c) => { const t = CAB_TYPES[c.type] || CAB_TYPES.base; const f = floorOf(t); return [t.counter || t.gap ? (t.gap ? 0 : 0) : f, f + (+c.h || 0) + (t.counter ? ct : 0)]; });
+    const ext = run.cabinets.map((c) => { const t = CAB_TYPES[c.type] || CAB_TYPES.base; const f = floorOf(t, c); return [t.counter || t.gap ? (t.gap ? 0 : 0) : f, f + (+c.h || 0) + (t.counter ? ct : 0)]; });
     const bottom = Math.min(...ext.map((e) => e[0])); const top = Math.max(...ext.map((e) => e[1]));
     const rowH = (top - bottom) * k + 64; const base = y0 + 20 + (top - bottom) * k; // y of the lowest drawn level
     out += `<text x="${padL}" y="${y0 + 12}" font-size="12" font-weight="700" fill="currentColor">${esc(run.name || 'Run')}${run.island ? ' <tspan font-weight="400" opacity=".7">(island — free-standing)</tspan>' : ''}${bottom > 0 ? ` <tspan font-weight="400" opacity=".7">(hung ${bottom} cm above the floor)</tspan>` : ''}</text>`;
@@ -25,21 +25,47 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
     let x = padL;
     for (const c of run.cabinets) {
       const t = CAB_TYPES[c.type] || CAB_TYPES.base; const w = (+c.w || 0) * k; const h = (+c.h || 0) * k;
-      const yTop = base - (floorOf(t) - bottom) * k - h;
+      const yTop = base - (floorOf(t, c) - bottom) * k - h;
+      if (t.gap && c.appliance && APPLIANCES[c.appliance]) { out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="#dfe3e8" stroke="${INK}" stroke-width="1.2"/><text x="${x + w / 2}" y="${yTop + h / 2}" font-size="10" text-anchor="middle" fill="${INK}">${esc(APPLIANCES[c.appliance][0])}</text><text x="${x + w / 2}" y="${base + 14}" font-size="10" text-anchor="middle" fill="currentColor">${+c.w || 0}</text>`; x += w; continue; }
       if (t.gap) { out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="none" stroke="${INK}" stroke-dasharray="4 3" stroke-width="1"/><text x="${x + w / 2}" y="${yTop + h / 2}" font-size="10" text-anchor="middle" fill="currentColor">appliance</text>`; x += w; continue; }
       out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="${FILL}" stroke="${INK}" stroke-width="1.2"/>`;
-      const doors = Math.max(0, Math.round(+c.doors || 0)); const drawers = Math.max(0, Math.round(+c.drawers || 0)); const glazed = Math.min(doors, Math.round(+c.glazed || 0));
-      const zn = zonesOf(c); const f = h / (+c.h || 1);
-      if (drawers) { const z = zn.drawers; const zx = x + z.x * f; const zy = yTop + (+c.h - z.y - z.h) * f; const zw = z.w * f; const dh = (z.h * f) / drawers; for (let i = 0; i < drawers; i++) out += `<rect x="${zx + 2}" y="${zy + i * dh + 2}" width="${zw - 4}" height="${dh - 4}" fill="${FILL2}" stroke="${INK}" stroke-width=".8"/><line x1="${zx + zw * .35}" y1="${zy + i * dh + dh * .3}" x2="${zx + zw * .65}" y2="${zy + i * dh + dh * .3}" stroke="${INK}" stroke-width="2"/>`; }
-      if (doors) {
-        const z = zn.doors; const zx = x + z.x * f; const zy = yTop + (+c.h - z.y - z.h) * f; const zw = z.w * f; const zh = z.h * f;
-        for (let i = 0; i < doors; i++) {
-          const dw = zw / doors; const gx = zx + i * dw;
-          out += `<rect x="${gx + 2}" y="${zy + 2}" width="${dw - 4}" height="${zh - 4}" fill="${i < glazed ? GLASS : FILL2}" stroke="${INK}" stroke-width=".8"/>`;
-          const hx = doors === 1 ? gx + dw - 7 : i % 2 === 0 ? gx + dw - 6 : gx + 6; out += `<line x1="${hx}" y1="${zy + zh * (t.wall ? 0.75 : 0.25)}" x2="${hx}" y2="${zy + zh * (t.wall ? 0.9 : 0.4)}" stroke="${INK}" stroke-width="2"/>`;
-          out += doors === 1 ? `<path d="M${gx + 2} ${zy + 2} L${gx + dw - 2} ${zy + zh / 2} L${gx + 2} ${zy + zh - 2}" fill="none" stroke="${INK}" stroke-width=".6" stroke-dasharray="3 3"/>` : '';
-        }
+      const doors = t.corner ? 1 : Math.max(0, Math.round(+c.doors || 0)); const drawers = Math.max(0, Math.round(+c.drawers || 0)); const glazed = Math.min(doors, Math.round(+c.glazed || 0));
+      const zn = zonesOf(c); const f = h / (+c.h || 1); const dir = c.dir && DIRS[c.dir] ? c.dir : 'auto'; const slots = t.tall ? slotsOf(c) : null;
+      // the dashed opening symbol: its point is on the handle side; sliding doors get an arrow
+      const sym = (gx, zy, dw, zh, dr, left) => {
+        const dash = `fill="none" stroke="${INK}" stroke-width=".6" stroke-dasharray="3 3"`;
+        if (dr === 'up') return `<path d="M${gx + 2} ${zy + 2} L${gx + dw / 2} ${zy + zh - 2} L${gx + dw - 2} ${zy + 2}" ${dash}/>`;
+        if (dr === 'down') return `<path d="M${gx + 2} ${zy + zh - 2} L${gx + dw / 2} ${zy + 2} L${gx + dw - 2} ${zy + zh - 2}" ${dash}/>`;
+        if (dr === 'slide') { const my = zy + zh / 2; return `<path d="M${gx + 6} ${my} L${gx + dw - 6} ${my} M${gx + dw - 11} ${my - 4} L${gx + dw - 6} ${my} L${gx + dw - 11} ${my + 4}" fill="none" stroke="${INK}" stroke-width="1"/>`; }
+        return left ? `<path d="M${gx + 2} ${zy + 2} L${gx + dw - 2} ${zy + zh / 2} L${gx + 2} ${zy + zh - 2}" ${dash}/>` : `<path d="M${gx + dw - 2} ${zy + 2} L${gx + 2} ${zy + zh / 2} L${gx + dw - 2} ${zy + zh - 2}" ${dash}/>`;
+      };
+      const handle = (gx, zy, dw, zh, dr, left, wall) => {
+        if (dr === 'up') return `<line x1="${gx + dw / 2 - 8}" y1="${zy + zh - 6}" x2="${gx + dw / 2 + 8}" y2="${zy + zh - 6}" stroke="${INK}" stroke-width="2"/>`;
+        if (dr === 'down') return `<line x1="${gx + dw / 2 - 8}" y1="${zy + 6}" x2="${gx + dw / 2 + 8}" y2="${zy + 6}" stroke="${INK}" stroke-width="2"/>`;
+        const hx = left ? gx + dw - 6 : gx + 6; return `<line x1="${hx}" y1="${zy + zh * (wall ? 0.75 : 0.25)}" x2="${hx}" y2="${zy + zh * (wall ? 0.9 : 0.4)}" stroke="${INK}" stroke-width="2"/>`;
+      };
+      const doorSet = (gx0, zy, zw, zh, n, dr, gl, wall) => { for (let i = 0; i < n; i++) { const dw = zw / n; const gx = gx0 + i * dw; const left = dr === 'right' ? false : dr === 'left' ? true : n === 1 || i % 2 === 0;
+        out += `<rect x="${gx + 2}" y="${zy + 2}" width="${dw - 4}" height="${zh - 4}" fill="${i < gl ? GLASS : FILL2}" stroke="${INK}" stroke-width=".8"/>${handle(gx, zy, dw, zh, dr, left, wall)}`;
+        if (n === 1 || dr === 'up' || dr === 'down' || dr === 'slide') out += sym(gx, zy, dw, zh, dr, left); } };
+      if (slots) {
+        const fixed = slots.reduce((a2, q) => a2 + q.h, 0); const free = slots.filter((q) => !(q.h > 0)).length; let yy = yTop + h;
+        slots.forEach((sl, i) => { const hh = (sl.h > 0 ? sl.h : Math.max(0, ((+c.h || 0) - fixed) / (free || 1))) * f; yy -= hh;
+          if (sl.k === 'door' || sl.k === 'glass') doorSet(x, yy, w, hh, sl.n, sl.dir, sl.k === 'glass' ? sl.n : 0, false);
+          else if (sl.k === 'drawer') out += `<rect x="${x + 2}" y="${yy + 2}" width="${w - 4}" height="${hh - 4}" fill="${FILL2}" stroke="${INK}" stroke-width=".8"/><line x1="${x + w * .35}" y1="${yy + hh * .35}" x2="${x + w * .65}" y2="${yy + hh * .35}" stroke="${INK}" stroke-width="2"/>`;
+          else if (sl.k === 'open') out += `<rect x="${x + 2}" y="${yy + 2}" width="${w - 4}" height="${hh - 4}" fill="#f6f2e8" stroke="${INK}" stroke-width=".6" stroke-dasharray="2 2"/>`;
+          else out += `<rect x="${x + 2}" y="${yy + 2}" width="${w - 4}" height="${hh - 4}" fill="#2b2f36" stroke="${INK}" stroke-width=".8"/><rect x="${x + 6}" y="${yy + 6}" width="${w - 12}" height="${Math.max(2, hh - 16)}" fill="#46525e"/><text x="${x + w / 2}" y="${yy + hh / 2 + 3}" font-size="9" text-anchor="middle" fill="#fff">${esc((APPLIANCES[sl.k] || [sl.k])[0])}</text>`; });
+      } else if (t.corner) {
+        const dwA = Math.max(0, (+c.w || 0) - (+c.d || 0)) * f; const right = (c.side || 'right') !== 'left';
+        out += `<rect x="${right ? x + w - (+c.d || 0) * f : x}" y="${yTop}" width="${(+c.d || 0) * f}" height="${h}" fill="${FILL2_}" fill-opacity=".5" stroke="${INK}" stroke-dasharray="3 2" stroke-width=".6"/>`;
+        doorSet(right ? x : x + w - dwA, yTop, dwA, h, 1, dir === 'slide' ? 'auto' : dir, glazed, t.wall);
+      } else if (t.shelf) { out += ''; } else if (t.hood) {
+        out += `<rect x="${x + w * .3}" y="${yTop - 40}" width="${w * .4}" height="${40 + h * .87}" fill="#c9ced6" stroke="${INK}" stroke-width=".8"/><rect x="${x}" y="${yTop + h * .87}" width="${w}" height="${h * .13}" fill="#aab2bc" stroke="${INK}" stroke-width=".8"/>`;
+      } else if (t.gap) { /* drawn above */ } else {
+        if (!doors && !drawers) out += [1, 2, 3].slice(0, Math.max(0, Math.round(+c.shelves || 0))).map((i, _, all) => `<line x1="${x + 2}" y1="${yTop + (h * i) / (all.length + 1)}" x2="${x + w - 2}" y2="${yTop + (h * i) / (all.length + 1)}" stroke="${INK}" stroke-width="1.4"/>`).join('') + `<text x="${x + w / 2}" y="${yTop + h / 2}" font-size="9" text-anchor="middle" fill="currentColor" opacity=".55">open</text>`;
+        if (drawers) { const z = zn.drawers; const zx = x + z.x * f; const zy = yTop + (+c.h - z.y - z.h) * f; const zw = z.w * f; const dh = (z.h * f) / drawers; for (let i = 0; i < drawers; i++) out += `<rect x="${zx + 2}" y="${zy + i * dh + 2}" width="${zw - 4}" height="${dh - 4}" fill="${FILL2}" stroke="${INK}" stroke-width=".8"/><line x1="${zx + zw * .35}" y1="${zy + i * dh + dh * .4}" x2="${zx + zw * .65}" y2="${zy + i * dh + dh * .4}" stroke="${INK}" stroke-width="2"/>`; }
+        if (doors) { const z = zn.doors; doorSet(x + z.x * f, yTop + (+c.h - z.y - z.h) * f, z.w * f, z.h * f, doors, dir, glazed, t.wall); }
       }
+      if (t.shelf) out += `<rect x="${x}" y="${yTop}" width="${w}" height="${Math.max(3, h)}" fill="#d9c9a8" stroke="${INK}" stroke-width="1"/>`;
       if (t.sink) out += `<ellipse cx="${x + w / 2}" cy="${yTop - ct * k - 3}" rx="${w * .28}" ry="2.5" fill="none" stroke="${INK}" stroke-width="1"/>`;
       if (t.counter) out += `<rect x="${x - 1}" y="${yTop - ct * k}" width="${w + 2}" height="${ct * k}" fill="${TOP}"/>`;
       if (!t.wall && !t.tall) out += `<rect x="${x}" y="${yTop + h}" width="${w}" height="${style.plinth * k}" fill="#8b95a3"/>`;
@@ -61,12 +87,13 @@ export function planSVG(spec, model, { maxW = 760 } = {}) {
   const k = Math.min(2.2, (maxW - 50) / widest); const padL = 24; let y0 = 0; let out = ''; const TOP = stoneHex(c.material); const dh = colourHex((model.style || {}).door_colour); const FILL = dh ? lighten(dh, .45) : FILL_;
   runs.forEach((run, ri) => {
     const over = run.island ? (+run.overhang || 0) : 0;
-    const depth = Math.max(...run.cabinets.map((x) => +x.d || 0), 60) + (+c.front || 0); const rowH = (depth + over) * k + 40; const yb = y0 + 22 + over * k;
+    const depth = Math.max(...run.cabinets.map((x) => ((CAB_TYPES[x.type] || {}).corner && !(CAB_TYPES[x.type] || {}).wall ? +x.w || 0 : +x.d || 0)), 60) + (+c.front || 0); const rowH = (depth + over) * k + 40; const yb = y0 + 22 + over * k;
     out += `<text x="${padL}" y="${y0 + 12}" font-size="12" font-weight="700" fill="currentColor">${esc(run.name || 'Run')}${run.island ? ' (island)' : ''}</text>`;
     let x = padL;
     for (const cab of run.cabinets) {
       const t = CAB_TYPES[cab.type] || CAB_TYPES.base; const w = (+cab.w || 0) * k; const d = (+cab.d || 0) * k;
       if (t.gap) { out += `<rect x="${x}" y="${yb}" width="${w}" height="${d}" fill="none" stroke="${INK}" stroke-dasharray="4 3"/>`; x += w; continue; }
+      if (t.corner) { const cw = (+cab.w || 0) * k; const right = (cab.side || (run.cabinets[0] === cab && run.cabinets.length > 1 ? 'left' : 'right')) !== 'left'; if (cw > d) out += `<rect x="${right ? x + w - d : x}" y="${yb + d}" width="${d}" height="${cw - d}" fill="${t.wall ? 'none' : FILL}" stroke="${INK}" stroke-width="1" ${t.wall ? 'stroke-dasharray="5 3"' : ''}/>`; }
       out += `<rect x="${x}" y="${yb}" width="${w}" height="${d}" fill="${t.wall ? 'none' : FILL}" stroke="${INK}" stroke-width="1" ${t.wall ? 'stroke-dasharray="5 3"' : ''}/>`;
       x += w;
     }

@@ -234,3 +234,23 @@ test('VAT per line: only lines with VAT are taxed, the discount is shared over t
   const old = [{ qty: 3, price: 100 }]; assert.equal(quoteTotals({ items: old, vat_rate: 10 }).vat, 30); assert.equal(hasVat(old[0]), true); // no flag = VAT as before
   assert.equal(hasVat({ vat: false }), false); assert.equal(hasVat({ vat: 0 }), false); assert.equal(hasVat({ vat: true }), true);
 });
+
+test('kitchens: door directions, L-corner, slots in tall units, appliance gaps, shelves and open cabinets', async () => {
+  const { kitchenModel, cabinetParts, slotsOf } = await import('../public/js/kitchen.js');
+  const { scene, frontsOf, placeRuns } = await import('../public/js/kitchen-3d.js');
+  const mk = (cab) => cabinetParts({ w: 60, h: 72, d: 56, ...cab });
+  assert.equal(mk({ type: 'base', doors: 1, dir: 'slide' }).hw.tracks, 1); assert.equal(mk({ type: 'base', doors: 1, dir: 'slide' }).hw.hinges, 0);
+  assert.equal(mk({ type: 'base', doors: 2, dir: 'up' }).hw.lifts, 2);
+  assert.equal(mk({ type: 'base', doors: 2 }).hw.hinges, 4);
+  assert.equal(mk({ type: 'base', doors: 0, drawers: 0 }).panels.filter((p) => p.mat === 'door').length, 0); // no doors: stays open
+  const tall = { type: 'tall', w: 60, h: 210, d: 58, slots: [{ k: 'door', h: 70 }, { k: 'oven', h: 60 }, { k: 'door', h: 80, n: 2 }] };
+  const tp = cabinetParts(tall); assert.equal(tp.appliances[0].k, 'oven'); assert.equal(tp.panels.filter((p) => p.label === 'Divider').length, 2);
+  assert.deepEqual(frontsOf(tall).map((f) => f.key), ['s0', 's2']); assert.equal(slotsOf({ slots: [] }), null);
+  const shelf = cabinetParts({ type: 'shelf', w: 80, h: 4, d: 25 }); assert.equal(shelf.panels.length, 1); assert.equal(shelf.hw.hangers, 2);
+  const spec = { runs: [{ name: 'A', cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }, { type: 'corner', w: 90, h: 72, d: 56, doors: 2 }] }, { name: 'B', cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }] }] };
+  const m = kitchenModel(spec); assert.ok(m.tops.pieces[0].leg > 0); assert.equal(placeRuns(spec)[1].z, 62);
+  const spec2 = { runs: [{ cabinets: [{ type: 'corner', w: 90, h: 72, d: 56, doors: 2 }, { type: 'base', w: 60, h: 72, d: 56, doors: 1 }] }, { cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }] }] };
+  assert.equal(placeRuns(spec2)[1].z, 90); // a corner at the start pushes the side run out to the end of its return leg
+  const b = scene({ runs: [{ cabinets: [{ type: 'gap', w: 60, h: 85, d: 60, appliance: 'fridge' }, { type: 'base', w: 60, h: 72, d: 56, doors: 1, dir: 'down' }, tall, { type: 'corner', w: 90, h: 72, d: 56, doors: 2 }] }] }, { '0|1': 1, '0|3': 1 });
+  assert.ok(b.length > 20 && b.every((x) => x.corners.flat(2).every(Number.isFinite)));
+});
