@@ -357,7 +357,7 @@ async function editor(el, id, tab) {
     const stepTo = (dir) => { if (!stepBack(dir)) return; if (view3d.sel && !spec.runs[view3d.sel.ri]?.cabinets[view3d.sel.ci]) view3d.sel = null; refresh3(); updUndo(); toast(dir < 0 ? 'Went back one step' : 'Redone', 'ok'); };
     $('#undoBtn', pane)?.addEventListener('click', () => stepTo(-1)); $('#redoBtn', pane)?.addEventListener('click', () => stepTo(1));
     hist.after = () => { if (cv.isConnected) updUndo(); }; updUndo();
-    const keys = (e) => { if (!cv.isConnected) { document.removeEventListener('keydown', keys); return; } if (!(e.ctrlKey || e.metaKey) || e.target.closest?.('input,textarea,select')) return; const kk = e.key.toLowerCase(); if (kk === 'z' && !e.shiftKey) { e.preventDefault(); stepTo(-1); } else if (kk === 'y' || (kk === 'z' && e.shiftKey)) { e.preventDefault(); stepTo(1); } };
+    const keys = (e) => { if (!cv.isConnected) { document.removeEventListener('keydown', keys); return; } if (e.target.closest?.('input,textarea,select')) return; if ((e.key === 'Delete' || e.key === 'Backspace') && !e.ctrlKey && !e.metaKey && view3d.sel) { const arr = spec.runs[view3d.sel.ri]?.cabinets; if (arr?.[view3d.sel.ci]) { e.preventDefault(); arr.splice(view3d.sel.ci, 1); view3d.sel = null; touch(); refresh3(); } return; } if (!(e.ctrlKey || e.metaKey)) return; const kk = e.key.toLowerCase(); if (kk === 'z' && !e.shiftKey) { e.preventDefault(); stepTo(-1); } else if (kk === 'y' || (kk === 'z' && e.shiftKey)) { e.preventDefault(); stepTo(1); } };
     document.addEventListener('keydown', keys);
     drawAddBar(); panel(); animate();
   }
