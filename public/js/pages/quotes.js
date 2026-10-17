@@ -8,7 +8,7 @@ import { quotePieces, allocateLeftovers, accessoriesFor } from '../stock.js';
 import { openPoDialog } from '../po-dialog.js';
 import { dot } from './stock.js';
 import { drawModel, HAND_KINDS, SWING_KINDS } from '../drawings.js';
-import { modal, formHTML, readForm, gpsRow, wireGps, mapLink, parseGps } from '../ui.js';
+import { modal, formHTML, readForm, gpsRow, wireGps, mapLink, parseGps, colourOptions } from '../ui.js';
 import { glazingNote } from '../glazing.js';
 
 const STATUS = { draft: ['Draft', ''], sent: ['Sent', 'blue'], accepted: ['Accepted', 'ok'], rejected: ['Rejected', 'bad'] };
@@ -80,7 +80,7 @@ async function editor(el, id) {
     <label class="field"><span>Site <select id="locpick" hidden style="margin-left:6px;font-size:12px;max-width:180px" title="This customer's saved locations"></select></span><input id="site" value="${esc(q.site)}"></label>
     ${gpsRow('gps', q.gps)}
     <label class="field"><span>Client VAT No. (for tax invoice)</span><input id="client_vat" value="${esc(q.client_vat || '')}"></label>
-    <label class="field"><span>Colour (whole quotation)</span><select id="colour"><option value="">— not set —</option>${(S.settings.colours || []).map((c) => `<option ${q.colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
+    <label class="field"><span>Colour (whole quotation)</span><select id="colour">${colourOptions(S.settings.colours, q.colour, '— not set —')}</select></label>
     <label class="field"><span>Status</span><select id="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label class="field" style="grid-column: 1 / -1"><span>Heading line (printed above the items)</span><input id="title" value="${esc(q.title)}"></label>
   </div></div>
@@ -119,7 +119,7 @@ async function editor(el, id) {
         <td><input class="w-s" data-k="h" type="number" step="any" value="${it.h ?? ''}"></td>
         <td style="min-width:104px">${handCell(it)}</td>
         <td><select data-k="glass_id" style="width:110px">${glassOpts(it.glass_id)}</select><div class="cost" data-fit style="text-align:left;max-width:150px"></div></td>
-        <td><select data-k="colour" style="width:92px"><option value="">(as quote)</option>${(S.settings.colours || []).map((c) => `<option ${it.colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></td>
+        <td><select data-k="colour" style="width:92px">${colourOptions(S.settings.colours, it.colour, '(as quote)')}</select></td>
         <td><input class="w-q" data-k="qty" type="number" step="any" value="${it.qty ?? 1}"></td>
         <td><input class="w-m price" data-k="price" type="number" step="any" value="${it.price ?? 0}" title="${it.manual ? 'Manual price' : 'Calculated from price list'}"></td>
         <td style="text-align:center"><input type="checkbox" data-k="vat" style="width:auto" ${hasVat(it) ? 'checked' : ''} title="${hasVat(it) ? 'VAT is charged on this line' : 'No VAT on this line'}"></td>

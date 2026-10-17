@@ -209,6 +209,8 @@ export const orderBar = (o, wide = false) => {
   const col = p >= 100 ? 'var(--ok, #12b76a)' : p >= 50 ? 'var(--brand-2, #2e7dd7)' : '#f79009';
   return `<div class="bar" style="height:${wide ? 14 : 10}px;margin:0;width:${wide ? '100%' : '110px'}" title="${p}% of the work is done (${o.tasks_done} of ${o.tasks_n} tasks finished)"><i style="width:${p}%;background:${col}"></i></div><small class="muted">${p}% · ${o.tasks_done}/${o.tasks_n} tasks</small>`;
 };
+/** <option>s for a colour select: your colour list, plus the value already saved (even if it was renamed or removed), so it is never silently lost. */
+export const colourOptions = (list, cur, blank) => { const L = [...(list || [])]; const extra = cur && !L.includes(cur); if (extra) L.push(cur); return (blank === undefined ? '' : `<option value="">${esc(blank)}</option>`) + L.map((c) => `<option value="${esc(c)}" ${c === cur ? 'selected' : ''}>${esc(c)}${extra && c === cur ? ' (not in your list)' : ''}</option>`).join(''); };
 /** Task priorities: label, badge colour. */
 export const PRIORITY = { urgent: ['Urgent', 'bad'], high: ['High', 'warn'], normal: ['Normal', ''], low: ['Low', 'blue'] };
 /** The class that pins a task to the top and makes it flash: open urgent / high tasks only. */

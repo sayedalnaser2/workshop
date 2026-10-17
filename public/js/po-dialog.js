@@ -8,7 +8,7 @@ export async function openPoDialog({ quote = null, orderInv = '', lines: given =
   let lines = given ? given.map((l) => ({ ...l })) : quote ? poSuggestions(quote, { models: S.models, profiles: S.profiles, accessories: S.accessories, glassTypes: S.glass_types, items, stock, kerf: S.settings.bar_kerf || 0 }) : [];
   lines.forEach((l) => { l.on = l.on ?? l.qty > 0; });
   const wrap = document.createElement('div');
-  wrap.innerHTML = `${datalist('dl-cat', items.map((i) => `${i.name}${i.code ? ' [' + i.code + ']' : ''} — ${i.supplier || ''}`))}
+  wrap.innerHTML = `${datalist('dl-pocol', S.settings.colours || [])}${datalist('dl-cat', items.map((i) => `${i.name}${i.code ? ' [' + i.code + ']' : ''} — ${i.supplier || ''}`))}
     <p class="muted" style="margin-top:0">${quote ? `Suggested from <b>${esc(quote.number)}</b>: bars needed after using leftovers, minus what is already in new stock. ` : ''}Pick the supplier for each line — one purchase order is created per supplier.</p>
     <div class="items-wrap"><table class="items" style="min-width:860px"><thead><tr><th></th><th>Item</th><th>Colour</th><th class="tot">Needed</th><th class="tot">In stock</th><th>Order qty</th><th>Unit</th><th>Price</th><th>Supplier</th><th class="tot">Total</th><th></th></tr></thead><tbody id="pol"></tbody></table></div>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><input id="addcat" list="dl-cat" placeholder="Add from catalogue (type item name)…" style="max-width:340px"><button class="btn" id="addBlank">+ Blank line</button></div>
@@ -22,7 +22,7 @@ export async function openPoDialog({ quote = null, orderInv = '', lines: given =
   const draw = () => {
     $('#pol', wrap).innerHTML = lines.map((l, i) => `<tr data-i="${i}"><td><input type="checkbox" data-k="on" ${l.on ? 'checked' : ''}></td>
       <td style="min-width:200px"><input data-k="name" value="${esc(l.name)}"><div class="muted" style="font-size:11px">${esc(l.code || '')}</div></td>
-      <td><input data-k="colour" value="${esc(l.colour || '')}" style="width:80px"></td><td class="tot">${l.need != null ? fq(l.need) : ''}</td><td class="tot">${l.inStock != null ? fq(l.inStock) : ''}</td>
+      <td><input data-k="colour" list="dl-pocol" value="${esc(l.colour || '')}" style="width:100px"></td><td class="tot">${l.need != null ? fq(l.need) : ''}</td><td class="tot">${l.inStock != null ? fq(l.inStock) : ''}</td>
       <td><input data-k="qty" type="number" step="any" class="w-q" value="${l.qty}"></td><td><input data-k="unit" value="${esc(l.unit || '')}" style="width:90px"></td>
       <td><input data-k="price" type="number" step="any" class="w-m" value="${l.price ?? 0}"></td><td><select data-k="supplier" style="min-width:150px">${supOpts(l)}</select>${supHint(l)}</td>
       <td class="tot" data-t>${money(num(l.qty) * num(l.price))}</td><td><button class="btn sm danger" data-rm>×</button></td></tr>`).join('') || '<tr><td colspan="11" class="muted" style="padding:14px">No lines yet — add items from the catalogue below.</td></tr>';

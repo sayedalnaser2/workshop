@@ -1,6 +1,7 @@
 import { scene, draw3D, pick3D, placeRuns, unproject, frontsOf, runStarts } from '../kitchen-3d.js';
 import { S } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, toast, guard, confirmBox, modal, formHTML, readForm, dataTable, badge, datalist } from '../ui.js';
+import { colourOptions } from '../ui.js';
 import { shelfCount, hasSkirt, layoutSlots, slotsFromCab, addSlot, slotHeights, CAB_TYPES, DEFAULT_STYLE, DEFAULT_COUNTER, APPLIANCES, SLOT_KINDS, DIRS, ACCESSORIES, slotsOf, kitchenModel, priceKitchen, mergeCabinets, splitCabinet, mergeSaving } from '../kitchen.js';
 import { elevationSVG, planSVG, sheetSVG } from '../kitchen-draw.js';
 import { docHeader, docFooter, L, AR, wordsBlock, termsBlock } from '../doc.js';
@@ -114,7 +115,7 @@ async function editor(el, id, tab) {
 
   // ---------------------------------------------------------------- design
   function design(pane) {
-    const sel = (kind, key, label, blank) => `<label class="field"><span>${label}</span><select data-style="${key}">${blank ? '<option value="">same as carcass</option>' : '<option value="">— choose —</option>'}${namesOf(optList, kind).map((n) => `<option ${spec.style[key] === n ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>`;
+    const sel = (kind, key, label, blank) => `<label class="field"><span>${label}</span><select data-style="${key}">${blank ? '<option value="">same as carcass</option>' : '<option value="">— choose —</option>'}${(kind === 'profile_colour' ? colourOptions([...new Set([...namesOf(optList, kind), ...(S.settings.colours || [])])], spec.style[key]) : colourOptions(namesOf(optList, kind), spec.style[key]))}</select></label>`; // the profile colours also offer your own colours
     pane.innerHTML = `<div class="kgrid"><div class="card"><div style="display:flex;gap:8px;align-items:center"><h3 style="margin:0">Drawing</h3><span class="grow"></span><div class="seg"><button data-v="elev" class="${view === 'elev' ? 'on' : ''}">Front</button><button data-v="plan" class="${view === 'plan' ? 'on' : ''}">Plan</button></div><button class="btn sm primary" id="open3d">🧊 Open 3D</button></div><div id="draw" style="margin-top:8px;overflow-x:auto"></div></div><div id="sum" class="card"></div></div>
       <div style="margin-top:14px">
         <div class="card"><div class="form" style="grid-template-columns:repeat(3,1fr)">
@@ -124,7 +125,7 @@ async function editor(el, id, tab) {
           <label class="field"><span>Kitchen type</span><select data-style="kind"><option value="wood" ${spec.style.kind !== 'aluminium' ? 'selected' : ''}>Wood / board kitchen</option><option value="aluminium" ${spec.style.kind === 'aluminium' ? 'selected' : ''}>Aluminium kitchen (framed doors)</option></select></label>
           ${spec.style.kind === 'aluminium' ? `${sel('profile', 'profile', 'Door frame profile')}<label class="field"><span>Frame width cm</span><input data-style="frame_w" type="number" step="any" value="${spec.style.frame_w ?? 4.5}"></label><label class="field"><span>Profile bar length cm</span><input data-style="bar_len" type="number" step="any" value="${spec.style.bar_len ?? 600}"></label>` : ''}
           ${sel('handle', 'handle', 'Handle')}${sel('hinge', 'hinge', 'Hinges')}${sel('drawer', 'drawer', 'Drawers')}
-          <label class="field"><span>Door colour (drawing &amp; sheets)</span><select data-style="door_colour"><option value="">— not set —</option>${(S.settings.colours || []).map((c) => `<option ${spec.style.door_colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>${sel('glass', 'glass', 'Glazed doors')}${sel('profile_colour', 'profile_in', 'Profile colour (inside)')}${sel('profile_colour', 'profile_out', 'Profile colour (outside)')}
+          <label class="field"><span>Door colour (drawing &amp; sheets)</span><select data-style="door_colour">${colourOptions(S.settings.colours, spec.style.door_colour, '— not set —')}</select></label>${sel('glass', 'glass', 'Glazed doors')}${sel('profile_colour', 'profile_in', 'Profile colour (inside)')}${sel('profile_colour', 'profile_out', 'Profile colour (outside)')}
           <label class="field"><span>Status</span><select id="kstatus">${['draft', 'quoted', 'approved', 'in production', 'installed'].map((s) => `<option ${k.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label></div>
           <details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">Board and layout settings</summary><div class="form" style="grid-template-columns:repeat(4,1fr);margin-top:8px">${[['t', 'Board thickness cm'], ['back_t', 'Back thickness cm'], ['plinth', 'Plinth height cm'], ['wall_height', 'Wall units start at cm'], ['sheet_w', 'Sheet width cm'], ['sheet_h', 'Sheet height cm'], ['kerf', 'Saw kerf cm'], ['gap', 'Door gap cm']].map(([key, l]) => `<label class="field"><span>${l}</span><input type="number" step="any" data-style="${key}" value="${spec.style[key]}"></label>`).join('')}</div></details></div>
         <div id="runs"></div><div style="margin-top:10px"><button class="btn" id="addRun">+ Add a wall / run</button></div>
