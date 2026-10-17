@@ -20,7 +20,7 @@ export async function openTaskForm({ task = null, order_inv = '', onSaved }) {
     { key: 'assignee_id', label: 'Assign to', type: 'select', options: [['', '— nobody yet (workers can take it) —'], ...staff.map((u) => [u.id, `${u.name} (${u.role})`])] },
     { key: 'est', label: 'Time estimate', placeholder: '2:30  or  2h 30m  or  90' },
     { key: 'due', label: 'Due date', type: 'date' },
-    { key: 'priority', label: 'Priority', type: 'select', options: [['normal', 'Normal'], ['high', 'High'], ['low', 'Low']] },
+    { key: 'priority', label: 'Priority', type: 'select', options: [['urgent', '🔥 Urgent'], ['high', 'High'], ['normal', 'Normal'], ['low', 'Low']] },
     { key: 'description', label: 'Details for the worker', type: 'textarea', full: true },
   ];
   const v = task ? { ...task, est: durText(task.estimate_min), assignee_id: task.assignee_id ?? '' } : { stage: STAGES()[0], priority: 'normal', order_inv, assignee_id: '' };

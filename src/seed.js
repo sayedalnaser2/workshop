@@ -250,3 +250,12 @@ export function linkBankToChart(b) {
   const acc = insertRow('accounts', { code: `${parent.code}${n}`, name: b.name || 'Bank account', type: 'asset', parent_id: parent.id, sys: '', note: '', active: 1 });
   return updateRow('bank_accounts', b.id, { coa_id: acc.id });
 }
+
+/** A database from before customer credit gets its "Customer Credit Redeemed" expense account (never over an existing code). */
+export function ensureLoyaltyAccount() {
+  if (!db.prepare('SELECT COUNT(*) n FROM accounts').get().n) return;
+  if (db.prepare("SELECT id FROM accounts WHERE sys='loyalty'").get()) return;
+  const par = db.prepare("SELECT id FROM accounts WHERE code='5'").get(); if (!par) return;
+  let code = '57'; while (db.prepare('SELECT id FROM accounts WHERE code=?').get(code)) code = String(Number(code) + 1);
+  insertRow('accounts', { code, name: 'Customer Credit Redeemed', type: 'expense', parent_id: par.id, sys: 'loyalty', note: '', active: 1 });
+}

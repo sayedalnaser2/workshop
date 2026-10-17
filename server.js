@@ -11,7 +11,7 @@ import { needsSetup, syncEmployees, authenticate, createUser, updateUser, delete
 import { tableAccess, hasAny, hasEditAny, seesMoney } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
 import { DEFAULT_CHART, buildEntries, trialBalance, statements, accountLedger, DEBIT_TYPES } from './public/js/accounting.js';
-import { seedBankAccounts, linkBankToChart, seedChart, seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets, seedBalexco, seedAluKitchen } from './src/seed.js';
+import { seedBankAccounts, linkBankToChart, seedChart, seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets, seedBalexco, seedAluKitchen, ensureLoyaltyAccount } from './src/seed.js';
 import { isOnTask, taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated, markPresent, shiftStatus, overtimeAction, dayReport } from './src/tasks.js';
 import { targetProgress, METRICS } from './src/targets.js';
 import { exportWorkbook } from './src/exporter.js';
@@ -22,7 +22,7 @@ import { vatReport, orderVat, vatIn } from './public/js/vat.js';
 import { audit, diff, labelOf, listAudit, notable, withUpd } from './src/audit.js';
 import { respond, staticServer, throttleCheck, throttleFail, throttleOk, runBackup, listBackups, backupDir } from './src/web.js';
 
-syncEmployees(); seedChart(DEFAULT_CHART); seedBankAccounts(); freezeAllVat(); seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets(); seedBalexco(); seedAluKitchen();
+syncEmployees(); seedChart(DEFAULT_CHART); ensureLoyaltyAccount(); seedBankAccounts(); freezeAllVat(); seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets(); seedBalexco(); seedAluKitchen();
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DEV = process.env.WORKSHOP_DEV === '1';
@@ -43,8 +43,10 @@ const readJson = async (req) => { const b = await readBody(req, 5e6); return b.l
 // ------------------------------------------------------------------ computed views
 // one pass over receipts and purchases instead of two sub-queries per order
 const ordersLedger = () => db.prepare(`
-  SELECT o.*, IFNULL(r.paid, 0) AS paid, IFNULL(p.cost, 0) AS cost, IFNULL(c.credit, 0) AS credit
+  SELECT o.*, IFNULL(r.paid, 0) AS paid, IFNULL(p.cost, 0) AS cost, IFNULL(c.credit, 0) AS credit, IFNULL(tk.n, 0) AS tasks_n, IFNULL(tk.done_n, 0) AS tasks_done,
+    CASE WHEN tk.w > 0 THEN ROUND(tk.wp / tk.w) END AS progress
   FROM orders o
+  LEFT JOIN (SELECT order_inv, COUNT(*) AS n, SUM(status = 'done') AS done_n, SUM(COALESCE(NULLIF(estimate_min, 0), 60)) AS w, SUM(COALESCE(NULLIF(estimate_min, 0), 60) * (CASE WHEN status = 'done' THEN 100 ELSE MIN(100, MAX(0, IFNULL(progress, 0))) END)) AS wp FROM tasks WHERE order_inv <> '' GROUP BY order_inv) tk ON tk.order_inv = o.inv
   LEFT JOIN (SELECT order_inv, SUM(amount) AS paid FROM receipts GROUP BY order_inv) r ON r.order_inv = o.inv
   LEFT JOIN (SELECT order_inv, SUM(total) AS credit FROM credit_notes WHERE status = 'approved' GROUP BY order_inv) c ON c.order_inv = o.inv
   LEFT JOIN (SELECT order_inv, SUM(amount) AS cost FROM purchases WHERE IFNULL(hidden,0)=0 GROUP BY order_inv) p ON p.order_inv = o.inv
@@ -179,6 +181,22 @@ const AUTO = { quotes: ['number', 'quote'], orders: ['inv', 'invoice'], receipts
 
 // ------------------------------------------------------------------ approvals, credit notes, files
 const bad = (m, status = 400) => Object.assign(new Error(m), { status });
+// ---- customer credit: spend enough on an invoice and earn credit towards the next purchase (optionally expiring)
+const loyaltyCfg = () => ({ enabled: false, tiers: [], expiry_months: 0, ...(getSetting('loyalty') || {}) });
+const addMonths = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); };
+/** The credit an invoice earns: the highest tier the amount reaches (a fixed sum or a % of the invoice), or 0. */
+function creditEarned(amount, cfg = loyaltyCfg()) {
+  if (!cfg.enabled) return 0; const tier = [...(cfg.tiers || [])].filter((t) => Number(t.min) > 0 && Number(amount) >= Number(t.min) && Number(t.value) > 0).sort((a, b) => Number(b.min) - Number(a.min))[0];
+  if (!tier) return 0; return Math.round((tier.type === 'percent' ? Number(amount) * Number(tier.value) / 100 : Number(tier.value)) * 1000) / 1000;
+}
+function issueCredit(order, user) {
+  const cfg = loyaltyCfg(); const amt = creditEarned(order.amount, cfg); if (!(amt > 0) || !order.client) return null;
+  if (db.prepare(`SELECT id FROM customer_credits WHERE order_inv=? AND IFNULL(status,'')<>'void'`).get(order.inv)) return null;
+  const date = new Date().toISOString().slice(0, 10);
+  const row = insertRow('customer_credits', { client: order.client, mobile: order.mobile || '', amount: amt, used: 0, date, expires: Number(cfg.expiry_months) > 0 ? addMonths(date, Number(cfg.expiry_months)) : '', order_inv: order.inv, note: `Earned on invoice ${order.inv}`, status: 'active', log: [] });
+  audit(user, 'customer_credits', row.id, 'created', `${order.client} — BD ${amt} (invoice ${order.inv})`);
+  return row;
+}
 const approvalCfg = () => ({ discount_pct: 10, credit_notes: true, ...(getSetting('approvals') || {}) });
 
 /** Quotation saved by a user: work out whether the discount needs the admin, and keep sent/accepted off until it is approved. */
@@ -440,7 +458,7 @@ async function api(req, res, url) {
     return send(res, 200, buf, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${encodeURIComponent(d.file_name || 'file')}"` });
   }
   if (p[0] === 'quotes' && p[2] === 'to-order' && m === 'POST') {
-    needEdit('orders');
+    needEdit('orders', 'quotes');
     const q = getRow('quotes', Number(p[1]));
     if (!q) return send(res, 404, { error: 'Quote not found' });
     if (q.order_inv) return send(res, 400, { error: `Already converted to ${q.order_inv}` });
@@ -448,14 +466,34 @@ async function api(req, res, url) {
     const o = tx(() => {
       const inv = nextNumber('invoice', new Date().toISOString(), true);
       const T = quoteTotals(q);
-      const order = insertRow('orders', { inv, date: new Date().toISOString().slice(0, 10), client: q.client, site: q.site, mobile: q.mobile, amount: Math.round(T.grand * 1000) / 1000, vat: Math.round(Math.max(0, T.vat - T.waived) * 1000) / 1000, client_vat: q.client_vat || '', done: 0, quote_no: q.number });
+      const order = insertRow('orders', { inv, date: new Date().toISOString().slice(0, 10), client: q.client, site: q.site, gps: q.gps || '', mobile: q.mobile, amount: Math.round(T.grand * 1000) / 1000, vat: Math.round(Math.max(0, T.vat - T.waived) * 1000) / 1000, client_vat: q.client_vat || '', done: 0, quote_no: q.number });
       updateRow('quotes', q.id, { order_inv: inv, status: 'accepted' });
       audit(user, 'orders', order.id, 'created', `${inv} from ${q.number}`);
+      const earned = issueCredit(order, user); if (earned) order.credit_earned = earned.amount;
       return order;
     });
     return send(res, 200, o);
   }
 
+  // --- customer credit: spend it on an invoice (recorded as a receipt paid with credit, so the invoice balance and the books follow)
+  if (p[0] === 'credits' && p[1] === 'redeem' && m === 'POST') {
+    needEdit('credits'); const b = await readJson(req); const norm = (x) => String(x || '').trim().toLowerCase();
+    const out = tx(() => {
+      const cr = getRow('customer_credits', Number(b.credit_id)); if (!cr || cr.status === 'void') throw bad('That credit is not available.');
+      const today = new Date().toISOString().slice(0, 10); if (cr.expires && cr.expires < today) throw bad(`This credit expired on ${cr.expires}.`);
+      const left = Math.round(((Number(cr.amount) || 0) - (Number(cr.used) || 0)) * 1000) / 1000; const amt = Math.round(Number(b.amount) * 1000) / 1000;
+      if (!(amt > 0)) throw bad('Enter the amount to use.'); if (amt > left + 0.0005) throw bad(`Only BD ${left} of this credit is left.`);
+      const inv = String(b.order_inv || '').trim(); const o = ordersLedger().find((x) => x.inv === inv); if (!o) throw bad(`There is no invoice ${inv}.`);
+      if (norm(o.client) !== norm(cr.client) && !(cr.mobile && o.mobile && norm(cr.mobile) === norm(o.mobile))) throw bad(`This credit belongs to ${cr.client}, not ${o.client}.`);
+      if (amt > o.balance + 0.0005) throw bad(`That is more than the BD ${o.balance} still due on ${inv}.`);
+      const rec = insertRow('receipts', { no: nextNumber('receipt', today, true), date: today, order_inv: inv, client: o.client, amount: amt, method: 'Loyalty credit', ref: `credit #${cr.id}`, note: `Customer credit from ${cr.order_inv || 'a gift'}`, account: 'loyalty' });
+      const log = [...(cr.log || []), { date: today, order_inv: inv, amount: amt, receipt: rec.no, by: user.name }];
+      const saved = updateRow('customer_credits', cr.id, { used: Math.round(((Number(cr.used) || 0) + amt) * 1000) / 1000, log });
+      audit(user, 'receipts', rec.id, 'created', `${rec.no} — credit used on ${inv}`, [{ f: 'amount', from: '', to: String(amt) }]); audit(user, 'customer_credits', cr.id, 'updated', `${cr.client}`, [{ f: 'used', from: String(cr.used || 0), to: String(saved.used) }]);
+      return { credit: saved, receipt: rec };
+    });
+    return send(res, 200, out);
+  }
   // --- generic CRUD
   if (p[0] === 't' && SCHEMA[p[1]]) {
     const t = p[1]; const id = p[2] ? Number(p[2]) : null;
@@ -486,6 +524,7 @@ async function api(req, res, url) {
         if (a && !body[a[0]]) body[a[0]] = nextNumber(a[1], body.date, true);
         let created = insertRow(t, body); if (t === 'tasks') onTaskCreated(created, user);
         if (t === 'bank_accounts') { if (!created.key) created = updateRow(t, created.id, { key: `bank-${created.id}` }); if (created.sort == null) created = updateRow(t, created.id, { sort: created.id }); created = linkBankToChart(created); }
+        if (t === 'orders') { const earned = issueCredit(created, user); if (earned) created.credit_earned = earned.amount; }
         audit(user, t, created.id, 'created', labelOf(created), notable(created)); return created;
       });
       return send(res, 201, row);

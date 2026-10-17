@@ -172,6 +172,46 @@ export function tipText(r) {
   return `${act} ${when}${u.by ? (ar ? ' بواسطة ' : ' by ') + u.by : ''}${what ? '\n' + what : ''}`;
 }
 export const tip = (r) => { const t = tipText(r); return t ? ` title="${esc(t)}"` : ''; };
+// ------------------------------------------------------------------ GPS / maps
+/** "26.2235, 50.5876" from a plain pair or from a pasted Google Maps link; '' when there is none. */
+export function parseGps(text) {
+  const t = String(text || '').trim(); if (!t) return '';
+  const pats = [/@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/, /[?&](?:q|ll|query)=(-?\d{1,3}\.\d+)[, ]+(-?\d{1,3}\.\d+)/, /!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/, /^(-?\d{1,3}\.\d+)\s*[, ]\s*(-?\d{1,3}\.\d+)$/];
+  for (const re of pats) { const m = t.match(re); if (m && Math.abs(+m[1]) <= 90 && Math.abs(+m[2]) <= 180) return `${(+m[1]).toFixed(6)}, ${(+m[2]).toFixed(6)}`; }
+  return '';
+}
+/** A Google Maps link: the exact pin when there is one, else a search for the address text. */
+export function mapUrl(gps, site = '') {
+  const g = parseGps(gps); if (g) return `https://www.google.com/maps?q=${encodeURIComponent(g.replace(/\s/g, ''))}`;
+  return String(site || '').trim() ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(site)}` : '';
+}
+/** The phone's / laptop's current position as "lat, lng". */
+export const grabGps = () => new Promise((resolve, reject) => {
+  if (!navigator.geolocation) return reject(new Error('This device cannot give its location.'));
+  navigator.geolocation.getCurrentPosition((p) => resolve(`${p.coords.latitude.toFixed(6)}, ${p.coords.longitude.toFixed(6)}`), (e) => reject(new Error(e.code === 1 ? 'Location is blocked — allow it in the browser for this site.' : 'Could not get the location.')), { enableHighAccuracy: true, timeout: 15000 });
+});
+/** The map pin link shown next to an address: "📍 Map". */
+export const mapLink = (gps, site, label = '📍 Map') => { const u = mapUrl(gps, site); return u ? `<a href="${esc(u)}" target="_blank" rel="noopener" class="maplink" title="Open in Google Maps" onclick="event.stopPropagation()">${label}</a>` : ''; };
+/** A location row for a form: the pin text, "use my location" and "open map". Wire it with wireGps(). */
+export const gpsRow = (id, value = '') => `<label class="field"><span>📍 Location pin (GPS)</span><div style="display:flex;gap:6px;flex-wrap:wrap"><input id="${id}" value="${esc(value || '')}" placeholder="26.2235, 50.5876 — or paste a Google Maps link" style="flex:1;min-width:180px"><button type="button" class="btn sm" data-gps="${id}">📍 Use my location</button><a class="btn sm" data-gpsmap="${id}" target="_blank" rel="noopener">Open map</a></div></label>`;
+export function wireGps(root, id, siteSel) {
+  const inp = root.querySelector('#' + id); if (!inp) return; const link = root.querySelector(`[data-gpsmap="${id}"]`); const btn = root.querySelector(`[data-gps="${id}"]`);
+  const upd = () => { const u = mapUrl(inp.value, siteSel ? root.querySelector(siteSel)?.value : ''); if (u) { link.href = u; link.style.display = ''; } else link.style.display = 'none'; };
+  inp.addEventListener('change', () => { const g = parseGps(inp.value); if (g && g !== inp.value) { inp.value = g; inp.dispatchEvent(new Event('input', { bubbles: true })); } upd(); });
+  if (siteSel) root.querySelector(siteSel)?.addEventListener('input', upd);
+  btn.onclick = async () => { btn.disabled = true; btn.textContent = 'Locating…'; try { inp.value = await grabGps(); inp.dispatchEvent(new Event('input', { bubbles: true })); toast('Location captured'); upd(); } catch (e) { toast(e.message, 'err'); } finally { btn.disabled = false; btn.textContent = '📍 Use my location'; } };
+  upd();
+}
+/** Progress of a whole order from its tasks: a bar, the percentage and "done / total tasks". */
+export const orderBar = (o, wide = false) => {
+  if (!o.tasks_n) return '<span class="muted" style="font-size:12px">No tasks yet</span>';
+  const p = Math.max(0, Math.min(100, Math.round(o.progress || 0)));
+  const col = p >= 100 ? 'var(--ok, #12b76a)' : p >= 50 ? 'var(--brand-2, #2e7dd7)' : '#f79009';
+  return `<div class="bar" style="height:${wide ? 14 : 10}px;margin:0;width:${wide ? '100%' : '110px'}" title="${p}% of the work is done (${o.tasks_done} of ${o.tasks_n} tasks finished)"><i style="width:${p}%;background:${col}"></i></div><small class="muted">${p}% · ${o.tasks_done}/${o.tasks_n} tasks</small>`;
+};
+/** Task priorities: label, badge colour. */
+export const PRIORITY = { urgent: ['Urgent', 'bad'], high: ['High', 'warn'], normal: ['Normal', ''], low: ['Low', 'blue'] };
+export const prioBadge = (p, always = false) => { const x = PRIORITY[p] || PRIORITY.normal; return !always && (!p || p === 'normal') ? '' : `<span class="badge ${x[1]}">${x[0]}</span>`; };
 export const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
 export const iconBtn = (act, label, cls = '') => `<button class="btn sm ${cls}" data-act="${act}">${label}</button>`;
 

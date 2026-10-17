@@ -17,7 +17,7 @@ export const DEFAULT_CHART = [
   ['3', 'OWNER EQUITY', 'equity'], ['31', 'Capital', 'equity', '3', 'capital'], ['32', 'Owner Drawings', 'equity', '3', 'drawings'], ['33', 'Opening Balance Equity', 'equity', '3', 'opening'],
   ['4', 'INCOME (SALES)', 'income'], ['41', 'Sales', 'income', '4', 'sales'], ['42', 'Other Income', 'income', '4', 'other_income'],
   ['5', 'EXPENSE', 'expense'], ['51', 'Purchases & Materials', 'expense', '5', 'purchases'], ['52', 'Salaries & Wages', 'expense', '5', 'salary'], ['53', 'Rent', 'expense', '5', 'rent'],
-  ['54', 'Workshop Expenses', 'expense', '5', 'workshop'], ['55', 'Other Expenses', 'expense', '5', 'other_expense'], ['56', 'Bank Charges', 'expense', '5', 'bank_charges'],
+  ['54', 'Workshop Expenses', 'expense', '5', 'workshop'], ['55', 'Other Expenses', 'expense', '5', 'other_expense'], ['56', 'Bank Charges', 'expense', '5', 'bank_charges'], ['57', 'Customer Credit Redeemed', 'expense', '5', 'loyalty'],
 ];
 /** Payment-voucher categories the older screens used, and where they now post. */
 const CATEGORY_SYS = { 'Supplier payment': 'ap', Salary: 'salary', Rent: 'rent', 'Workshop expense': 'workshop', Other: 'other_expense' };
@@ -49,7 +49,8 @@ export function buildEntries(data) {
   for (const [amt, acc, nm] of bankOpen) if (Number(amt)) post('0000-00-00', 'Opening', 'Opening', `Opening balance — ${nm}`, [[acc, amt > 0 ? amt : 0, amt < 0 ? -amt : 0], [A('opening'), amt < 0 ? -amt : 0, amt > 0 ? amt : 0]]);
   for (const o of orders) { const vat = orderVat(o, qNo, rate); const amt = Number(o.amount) || 0; post(o.date, o.inv, 'Sales invoice', `Invoice ${o.inv} — ${o.client || ''}`.trim(), [[A('ar'), amt, 0], [A('sales'), 0, amt - vat], [A('vat_out'), 0, vat]]); }
   for (const c of credits) post(c.date, c.no, 'Credit note', `Credit note ${c.no} — ${c.client || ''} (${c.order_inv || ''})`.trim(), [[A('sales'), c.net || 0, 0], [A('vat_out'), c.vat || 0, 0], [A('ar'), 0, c.total || 0]]);
-  for (const r of receipts) post(r.date, r.no, 'Receipt voucher', `Receipt ${r.no} — ${r.client || r.order_inv || ''}`.trim(), [[cashOf(r), r.amount, 0], [A('ar'), 0, r.amount]]);
+  // a receipt paid with the customer's earned credit takes no money: the credit is a cost of winning the repeat sale
+  for (const r of receipts) post(r.date, r.no, 'Receipt voucher', `Receipt ${r.no} — ${r.client || r.order_inv || ''}`.trim(), [[r.method === 'Loyalty credit' ? A('loyalty') || A('other_expense') : cashOf(r), r.amount, 0], [A('ar'), 0, r.amount]]);
   for (const p of purchases) { if (p.hidden) continue; const amt = Number(p.amount) || 0; const vat = p.vat != null && p.vat !== '' ? r3(p.vat) : assume ? vatIn(amt, rate) : 0; post(p.date, p.invoice || p.pv || '', 'Supplier purchase', `Purchase ${p.invoice || p.pv || ''} — ${p.supplier || ''}`.trim(), [[A('purchases'), amt - vat, 0], [A('vat_in'), vat, 0], [A('ap'), 0, amt]]); }
   for (const v of payments) {
     const target = v.employee_id ? A('salary') : byName.get(String(v.category || '').trim().toLowerCase()) || A(CATEGORY_SYS[v.category] || 'other_expense');

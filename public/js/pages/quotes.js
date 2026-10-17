@@ -8,7 +8,7 @@ import { quotePieces, allocateLeftovers, accessoriesFor } from '../stock.js';
 import { openPoDialog } from '../po-dialog.js';
 import { dot } from './stock.js';
 import { drawModel, HAND_KINDS, SWING_KINDS } from '../drawings.js';
-import { modal, formHTML, readForm } from '../ui.js';
+import { modal, formHTML, readForm, gpsRow, wireGps, mapLink, parseGps } from '../ui.js';
 import { glazingNote } from '../glazing.js';
 
 const STATUS = { draft: ['Draft', ''], sent: ['Sent', 'blue'], accepted: ['Accepted', 'ok'], rejected: ['Rejected', 'bad'] };
@@ -31,7 +31,7 @@ async function list(el) {
     cols: [
       { key: 'number', label: 'Quote #', render: (r) => `<b>${esc(r.number)}</b>` },
       { key: 'date', label: 'Date', render: (r) => dmy(r.date) },
-      { key: 'client', label: 'Client' }, { key: 'site', label: 'Site' },
+      { key: 'client', label: 'Client' }, { key: 'site', label: 'Site', render: (r) => `${esc(r.site || '')} ${mapLink(r.gps, r.site)}` },
       { key: 'count', label: 'Items', num: true },
       { key: 'total', label: 'Total (BD)', num: true, render: (r) => money(r.total) },
       { key: 'status', label: 'Status', render: (r) => badge(...(STATUS[r.status] || STATUS.draft)) + (r.approval === 'pending' ? ' ' + badge('Discount waiting', 'warn') : r.approval === 'rejected' ? ' ' + badge('Discount refused', 'bad') : '') + (r.order_inv ? ` <a href="#/orders" class="badge">${esc(r.order_inv)}</a>` : '') },
@@ -77,6 +77,7 @@ async function editor(el, id) {
     <label class="field"><span>Client</span><input id="client" list="dl-clients" value="${esc(q.client)}" autocomplete="off"></label>
     <label class="field"><span>Mobile</span><input id="mobile" value="${esc(q.mobile)}"></label>
     <label class="field"><span>Site</span><input id="site" value="${esc(q.site)}"></label>
+    ${gpsRow('gps', q.gps)}
     <label class="field"><span>Client VAT No. (for tax invoice)</span><input id="client_vat" value="${esc(q.client_vat || '')}"></label>
     <label class="field"><span>Colour (whole quotation)</span><select id="colour"><option value="">— not set —</option>${(S.settings.colours || []).map((c) => `<option ${q.colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
     <label class="field"><span>Status</span><select id="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -261,9 +262,10 @@ async function editor(el, id) {
   $('#addItem', el).onclick = () => { q.items.push(blankItem()); drawRows(); $$('tr[data-i]:last-child input', tbody)[1]?.focus(); };
   $('#addNote', el).onclick = () => { q.items.push({ kind: 'note', desc: '', qty: 0, price: 0 }); drawRows(); };
 
+  wireGps(el, 'gps', '#site');
   const collect = () => ({
     client_vat: $('#client_vat', el).value.trim(), number: $('#number', el).value.trim(), date: $('#date', el).value, client: $('#client', el).value.trim(), mobile: $('#mobile', el).value.trim(), site: $('#site', el).value.trim(),
-    title: $('#title', el).value.trim(), colour: $('#colour', el).value, status: $('#status', el).value, notes: $('#notes', el).value, prepared_by: $('#prepared_by', el).value.trim(),
+    gps: parseGps($('#gps', el).value), title: $('#title', el).value.trim(), colour: $('#colour', el).value, status: $('#status', el).value, notes: $('#notes', el).value, prepared_by: $('#prepared_by', el).value.trim(),
     items: q.items.filter((it) => it.kind === 'note' ? it.desc.trim() : (it.desc.trim() || it.price)), discount: q.discount || 0, vat_rate: q.vat_rate ?? 0, vat_waived: q.vat_waived || 0, disc_mode: q.disc_mode || 'before',
     ...(pw ? { password: pw } : {}),
   });
@@ -290,7 +292,7 @@ async function editor(el, id) {
       const sv = await save(); if (!sv) return;
       if (sv.approval === 'pending' || sv.approval === 'rejected') return toast('The discount must be approved by the admin first', 'err');
       if (!await confirmBox(`Create an order/invoice from ${q.number} for BD ${money(quoteTotals(collect()).grand)}?`, 'Create order', 'primary')) return;
-      const o = await api.post(`quotes/${id}/to-order`, {}); await refresh(); toast(`Created ${o.inv}`); location.hash = '#/orders';
+      const o = await api.post(`quotes/${id}/to-order`, {}); await refresh(); toast(`Created ${o.inv}${o.credit_earned ? ` — the customer earned BD ${money(o.credit_earned, 2)} credit` : ''}`); location.hash = '#/orders';
       const fresh = await api.get(`t/quotes/${id}`);
       openPoDialog({ quote: fresh, orderInv: o.inv, onDone: () => (location.hash = '#/pos') });
     });

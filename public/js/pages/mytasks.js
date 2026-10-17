@@ -1,5 +1,5 @@
 import { S } from '../app.js';
-import { api, $, $$, esc, dmy, today, num, toast, guard, modal, badge, confirmBox, formHTML, readForm } from '../ui.js';
+import { api, $, $$, esc, dmy, today, num, toast, guard, modal, badge, prioBadge, mapLink, confirmBox, formHTML, readForm } from '../ui.js';
 import { fmtMin, fmtSec, parseDur, ago, localTime, startTicker, variance } from '../time.js';
 import { drawModel } from '../drawings.js';
 import { quotePieces } from '../stock.js';
@@ -83,7 +83,7 @@ export async function render(el, [jobId]) {
     const pct = Math.round(t.progress || 0);
     const live = here && t.ticking;
     return `<div class="card" data-id="${t.id}" title="Open the job details" style="cursor:pointer;display:flex;flex-direction:column;gap:10px;${here ? 'border-color:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb, var(--ok) 30%, transparent)' : ''}">
-      <div style="display:flex;gap:8px;align-items:flex-start"><div style="flex:1"><a href="#/mytasks/${t.id}" style="font-size:15px;font-weight:700;color:inherit">${esc(t.title)}</a><div class="muted" style="font-size:12px">${[t.order_inv, t.client, t.site].filter(Boolean).map(esc).join(' · ') || 'No order'}</div></div>${t.priority === 'high' ? badge('High', 'bad') : ''}${badge(t.stage || 'Task', 'blue')}</div>
+      <div style="display:flex;gap:8px;align-items:flex-start"><div style="flex:1"><a href="#/mytasks/${t.id}" style="font-size:15px;font-weight:700;color:inherit">${esc(t.title)}</a><div class="muted" style="font-size:12px">${[t.order_inv, t.client, t.site].filter(Boolean).map(esc).join(' · ') || 'No order'} ${mapLink(t.site_gps, t.site)}</div></div>${prioBadge(t.priority)}${badge(t.stage || 'Task', 'blue')}</div>
       ${t.description ? `<div style="font-size:13px">${esc(t.description)}</div>` : ''}
       <div style="display:flex;gap:6px;flex-wrap:wrap">${here ? badge('● You are on this', 'ok') : ''}${t.status === 'blocked' ? badge('Blocked', 'bad') : t.status === 'done' ? badge('Done', 'ok') : t.status === 'doing' ? badge('In progress', 'warn') : badge('To do')}${due}${!t.assignee_id ? badge('Not assigned', 'warn') : ''}${t.needs_helper ? badge('🆘 helper requested', 'bad') : ''}</div>
       <div><div class="bar" style="height:12px;margin:0"><i style="width:${pct}%;background:var(--ok)"></i></div><div style="display:flex;justify-content:space-between;font-size:12px;margin-top:3px"><span>${pct}% done</span><span class="muted">Estimate ${t.estimate_min ? fmtMin(t.estimate_min) : '—'}</span></div></div>
@@ -147,10 +147,10 @@ async function jobSheet(el, id) {
       ${Object.keys(ac).length ? `<div style="margin-top:12px"><b>Hardware</b><div style="font-size:13px;margin-top:2px">${Object.entries(ac).map(([aid, qn]) => `<span class="badge" style="margin:2px 4px 2px 0">${esc(S.accessories.find((x) => x.id === Number(aid))?.name || 'Item')} × ${Math.ceil(qn)}</span>`).join('')}</div></div>` : ''}</div>`;
   }
 
-  el.innerHTML = `<div id="job"><div class="ph"><a class="btn" href="#/mytasks">← My tasks</a><h1>${esc(t.title)}</h1>${badge(t.stage || 'Task', 'blue')}${t.priority === 'high' ? badge('High priority', 'bad') : ''}${t.status === 'blocked' ? badge('Blocked', 'bad') : t.status === 'done' ? badge('Done', 'ok') : ''}</div>
+  el.innerHTML = `<div id="job"><div class="ph"><a class="btn" href="#/mytasks">← My tasks</a><h1>${esc(t.title)}</h1>${badge(t.stage || 'Task', 'blue')}${prioBadge(t.priority) ? prioBadge(t.priority) + ' ' : ''}${t.status === 'blocked' ? badge('Blocked', 'bad') : t.status === 'done' ? badge('Done', 'ok') : ''}</div>
     <div class="card" data-id="${t.id}" style="margin-bottom:14px">
       <div class="cols2" style="gap:18px;align-items:start"><div>
-        <div style="font-size:12px" class="muted">Customer / site</div><div style="font-size:16px"><b>${esc(t.client || '—')}</b>${t.site ? ` — ${esc(t.site)}` : ''}</div>
+        <div style="font-size:12px" class="muted">Customer / site</div><div style="font-size:16px"><b>${esc(t.client || '—')}</b>${t.site ? ` — ${esc(t.site)}` : ''} ${mapLink(t.site_gps, t.site, '<span class="btn sm primary">📍 Open in maps</span>')}</div>
         <div class="muted" style="font-size:13px;margin-top:2px">${[t.order_inv && 'Order ' + t.order_inv, (t.team_names?.length || t.assignee_name) && 'Team: ' + [t.assignee_name, ...(t.team_names || [])].filter(Boolean).join(', '), q && 'Quotation ' + q.number, t.due && 'Due ' + dmy(t.due)].filter(Boolean).map(esc).join(' · ')}</div>
         ${t.description ? `<div style="margin-top:10px;padding:8px 10px;border-left:4px solid var(--brand-2);background:var(--soft);border-radius:4px"><b>Instructions</b><div style="white-space:pre-line">${esc(t.description)}</div></div>` : ''}
         ${q?.title ? `<div class="muted" style="margin-top:8px;font-size:13px">${esc(q.title)}</div>` : ''}

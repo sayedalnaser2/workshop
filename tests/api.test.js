@@ -409,3 +409,33 @@ test('purchase orders keep a payment log (part payments) and rows carry their la
   const list = (await call('boss', 'GET', '/api/t/purchase_orders')).data; assert.ok(list.find((r) => r.id === po.id)._upd.ts);
   await call('boss', 'DELETE', `/api/t/purchase_orders/${po.id}`);
 });
+
+test('sales user, customer credit (earned, expiring, spent), order progress and GPS', async () => {
+  assert.equal((await call('boss', 'POST', '/api/users', { username: 'sam', name: 'Sam Sales', role: 'sales', password: 'sal12345' })).status, 201); await login('sam', 'sal12345');
+  // what a sales user can and cannot reach
+  assert.equal((await call('sam', 'GET', '/api/t/quotes')).status, 200); assert.equal((await call('sam', 'GET', '/api/t/orders')).status, 200);
+  assert.equal((await call('sam', 'GET', '/api/t/payments')).status, 403); assert.equal((await call('sam', 'GET', '/api/t/employees')).status, 403); assert.equal((await call('sam', 'GET', '/api/users')).status, 403);
+  assert.equal((await call('sam', 'POST', '/api/t/orders', { client: 'X', amount: 5 })).status, 403); // sales cannot make invoices by hand
+  const sq = (await call('sam', 'POST', '/api/t/quotes', { client: 'Loyal Customer', mobile: '3999', date: '2026-10-10', site: 'Riffa', gps: '26.1234, 50.5555', vat_rate: 10, items: [{ desc: 'Big job', qty: 1, price: 1000 }] })); assert.equal(sq.status, 201); assert.equal(sq.data.prepared_by, 'Sam Sales');
+  // credit off by default: converting a quotation earns nothing
+  await call('boss', 'PUT', '/api/settings', { loyalty: { enabled: true, expiry_months: 3, tiers: [{ min: 500, type: 'fixed', value: 20 }, { min: 1000, type: 'percent', value: 3 }] } });
+  const conv = await call('sam', 'POST', `/api/quotes/${sq.data.id}/to-order`, {}); assert.equal(conv.status, 200, JSON.stringify(conv.data)); const inv = conv.data; assert.equal(inv.gps, '26.1234, 50.5555'); assert.equal(inv.amount, 1100);
+  assert.equal(inv.credit_earned, 33); // the highest tier reached: 3% of 1100
+  const credits = (await call('sam', 'GET', '/api/t/customer_credits')).data; const cr = credits.find((c) => c.order_inv === inv.inv); assert.equal(cr.amount, 33); assert.ok(cr.expires > '2026-01-01');
+  // a second invoice below every tier earns nothing, and the same invoice never earns twice
+  const small = (await call('boss', 'POST', '/api/t/orders', { client: 'Loyal Customer', mobile: '3999', amount: 100, date: '2026-10-11' })).data; assert.equal(small.credit_earned, undefined);
+  // spend 30 of it on the small invoice: a receipt paid with credit, the invoice balance falls, the credit is used up
+  assert.equal((await call('sam', 'POST', '/api/credits/redeem', { credit_id: cr.id, order_inv: small.inv, amount: 50 })).status, 400); // only 33 left
+  assert.equal((await call('boss', 'POST', '/api/t/orders', { client: 'Someone Else', amount: 100 })).status, 201);
+  const other = (await call('boss', 'GET', '/api/ledger')).data.find((o) => o.client === 'Someone Else'); assert.equal((await call('sam', 'POST', '/api/credits/redeem', { credit_id: cr.id, order_inv: other.inv, amount: 10 })).status, 400); // another customer's invoice
+  const ok = await call('sam', 'POST', '/api/credits/redeem', { credit_id: cr.id, order_inv: small.inv, amount: 30 }); assert.equal(ok.status, 200); assert.equal(ok.data.receipt.method, 'Loyalty credit'); assert.equal(ok.data.credit.used, 30);
+  const led = (await call('boss', 'GET', '/api/ledger')).data; assert.equal(led.find((o) => o.inv === small.inv).balance, 70); assert.equal(led.find((o) => o.inv === small.inv).paid, 30);
+  // the books: the credit is an expense, not cash
+  const acc = (await call('boss', 'GET', '/api/accounting')).data; const loy = acc.tb.list.find((a) => a.sys === 'loyalty'); assert.ok(loy && loy.ownDebit === 30, JSON.stringify(loy));
+  // progress of a whole order from its tasks
+  await call('boss', 'POST', '/api/t/tasks', { order_inv: inv.inv, title: 'Cut', stage: 'Cutting', estimate_min: 60, status: 'done', progress: 100 });
+  await call('boss', 'POST', '/api/t/tasks', { order_inv: inv.inv, title: 'Fit', stage: 'Fitting', estimate_min: 180, status: 'todo', progress: 40 });
+  const withTasks = (await call('boss', 'GET', '/api/ledger')).data.find((o) => o.inv === inv.inv); assert.equal(withTasks.tasks_n, 2); assert.equal(withTasks.tasks_done, 1); assert.equal(withTasks.progress, 55); // (60×100 + 180×40) / 240
+  // priority is kept per task
+  const t = (await call('boss', 'POST', '/api/t/tasks', { order_inv: inv.inv, title: 'Rush', priority: 'urgent' })).data; assert.equal(t.priority, 'urgent');
+});

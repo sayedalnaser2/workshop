@@ -1,5 +1,5 @@
 import { S } from '../app.js';
-import { api, $, $$, esc, num, today, dmy, toast, guard, confirmBox, modal, formHTML, readForm, dataTable, badge } from '../ui.js';
+import { api, $, $$, esc, num, today, dmy, toast, guard, confirmBox, modal, formHTML, readForm, dataTable, badge, gpsRow, wireGps, mapLink } from '../ui.js';
 import { priceFor } from '../calc.js';
 import { drawModel } from '../drawings.js';
 import { attachmentsPanel } from '../attachments.js';
@@ -29,7 +29,7 @@ async function list(el) {
   const t = $('#t', el);
   dataTable(t, {
     rows, search: ['client', 'site', 'mobile', 'surveyor', 'quote_no'], page: 40, empty: 'No surveys yet — start one when you visit a site.',
-    cols: [{ key: 'date', label: 'Date', render: (r) => dmy(r.date) }, { key: 'client', label: 'Customer', render: (r) => `<b>${esc(r.client)}</b><div class="muted" style="font-size:11px">${esc(r.site || '')}</div>` }, { key: 'count', label: 'Openings', num: true }, { key: 'surveyor', label: 'Measured by' },
+    cols: [{ key: 'date', label: 'Date', render: (r) => dmy(r.date) }, { key: 'client', label: 'Customer', render: (r) => `<b>${esc(r.client)}</b><div class="muted" style="font-size:11px">${mapLink(r.gps, r.site)} ${esc(r.site || '')}</div>` }, { key: 'count', label: 'Openings', num: true }, { key: 'surveyor', label: 'Measured by' },
       { key: 'status', label: 'Status', render: (r) => (r.quote_no ? badge('Quoted ' + r.quote_no, 'ok') : badge('Open', 'warn')) }],
     onRow: (r) => (location.hash = `#/surveys/${r.id}`),
     actions: () => '<button class="btn sm danger" data-act="del">Delete</button>',
@@ -44,12 +44,13 @@ async function editor(el, id) {
   const canQuote = canPage(S.me, 'quotes');
   const models = S.models; const colours = S.settings.colours || [];
   el.innerHTML = `<div class="ph"><a class="btn" href="#/surveys">← Surveys</a><h1>${esc(s.client)}</h1>${s.quote_no ? badge('Quoted ' + s.quote_no, 'ok') : ''}<span class="grow"></span><span class="muted" id="saved"></span></div>
-    <details class="card" ${s.site ? '' : 'open'}><summary style="cursor:pointer;font-weight:600">Customer & site — ${esc([s.site, s.mobile].filter(Boolean).join(' · ') || 'add details')}</summary><div class="form" style="margin-top:10px;grid-template-columns:repeat(3,1fr)"><label class="field"><span>Customer</span><input data-h="client" value="${esc(s.client)}"></label><label class="field"><span>Mobile</span><input data-h="mobile" type="tel" value="${esc(s.mobile || '')}"></label><label class="field"><span>Date</span><input data-h="date" type="date" value="${esc(s.date)}"></label><label class="field full"><span>Site / address</span><input data-h="site" value="${esc(s.site || '')}"></label><label class="field full"><span>General notes</span><textarea data-h="notes" rows="2">${esc(s.notes || '')}</textarea></label></div></details>
+    <details class="card" ${s.site ? '' : 'open'}><summary style="cursor:pointer;font-weight:600">Customer & site — ${esc([s.site, s.mobile].filter(Boolean).join(' · ') || 'add details')}</summary><div class="form" style="margin-top:10px;grid-template-columns:repeat(3,1fr)"><label class="field"><span>Customer</span><input data-h="client" value="${esc(s.client)}"></label><label class="field"><span>Mobile</span><input data-h="mobile" type="tel" value="${esc(s.mobile || '')}"></label><label class="field"><span>Date</span><input data-h="date" type="date" value="${esc(s.date)}"></label><label class="field full"><span>Site / address</span><input data-h="site" value="${esc(s.site || '')}"></label>${gpsRow('gps', s.gps).replace('<input id="gps"', '<input data-h="gps" id="gps"').replace('<label class="field">', '<label class="field full">')}<label class="field full"><span>General notes</span><textarea data-h="notes" rows="2">${esc(s.notes || '')}</textarea></label></div></details>
     <div id="items" style="margin-top:12px"></div>
     <div class="sticky-actions"><button class="btn primary" id="add">+ Add opening</button>${canQuote ? '<button class="btn" id="mkq">Create quotation from these sizes</button>' : ''}<a class="btn" href="#/surveys/${id}/print">Measurement sheet</a></div>`;
   let timer = 0; const flag = (t) => ($('#saved', el).textContent = t);
-  const save = async () => { clearTimeout(timer); try { await api.put(`t/surveys/${id}`, { client: s.client, mobile: s.mobile, site: s.site, date: s.date, notes: s.notes, items: s.items }); flag('Saved ✓'); } catch (e) { flag('Not saved: ' + e.message); } };
+  const save = async () => { clearTimeout(timer); try { await api.put(`t/surveys/${id}`, { client: s.client, mobile: s.mobile, site: s.site, gps: s.gps || '', date: s.date, notes: s.notes, items: s.items }); flag('Saved ✓'); } catch (e) { flag('Not saved: ' + e.message); } };
   const later = () => { flag('Saving…'); clearTimeout(timer); timer = setTimeout(save, 700); };
+  wireGps(el, 'gps', '[data-h=site]');
   $$('[data-h]', el).forEach((i) => i.addEventListener('input', () => { s[i.dataset.h] = i.value; if (i.dataset.h === 'client') $('h1', el).textContent = i.value; later(); }));
   const box = $('#items', el);
   const sel = (key, opts, val, blankLabel) => `<select data-k="${key}"><option value="">${blankLabel}</option>${opts.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(val ?? '') ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
@@ -82,7 +83,7 @@ async function editor(el, id) {
       const m = models.find((x) => x.id === Number(i.model_id)); const pi = S.price_items.find((p) => p.model_id === Number(i.model_id));
       return { w: i.w, h: i.h, desc: pi?.name || m?.name || i.label || 'Item', note: [i.label, i.note].filter(Boolean).join(' — '), qty: i.qty || 1, price: pi ? priceFor(pi, num(i.w), num(i.h)) : 0, manual: !pi, model_id: i.model_id || null, glass_id: i.glass_id || null, colour: i.colour || '' };
     });
-    const q = await api.post('t/quotes', { client: s.client, mobile: s.mobile, site: s.site, date: today(), title: S.settings.intro_line || '', items: qItems, vat_rate: S.settings.vat_rate ?? 10, discount: 0, vat_waived: 0, status: 'draft', notes: `From site survey of ${dmy(s.date)}${s.notes ? ' — ' + s.notes : ''}` });
+    const q = await api.post('t/quotes', { client: s.client, mobile: s.mobile, site: s.site, gps: s.gps || '', date: today(), title: S.settings.intro_line || '', items: qItems, vat_rate: S.settings.vat_rate ?? 10, discount: 0, vat_waived: 0, status: 'draft', notes: `From site survey of ${dmy(s.date)}${s.notes ? ' — ' + s.notes : ''}` });
     await api.put(`t/surveys/${id}`, { quote_no: q.number, status: 'quoted' }); toast(`Created ${q.number} — check the prices`); location.hash = `#/quotes/${q.id}`;
   }));
   draw();

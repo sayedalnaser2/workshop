@@ -36,10 +36,10 @@ const effMin = (s, now, cfgFor, pres) => totalMin(sessionSegments(s, cfgFor(s.us
 export function taskViews(where = '1=1', params = []) {
   const nowMs = Date.now(); const cfgFor = cfgMap(); const cfg = cfgFor(0); const pres = presence();
   const rows = db.prepare(`
-    SELECT t.*, u.name AS assignee_name, o.client, o.site, COALESCE(NULLIF(t.quote_no, ''), o.quote_no) AS quote_no,
+    SELECT t.*, u.name AS assignee_name, o.client, o.site, o.gps AS site_gps, COALESCE(NULLIF(t.quote_no, ''), o.quote_no) AS quote_no,
       (SELECT MAX(l.ts) FROM task_logs l WHERE l.task_id = t.id) AS last_activity
     FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id LEFT JOIN orders o ON o.inv = t.order_inv AND t.order_inv <> ''
-    WHERE ${where} ORDER BY CASE t.status WHEN 'doing' THEN 0 WHEN 'blocked' THEN 1 WHEN 'todo' THEN 2 ELSE 3 END, CASE t.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, IFNULL(t.due, '9999'), t.id DESC`).all(...params);
+    WHERE ${where} ORDER BY CASE t.status WHEN 'doing' THEN 0 WHEN 'blocked' THEN 1 WHEN 'todo' THEN 2 ELSE 3 END, CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END, IFNULL(t.due, '9999'), t.id DESC`).all(...params);
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   const sess = db.prepare(`SELECT * FROM task_sessions WHERE task_id IN (${ids.map(() => '?').join(',')})`).all(...ids);

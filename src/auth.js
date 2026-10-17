@@ -32,7 +32,7 @@ const cleanShift = (s) => { const o = {}; if (/^\d{1,2}:\d{2}$/.test(s.start || 
 const cleanPerms = (p) => { const pages = {}; for (const [k, v] of Object.entries(p?.pages || {})) if (k in PAGE_LABELS && !LOCKED_PAGES.includes(k) && ['none', 'view', 'edit'].includes(v)) pages[k] = v; return Object.keys(pages).length ? { pages } : null; };
 const activeAdmins = (exceptId = 0) => db.prepare("SELECT COUNT(*) n FROM users WHERE role='admin' AND active=1 AND id<>?").get(exceptId).n;
 
-const ROLE_TITLE = { admin: 'Admin', account: 'Accounts', worker: 'Worker' };
+const ROLE_TITLE = { admin: 'Admin', account: 'Accounts', sales: 'Sales', worker: 'Worker' };
 /** Every login is also an employee: make sure each user has an employee record (matching a not-yet-linked employee of the same name, else creating one). */
 export function syncEmployees() {
   const emps = db.prepare('SELECT id, name, user_id FROM employees').all();
