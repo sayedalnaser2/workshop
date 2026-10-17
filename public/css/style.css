@@ -316,3 +316,14 @@ table.mini { width: 100%; border-collapse: collapse; } .mini th { font-size: 11p
 .k3stage .k3panel .form { gap: 6px 8px; }
 @media (max-width: 800px) { .k3stage .k3tl { max-width: 100%; right: 10px; top: 56px; } .k3stage .k3panel { width: auto; left: 10px; top: auto; height: 46%; } .k3stage .k3tr { left: 10px; } }
 .maplink { font-size: 12px; white-space: nowrap; text-decoration: none; }
+
+/* urgent / high tasks: pinned to the top and flashing red until they are done */
+@keyframes hotflash { 0%, 100% { background-color: transparent; } 50% { background-color: rgba(217, 45, 32, .18); } }
+@keyframes hotflash-soft { 0%, 100% { background-color: transparent; } 50% { background-color: rgba(240, 68, 56, .10); } }
+div.hot { border-left: 5px solid #d92d20; }
+div.hot-urgent { animation: hotflash .9s ease-in-out infinite; }
+div.hot-high { animation: hotflash-soft 1.8s ease-in-out infinite; }
+tr.hot td:first-child { box-shadow: inset 5px 0 0 #d92d20; }
+tr.hot-urgent td { animation: hotflash .9s ease-in-out infinite; }
+tr.hot-high td { animation: hotflash-soft 1.8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { div.hot, tr.hot td { animation: none !important; background-color: rgba(217, 45, 32, .10); } }

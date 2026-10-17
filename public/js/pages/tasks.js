@@ -1,5 +1,5 @@
 import { S } from '../app.js';
-import { api, $, $$, esc, dmy, today, toast, guard, confirmBox, dataTable, badge, prioBadge, PRIORITY, mapLink, modal, formHTML, readForm } from '../ui.js';
+import { api, $, $$, esc, dmy, today, toast, guard, confirmBox, dataTable, badge, prioBadge, hotClass, PRIORITY, mapLink, modal, formHTML, readForm } from '../ui.js';
 import { fmtMin, parseDur, ago, localTime, localDay, variance, startTicker, fmtSec } from '../time.js';
 import { openTaskForm, addStandardTasks } from '../task-form.js';
 import { logLine } from './mytasks.js';
@@ -20,9 +20,9 @@ export async function render(el, [id]) {
     const sel = `<select id="who" style="width:200px"><option value="">Everyone</option><option value="none" ${assignee === 'none' ? 'selected' : ''}>Not assigned</option>${staff.map((u) => `<option value="${u.id}" ${assignee === String(u.id) ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>`;
     const t = $('#t', el);
     dataTable(t, {
-      rows: all, search: ['title', 'order_inv', 'client', 'assignee_name', 'stage'], page: 50, toolbar: sel, filterKey: 'tasks', empty: 'No tasks yet — create one, or open an order and add the standard tasks.',
+      rows: all, search: ['title', 'order_inv', 'client', 'assignee_name', 'stage'], page: 50, rowClass: hotClass, toolbar: sel, filterKey: 'tasks', empty: 'No tasks yet — create one, or open an order and add the standard tasks.',
       cols: [
-        { key: 'title', label: 'Task', render: (r) => `<b>${esc(r.title)}</b><div class="muted" style="font-size:11px">${[r.order_inv, r.client].filter(Boolean).map(esc).join(' · ')} ${mapLink(r.site_gps, r.site)}</div>` },
+        { key: 'title', label: 'Task', render: (r) => `<b>${hotClass(r) ? '📌 ' : ''}${esc(r.title)}</b><div class="muted" style="font-size:11px">${[r.order_inv, r.client].filter(Boolean).map(esc).join(' · ')} ${mapLink(r.site_gps, r.site)}</div>` },
         { key: 'priority', label: 'Priority', sort: (r) => ['urgent', 'high', 'normal', 'low'].indexOf(r.priority || 'normal'), render: (r) => `<select class="pq" data-id="${r.id}" title="Change the priority" style="min-width:96px;font-weight:600;${r.priority === 'urgent' ? 'color:#b42318;border-color:#b42318' : r.priority === 'high' ? 'color:#b54708' : r.priority === 'low' ? 'color:#667085' : ''}">${Object.entries(PRIORITY).map(([k, v2]) => `<option value="${k}" ${(r.priority || 'normal') === k ? 'selected' : ''}>${v2[0]}</option>`).join('')}</select>` },
         { key: 'stage', label: 'Stage' }, { key: 'assignee_name', label: 'Assigned to', render: (r) => `<select class="qa" data-id="${r.id}" style="min-width:150px" title="Change who is on this task"><option value="">— nobody —</option>${staff.map((u) => `<option value="${u.id}" ${r.assignee_id === u.id ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>${r.team_names?.length ? `<div class="muted" style="font-size:11px">+ ${esc(r.team_names.join(', '))}</div>` : ''}${r.needs_helper ? `<div>${badge('🆘 needs a helper', 'bad')}</div><div class="muted" style="font-size:11px">${esc(r.helper_note || '')}</div>` : ''}` },
         { key: 'status', label: 'Status', render: (r) => badge(...ST[r.status]) + (r.ticking ? ' <span class="pos" title="someone is on it right now">●</span>' : '') },

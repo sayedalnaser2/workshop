@@ -1,5 +1,5 @@
 import { S } from '../app.js';
-import { api, $, $$, esc, dmy, today, num, toast, guard, modal, badge, prioBadge, mapLink, confirmBox, formHTML, readForm } from '../ui.js';
+import { api, $, $$, esc, dmy, today, num, toast, guard, modal, badge, prioBadge, hotClass, mapLink, confirmBox, formHTML, readForm } from '../ui.js';
 import { fmtMin, fmtSec, parseDur, ago, localTime, startTicker, variance } from '../time.js';
 import { drawModel } from '../drawings.js';
 import { quotePieces } from '../stock.js';
@@ -82,8 +82,8 @@ export async function render(el, [jobId]) {
     const due = t.due ? `<span class="badge ${t.due < today() && t.status !== 'done' ? 'bad' : ''}">due ${dmy(t.due)}</span>` : '';
     const pct = Math.round(t.progress || 0);
     const live = here && t.ticking;
-    return `<div class="card" data-id="${t.id}" title="Open the job details" style="cursor:pointer;display:flex;flex-direction:column;gap:10px;${here ? 'border-color:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb, var(--ok) 30%, transparent)' : ''}">
-      <div style="display:flex;gap:8px;align-items:flex-start"><div style="flex:1"><a href="#/mytasks/${t.id}" style="font-size:15px;font-weight:700;color:inherit">${esc(t.title)}</a><div class="muted" style="font-size:12px">${[t.order_inv, t.client, t.site].filter(Boolean).map(esc).join(' · ') || 'No order'} ${mapLink(t.site_gps, t.site)}</div></div>${prioBadge(t.priority)}${badge(t.stage || 'Task', 'blue')}</div>
+    return `<div class="card ${hotClass(t)}" data-id="${t.id}" title="Open the job details" style="cursor:pointer;display:flex;flex-direction:column;gap:10px;${here ? 'border-color:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb, var(--ok) 30%, transparent)' : ''}">
+      <div style="display:flex;gap:8px;align-items:flex-start"><div style="flex:1"><a href="#/mytasks/${t.id}" style="font-size:15px;font-weight:700;color:inherit">${hotClass(t) ? '📌 ' : ''}${esc(t.title)}</a><div class="muted" style="font-size:12px">${[t.order_inv, t.client, t.site].filter(Boolean).map(esc).join(' · ') || 'No order'} ${mapLink(t.site_gps, t.site)}</div></div>${prioBadge(t.priority)}${badge(t.stage || 'Task', 'blue')}</div>
       ${t.description ? `<div style="font-size:13px">${esc(t.description)}</div>` : ''}
       <div style="display:flex;gap:6px;flex-wrap:wrap">${here ? badge('● You are on this', 'ok') : ''}${t.status === 'blocked' ? badge('Blocked', 'bad') : t.status === 'done' ? badge('Done', 'ok') : t.status === 'doing' ? badge('In progress', 'warn') : badge('To do')}${due}${!t.assignee_id ? badge('Not assigned', 'warn') : ''}${t.needs_helper ? badge('🆘 helper requested', 'bad') : ''}</div>
       <div><div class="bar" style="height:12px;margin:0"><i style="width:${pct}%;background:var(--ok)"></i></div><div style="display:flex;justify-content:space-between;font-size:12px;margin-top:3px"><span>${pct}% done</span><span class="muted">Estimate ${t.estimate_min ? fmtMin(t.estimate_min) : '—'}</span></div></div>

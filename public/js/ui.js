@@ -110,7 +110,7 @@ export function editRow({ table, title, fields, row = null, extra = '', defaults
  * cols: [{key,label,render?(row)->html, num?:bool, sort?:fn(row)->value, class?}]
  * opts: {rows, search:[keys], page:100, onRow(row), actions(row)->html, foot(rowsFiltered)->html, filters:[{label,fn}]}
  */
-export function dataTable(el, { cols, rows, search = [], page = 100, onRow, actions, foot, filters = [], empty = 'Nothing here yet.', toolbar = '', filterKey = '' }) {
+export function dataTable(el, { cols, rows, search = [], page = 100, onRow, actions, foot, filters = [], empty = 'Nothing here yet.', toolbar = '', filterKey = '', rowClass }) {
   let q = ''; let sortKey = null; let dir = 1; let pg = 0; let fi = 0;
   // a dashboard card can ask for a filter once, e.g. sessionStorage 'flt:orders' = 'Unpaid'
   if (filterKey) { try { const want = sessionStorage.getItem(`flt:${filterKey}`); sessionStorage.removeItem(`flt:${filterKey}`); const i = filters.findIndex((f) => f.label === want); if (i > 0) fi = i; } catch {} }
@@ -127,7 +127,7 @@ export function dataTable(el, { cols, rows, search = [], page = 100, onRow, acti
     const list = view(); const pages = Math.max(1, Math.ceil(list.length / page)); pg = Math.min(pg, pages - 1);
     head.innerHTML = `<tr>${cols.map((c) => `<th class="${c.num ? 'num' : ''} ${sortKey === c.key ? (dir > 0 ? 'asc' : 'desc') : ''}" data-k="${c.key}">${esc(c.label)}</th>`).join('')}${actions ? '<th></th>' : ''}</tr>`;
     const slice = list.slice(pg * page, pg * page + page);
-    body.innerHTML = slice.length ? slice.map((r, i) => `<tr data-i="${i}"${tip(r)} class="${onRow ? 'click' : ''}">${cols.map((c) => `<td class="${c.num ? 'num' : ''} ${c.class || ''}">${c.render ? c.render(r) : esc(r[c.key])}</td>`).join('')}${actions ? `<td class="act">${actions(r)}</td>` : ''}</tr>`).join('') : `<tr><td colspan="${cols.length + 1}" class="empty">${esc(empty)}</td></tr>`;
+    body.innerHTML = slice.length ? slice.map((r, i) => `<tr data-i="${i}"${tip(r)} class="${onRow ? 'click' : ''} ${rowClass ? rowClass(r) || '' : ''}">${cols.map((c) => `<td class="${c.num ? 'num' : ''} ${c.class || ''}">${c.render ? c.render(r) : esc(r[c.key])}</td>`).join('')}${actions ? `<td class="act">${actions(r)}</td>` : ''}</tr>`).join('') : `<tr><td colspan="${cols.length + 1}" class="empty">${esc(empty)}</td></tr>`;
     tf.innerHTML = foot ? foot(list) : '';
     $('.count', el).textContent = `${list.length} ${list.length === 1 ? 'row' : 'rows'}`;
     pager.innerHTML = pages > 1 ? `<button class="btn sm" data-p="-1" ${pg === 0 ? 'disabled' : ''}>‹ Prev</button><span>Page ${pg + 1} of ${pages}</span><button class="btn sm" data-p="1" ${pg >= pages - 1 ? 'disabled' : ''}>Next ›</button>` : '';
@@ -211,6 +211,8 @@ export const orderBar = (o, wide = false) => {
 };
 /** Task priorities: label, badge colour. */
 export const PRIORITY = { urgent: ['Urgent', 'bad'], high: ['High', 'warn'], normal: ['Normal', ''], low: ['Low', 'blue'] };
+/** The class that pins a task to the top and makes it flash: open urgent / high tasks only. */
+export const hotClass = (t) => (t && t.status !== 'done' ? (t.priority === 'urgent' ? 'hot hot-urgent' : t.priority === 'high' ? 'hot hot-high' : '') : '');
 export const prioBadge = (p, always = false) => { const x = PRIORITY[p] || PRIORITY.normal; return !always && (!p || p === 'normal') ? '' : `<span class="badge ${x[1]}">${x[0]}</span>`; };
 export const badge = (text, kind = '') => `<span class="badge ${kind}">${esc(text)}</span>`;
 export const iconBtn = (act, label, cls = '') => `<button class="btn sm ${cls}" data-act="${act}">${label}</button>`;
