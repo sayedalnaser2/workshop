@@ -459,3 +459,12 @@ test('customers: every client gets a permanent number, records link to it, searc
   assert.equal((await call('amina', 'GET', `/api/t/quotes/${q1.id}`)).data.client, 'Zayed Renamed'); assert.equal((await call('boss', 'GET', '/api/ledger')).data.find((o) => o.inv === inv.inv).client, 'Zayed Renamed');
   assert.equal((await call('amina', 'GET', `/api/t/customers/${c.id}`)).data.code, c.code); // the number never changes
 });
+
+test('a customer can have several locations; new sites quoted for are collected automatically', async () => {
+  const a = (await call('amina', 'POST', '/api/t/quotes', { client: 'Multi Site Co', mobile: '36005555', site: 'Villa 1, Riffa', gps: '26.1000, 50.5000', date: '2026-10-25', vat_rate: 10, items: [{ desc: 'x', qty: 1, price: 10 }] })).data;
+  await call('amina', 'POST', '/api/t/quotes', { client: 'Multi Site Co', site: 'Office, Manama', date: '2026-10-26', vat_rate: 10, items: [{ desc: 'y', qty: 1, price: 10 }] });
+  await call('amina', 'POST', '/api/t/quotes', { client: 'multi site co', site: 'villa 1, riffa', date: '2026-10-27', vat_rate: 10, items: [{ desc: 'z', qty: 1, price: 10 }] }); // the same site again: not a new location
+  let c = (await call('amina', 'GET', `/api/t/customers/${a.customer_id}`)).data; assert.deepEqual(c.locations.map((l) => l.address), ['Villa 1, Riffa', 'Office, Manama']); assert.equal(c.locations[0].gps, '26.1000, 50.5000');
+  await call('amina', 'PUT', `/api/t/customers/${c.id}`, { locations: [...c.locations.slice().reverse(), { label: 'Warehouse', address: 'Sitra', gps: '' }, { label: '', address: '', gps: '' }] });
+  c = (await call('amina', 'GET', `/api/t/customers/${c.id}`)).data; assert.deepEqual(c.locations.map((l) => l.address), ['Office, Manama', 'Villa 1, Riffa', 'Sitra']); assert.equal(c.address, 'Office, Manama'); // the first one is the main address; empty ones are dropped
+});

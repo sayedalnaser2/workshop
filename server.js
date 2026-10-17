@@ -186,12 +186,25 @@ const normName = (x) => String(x || '').trim().toLowerCase().replace(/\s+/g, ' '
 const phoneKey = (x) => { const d = String(x || '').replace(/\D/g, ''); return d.length >= 7 ? d.slice(-8) : ''; };
 const nextCustomerCode = () => { const n = db.prepare("SELECT MAX(CAST(SUBSTR(code, 2) AS INTEGER)) m FROM customers WHERE code LIKE 'C%'").get().m || 0; return 'C' + String(n + 1).padStart(4, '0'); };
 /** The customer for a name / mobile: the one with the same mobile, else the same name; a new one when there is none. Returns its id. */
+/** The customer's locations with this site added when it is new (the older single address counts as their first location). */
+function withLocation(c, site, gps) {
+  let locs = []; try { locs = JSON.parse(c.locations || '[]') || []; } catch {}
+  const addr = String(site || '').trim();
+  if (!locs.length && (c.address || c.gps)) locs.push({ label: '', address: c.address || '', gps: c.gps || '' });
+  if (addr || gps) {
+    const hit = locs.find((l) => (addr && normName(l.address) === normName(addr)) || (gps && l.gps && l.gps === gps));
+    if (!hit) locs.push({ label: '', address: addr, gps: gps || '' }); else if (!hit.gps && gps) hit.gps = gps; else if (!hit.address && addr) hit.address = addr;
+  }
+  return locs;
+}
 function ensureCustomer({ client, mobile, site, gps }) {
   const name = String(client || '').trim(); if (!name) return null; const pk = phoneKey(mobile);
   const all = db.prepare('SELECT * FROM customers').all();
   let c = (pk && all.find((x) => phoneKey(x.mobile) === pk || phoneKey(x.mobile2) === pk)) || all.find((x) => normName(x.name) === normName(name));
-  if (!c) return insertRow('customers', { code: nextCustomerCode(), name, mobile: mobile || '', mobile2: '', email: '', address: site || '', gps: gps || '', vat_no: '', note: '', active: 1 }).id;
+  if (!c) { const locs = String(site || '').trim() || gps ? [{ label: '', address: String(site || '').trim(), gps: gps || '' }] : []; return insertRow('customers', { code: nextCustomerCode(), name, mobile: mobile || '', mobile2: '', email: '', address: site || '', gps: gps || '', locations: locs, vat_no: '', note: '', active: 1 }).id; }
   const fill = {}; if (!c.mobile && mobile) fill.mobile = mobile; if (!c.address && site) fill.address = site; if (!c.gps && gps) fill.gps = gps;
+  const locs = withLocation(c, site, gps);
+  if (JSON.stringify(locs) !== (c.locations || '[]')) fill.locations = locs;
   if (Object.keys(fill).length) updateRow('customers', c.id, fill);
   return c.id;
 }
@@ -204,8 +217,11 @@ function linkCustomer(body, cur = {}) {
 }
 /** Older records get their customer numbers the first time this runs (and any later record that slipped through). */
 function backfillCustomers() {
-  for (const t of ['orders', 'quotes', 'surveys', 'kitchens']) for (const r of db.prepare(`SELECT id, client, mobile, site${t === 'kitchens' ? '' : ', gps'} FROM ${t} WHERE customer_id IS NULL AND IFNULL(client,'') <> '' ORDER BY id`).all()) {
-    const id = ensureCustomer(r); if (id) db.prepare(`UPDATE ${t} SET customer_id=? WHERE id=?`).run(id, r.id);
+  for (const t of ['orders', 'quotes', 'surveys', 'kitchens']) {
+    for (const r of db.prepare(`SELECT id, client, mobile, site${t === 'kitchens' ? '' : ', gps'}, customer_id FROM ${t} WHERE IFNULL(client,'') <> '' ORDER BY id`).all()) {
+      if (!r.customer_id) { const id = ensureCustomer(r); if (id) db.prepare(`UPDATE ${t} SET customer_id=? WHERE id=?`).run(id, r.id); }
+      else if (r.site || r.gps) { const c = db.prepare('SELECT * FROM customers WHERE id=?').get(r.customer_id); if (c) { const locs = withLocation(c, r.site, r.gps); if (JSON.stringify(locs) !== (c.locations || '[]')) updateRow('customers', c.id, { locations: locs }); } }
+    }
   }
 }
 /** Customers with their totals and every number they can be found by (customer no., mobile, invoice, quotation). */
@@ -565,7 +581,7 @@ async function api(req, res, url) {
       const row = tx(() => {
         checkRef(t, body); moneyRules(t, body); accountingRules(t, body); freezeVat(t, body);
         if (['quotes', 'orders', 'surveys', 'kitchens'].includes(t)) linkCustomer(body);
-        if (t === 'customers') { if (!String(body.name || '').trim()) throw bad('Enter the customer name.'); body.code = nextCustomerCode(); body.active = body.active ?? 1; }
+        if (t === 'customers') { if (!String(body.name || '').trim()) throw bad('Enter the customer name.'); body.code = nextCustomerCode(); body.active = body.active ?? 1; if (Array.isArray(body.locations) && body.locations.length) { body.address = body.locations[0].address || ''; body.gps = body.locations[0].gps || ''; } else if (body.address || body.gps) body.locations = [{ label: '', address: body.address || '', gps: body.gps || '' }]; }
         if (t === 'tasks') { body.status = body.status || 'todo'; body.progress = body.progress ?? 0; body.created_by = user.id; }
         if (worker && t === 'stock') { delete body.unit_cost; if (body.kind === 'leftover' && body.profile_id) { const pr = getRow('profiles', Number(body.profile_id)); body.unit_cost = pr && pr.bar_length > 0 ? Math.round((pr.price_bar / pr.bar_length) * (body.length || 0) * ((getSetting('leftover_pct') ?? 60) / 100) * 1000) / 1000 : 0; } }
         if (t === 'quotes') { body.prepared_by = user.name; quoteApproval(body, null, user); } // always the signed-in user
@@ -588,7 +604,7 @@ async function api(req, res, url) {
     }
     if (id && m === 'PUT') {
       const cur = getRow(t, id); if (!cur || !visible(cur)) return send(res, 404, { error: 'Not found' });
-      const body = await readJson(req); checkRef(t, body, cur); moneyRules(t, body, cur); accountingRules(t, body, cur); if (['quotes', 'orders', 'surveys', 'kitchens'].includes(t)) linkCustomer(body, cur); if (t === 'customers') delete body.code; // the customer number never changes if (worker) delete body.unit_cost;
+      const body = await readJson(req); checkRef(t, body, cur); moneyRules(t, body, cur); accountingRules(t, body, cur); if (['quotes', 'orders', 'surveys', 'kitchens'].includes(t)) linkCustomer(body, cur); if (t === 'customers') { delete body.code; if (Array.isArray(body.locations)) { body.locations = body.locations.filter((l) => String(l.address || '').trim() || l.gps).map((l) => ({ label: String(l.label || '').trim(), address: String(l.address || '').trim(), gps: String(l.gps || '').trim() })); body.address = body.locations[0]?.address || ''; body.gps = body.locations[0]?.gps || ''; } } // the customer number never changes; the main address is the first location if (worker) delete body.unit_cost;
       if (t === 'overtime' && 'status' in body) need(role === 'admin'); // only the admin approves overtime
       if (t === 'tasks' && 'hidden' in body) { need(role === 'admin'); body.hidden = body.hidden ? 1 : 0; } // only an admin hides or shows tasks
       if (t === 'tasks') { if (body.status === 'done' && cur.status !== 'done') { body.done_at = new Date().toISOString(); body.progress = 100; } else if (body.status && body.status !== 'done' && cur.status === 'done') body.done_at = null; }

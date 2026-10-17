@@ -77,7 +77,7 @@ async function editor(el, id) {
     <label class="field"><span>Date</span><input id="date" type="date" value="${esc(q.date)}"></label>
     <label class="field"><span>Client <small id="custno" class="muted"></small></span><input id="client" list="dl-clients" value="${esc(q.client)}" autocomplete="off"></label>
     <label class="field"><span>Mobile</span><input id="mobile" value="${esc(q.mobile)}"></label>
-    <label class="field"><span>Site</span><input id="site" value="${esc(q.site)}"></label>
+    <label class="field"><span>Site <select id="locpick" hidden style="margin-left:6px;font-size:12px;max-width:180px" title="This customer's saved locations"></select></span><input id="site" value="${esc(q.site)}"></label>
     ${gpsRow('gps', q.gps)}
     <label class="field"><span>Client VAT No. (for tax invoice)</span><input id="client_vat" value="${esc(q.client_vat || '')}"></label>
     <label class="field"><span>Colour (whole quotation)</span><select id="colour"><option value="">— not set —</option>${(S.settings.colours || []).map((c) => `<option ${q.colour === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label>
@@ -267,7 +267,9 @@ async function editor(el, id) {
     const customers = await api.get('t/customers').catch(() => []); const nm = (x) => String(x || '').trim().toLowerCase().replace(/\s+/g, ' ');
     const find = () => customers.find((c) => nm(c.name) === nm($('#client', el).value)); const chip = () => { const c = find(); $('#custno', el).innerHTML = c ? `· <a href="#/customers/${c.id}">${esc(c.code)}</a>` : $('#client', el).value.trim() ? '· new customer' : ''; };
     const dl = $('#dl-clients', el); if (dl) dl.innerHTML = [...new Set([...customers.map((c) => c.name), ...clients])].map((n) => `<option value="${esc(n)}">`).join('');
-    $('#client', el).addEventListener('input', chip); $('#client', el).addEventListener('change', () => { const c = find(); if (c) { if (!$('#mobile', el).value && c.mobile) $('#mobile', el).value = c.mobile; if (!$('#site', el).value && c.address) $('#site', el).value = c.address; if (!$('#gps', el).value && c.gps) { $('#gps', el).value = c.gps; $('#gps', el).dispatchEvent(new Event('change')); } if (!$('#client_vat', el).value && c.vat_no) $('#client_vat', el).value = c.vat_no; } chip(); }); chip();
+    const pick = $('#locpick', el); const fillPick = () => { const c = find(); const ls = c ? (Array.isArray(c.locations) && c.locations.length ? c.locations : c.address ? [{ label: '', address: c.address, gps: c.gps || '' }] : []) : []; pick.hidden = ls.length < 2; pick.innerHTML = '<option value="">📍 saved locations…</option>' + ls.map((l, i) => `<option value="${i}">${esc(l.label || l.address || 'Site ' + (i + 1))}${l.label && l.address ? ' — ' + esc(l.address) : ''}</option>`).join(''); pick._ls = ls; };
+    pick.addEventListener('change', () => { const l = pick._ls?.[Number(pick.value)]; if (!l) return; $('#site', el).value = l.address || ''; $('#site', el).dispatchEvent(new Event('input')); $('#gps', el).value = l.gps || ''; $('#gps', el).dispatchEvent(new Event('change')); pick.value = ''; });
+    $('#client', el).addEventListener('input', () => { chip(); fillPick(); }); $('#client', el).addEventListener('change', () => { fillPick(); const c = find(); if (c) { if (!$('#mobile', el).value && c.mobile) $('#mobile', el).value = c.mobile; if (!$('#site', el).value && c.address) $('#site', el).value = c.address; if (!$('#gps', el).value && c.gps) { $('#gps', el).value = c.gps; $('#gps', el).dispatchEvent(new Event('change')); } if (!$('#client_vat', el).value && c.vat_no) $('#client_vat', el).value = c.vat_no; } chip(); }); chip(); fillPick();
   }
   wireGps(el, 'gps', '#site');
   const collect = () => ({

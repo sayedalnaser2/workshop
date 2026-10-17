@@ -46,7 +46,7 @@ export const SCHEMA = {
   task_logs: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', ts: 'TEXT', kind: 'TEXT', text: 'TEXT', progress: 'REAL', minutes: 'REAL' }, order: 'ts DESC' },
   task_sessions: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', started: 'TEXT', ended: 'TEXT', kind: 'TEXT' }, order: 'started DESC' },
   employee_docs: { cols: { employee_id: 'INTEGER', type: 'TEXT', number: 'TEXT', expiry: 'TEXT', file_name: 'TEXT', file_path: 'TEXT', note: 'TEXT' }, order: 'expiry' },
-  customers: { cols: { code: 'TEXT', name: 'TEXT', mobile: 'TEXT', mobile2: 'TEXT', email: 'TEXT', address: 'TEXT', gps: 'TEXT', vat_no: 'TEXT', note: 'TEXT', active: 'INTEGER' }, order: 'id DESC' },
+  customers: { cols: { code: 'TEXT', name: 'TEXT', mobile: 'TEXT', mobile2: 'TEXT', email: 'TEXT', address: 'TEXT', gps: 'TEXT', locations: 'JSON', vat_no: 'TEXT', note: 'TEXT', active: 'INTEGER' }, order: 'id DESC' },
   customer_credits: { cols: { client: 'TEXT', mobile: 'TEXT', amount: 'REAL', used: 'REAL', date: 'TEXT', expires: 'TEXT', order_inv: 'TEXT', note: 'TEXT', status: 'TEXT', log: 'JSON' }, order: 'date DESC, id DESC' },
   credit_notes: { cols: { no: 'TEXT', date: 'TEXT', order_inv: 'TEXT', client: 'TEXT', client_vat: 'TEXT', lines: 'JSON', vat_rate: 'REAL', net: 'REAL', vat: 'REAL', total: 'REAL', reason: 'TEXT', status: 'TEXT', requested_by: 'TEXT', approval_note: 'TEXT' }, order: 'date DESC, id DESC' },
   events: { cols: { date: 'TEXT', end_date: 'TEXT', start: 'TEXT', end: 'TEXT', kind: 'TEXT', title: 'TEXT', order_inv: 'TEXT', quote_no: 'TEXT', client: 'TEXT', site: 'TEXT', mobile: 'TEXT', team: 'JSON', status: 'TEXT', note: 'TEXT' }, order: 'date, start' },
