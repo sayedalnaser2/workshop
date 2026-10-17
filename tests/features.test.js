@@ -237,7 +237,10 @@ test('VAT per line: only lines with VAT are taxed, the discount is shared over t
 
 test('kitchens: door directions, L-corner, slots in tall units, appliance gaps, shelves and open cabinets', async () => {
   const { kitchenModel, cabinetParts, slotsOf } = await import('../public/js/kitchen.js');
-  const { scene, frontsOf, placeRuns } = await import('../public/js/kitchen-3d.js');
+  const { scene, frontsOf, placeRuns, runStarts } = await import('../public/js/kitchen-3d.js');
+  const room = { runs: [{ cabinets: [{ type: 'base', w: 60 }, { type: 'tall', w: 60 }, { type: 'base', w: 60 }] }, { cabinets: [{ type: 'wall', w: 60 }, { type: 'wall', w: 60 }, { type: 'wall', w: 60 }] }] };
+  assert.deepEqual(runStarts(room, 1), [0, 120, 180]); // wall units slide past the tall unit instead of crossing it
+  assert.deepEqual(runStarts(room, 0), [0, 60, 120]);
   const mk = (cab) => cabinetParts({ w: 60, h: 72, d: 56, ...cab });
   assert.equal(mk({ type: 'base', doors: 1, dir: 'slide' }).hw.tracks, 1); assert.equal(mk({ type: 'base', doors: 1, dir: 'slide' }).hw.hinges, 0);
   assert.equal(mk({ type: 'base', doors: 2, dir: 'up' }).hw.lifts, 2);

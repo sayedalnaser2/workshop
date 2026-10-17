@@ -1,4 +1,4 @@
-import { scene, draw3D, pick3D, placeRuns, unproject, frontsOf } from '../kitchen-3d.js';
+import { scene, draw3D, pick3D, placeRuns, unproject, frontsOf, runStarts } from '../kitchen-3d.js';
 import { S } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, toast, guard, confirmBox, modal, formHTML, readForm, dataTable, badge, datalist } from '../ui.js';
 import { CAB_TYPES, DEFAULT_STYLE, DEFAULT_COUNTER, APPLIANCES, SLOT_KINDS, DIRS, ACCESSORIES, slotsOf, kitchenModel, priceKitchen, mergeCabinets, splitCabinet, mergeSaving } from '../kitchen.js';
@@ -283,7 +283,7 @@ async function editor(el, id, tab) {
       if (pts.size > 1) { drag = null; mv = null; const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); return; }
       const [x, y] = at(e); const hit = edit ? pick3D(cv, x, y) : null;
       if (hit) { view3d.sel = { ri: hit.ri, ci: hit.ci }; v.selected = view3d.sel; const c = cabOf(hit); const pl = placeRuns(spec)[hit.ri]; const p0 = unproject(cv, x, y, planeOf(c)); const [u0] = p0 ? uvOf(pl, p0.x, p0.z) : [0];
-        const start = spec.runs[hit.ri].cabinets.slice(0, hit.ci).reduce((a, q) => a + (+q.w || 0), 0);
+        const start = runStarts(spec, hit.ri)[hit.ci] ?? 0;
         mv = { ri: hit.ri, c, p0, u0, start, pl, whole: e.shiftKey || $('#moveRun', pane)?.checked, x: e.clientX, y: e.clientY, moved: false, y0: planeOf(c) }; panel(); go(); return; }
       drag = { x: e.clientX, y: e.clientY, yaw: v.yaw, pitch: v.pitch, moved: false };
     };
@@ -302,7 +302,7 @@ async function editor(el, id, tab) {
         spec.runs.forEach((rn, i) => { if (i === view3d.sel.ri || !rn.cabinets.length || isWallRun(rn) !== movingWall) return; const [uu, vv] = uvOf(pls[i], p.x, p.z); const len = rn.cabinets.reduce((a, q) => a + (+q.w || 0), 0); const dep = Math.max(...rn.cabinets.map((q) => +q.d || 0), 40); if (uu > -10 && uu < len + 10 && vv > -5 && vv < dep + 10) ri = i; });
         const [uu] = uvOf(pls[ri], p.x, p.z); const w = +mv.c.w || 0; const center = ri === view3d.sel.ri ? mv.start + w / 2 + (uu - mv.u0) : uu;
         const from = spec.runs[view3d.sel.ri].cabinets; const idx = from.indexOf(mv.c); if (idx >= 0) from.splice(idx, 1);
-        const dest = spec.runs[ri].cabinets; let acc = 0; let pos = 0; for (const q of dest) { if (acc + (+q.w || 0) / 2 < center) pos++; acc += +q.w || 0; }
+        const dest = spec.runs[ri].cabinets; const st0 = runStarts({ ...spec, runs: spec.runs.map((r, i) => (i === ri ? { ...r, cabinets: dest } : r)) }, ri); let pos = 0; dest.forEach((q, j) => { if (st0[j] + (+q.w || 0) / 2 < center) pos++; });
         const moved = ri !== view3d.sel.ri || pos !== idx; dest.splice(pos, 0, mv.c); view3d.sel = { ri, ci: pos }; if (moved) { for (const k2 of Object.keys(tgt)) delete tgt[k2]; for (const k2 of Object.keys(cur)) delete cur[k2]; } v.selected = view3d.sel; // open/closed states are kept per position, so they restart
         if (ri !== mv.ri) { mv.ri = ri; mv.pl = pls[ri]; mv.start = center - w / 2; mv.u0 = uu; }
         changed(); return;

@@ -19,6 +19,23 @@ export function placeRuns(spec) {
   });
 }
 
+/** Where each cabinet of a run starts (cm along the run). Wall units that hang over a base run make room for its tall units: they slide along to the right of them. */
+export function runStarts(spec, ri) {
+  const runs = spec.runs || []; const run = runs[ri]; const cabs = (run && run.cabinets) || []; const isWall = (c) => !!(CAB_TYPES[c.type] || {}).wall;
+  let blockers = [];
+  if (cabs.length && cabs.every(isWall)) {
+    const pl = placeRuns(spec); const k = runs.findIndex((r, i) => i !== ri && (r.cabinets || []).length && !r.cabinets.every(isWall) && pl[i].x === pl[ri].x && pl[i].z === pl[ri].z && pl[i].rot === pl[ri].rot);
+    if (k >= 0) { let a = 0; for (const c of runs[k].cabinets) { const w = +c.w || 0; if ((CAB_TYPES[c.type] || {}).tall) blockers.push([a, a + w]); a += w; } }
+  }
+  const out = []; let u = 0;
+  for (const c of cabs) {
+    const w = +c.w || 0;
+    for (let moved = blockers.length > 0; moved;) { moved = false; for (const [a, b] of blockers) if (u < b - 0.01 && u + w > a + 0.01) { u = b; moved = true; } }
+    out.push(u); u += w;
+  }
+  return out;
+}
+
 const dark = (hex, f) => { const n = parseInt(String(hex).replace('#', ''), 16); if (Number.isNaN(n)) return hex; const c = (sh) => Math.max(0, Math.min(255, Math.round(((n >> sh) & 255) * f))); return '#' + [16, 8, 0].map((sh) => c(sh).toString(16).padStart(2, '0')).join(''); };
 const shade = (hex, f) => { const n = parseInt(String(hex).replace('#', ''), 16); const c = (s) => Math.max(0, Math.min(255, Math.round(((n >> s) & 255) * f))); return `rgb(${c(16)},${c(8)},${c(0)})`; };
 
@@ -99,9 +116,9 @@ export function scene(spec, open = {}) {
       put(u0, u1, v - bd, v, y0, y1, BLACK, 'appl'); put(u0 + 3, u1 - 3, v, v + .5, y0 + 3, y1 - (k === 'oven' ? 9 : 4), GLASSY, 'appl');
       put(u0 + 4, u1 - 4, v, v + 2.2, y1 - (k === 'oven' ? 7 : 3.4), y1 - (k === 'oven' ? 5.8 : 2.4), '#9aa1aa', 'appl');
     };
-    let u = 0;
+    let u = 0; const starts = runStarts(spec, ri);
     for (const [ci, c] of (run.cabinets || []).entries()) {
-      curCi = ci;
+      curCi = ci; u = starts[ci] ?? u;
       const t = CAB_TYPES[c.type] || CAB_TYPES.base; const w = +c.w || 0; const h = +c.h || 0; const d = +c.d || 0;
       const y0 = t.wall ? (c.y !== undefined && c.y !== '' && Number.isFinite(+c.y) ? +c.y : style.wall_height) : t.tall ? 0 : style.plinth;
       if (t.gap) {
