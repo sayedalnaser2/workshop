@@ -24,7 +24,8 @@ export const DIRS = { auto: 'Automatic', left: 'Hinged left', right: 'Hinged rig
 export const ACCESSORIES = { tap: ['Tap / mixer', true], bin: ['Pull-out waste bin', false], cutlery: ['Cutlery tray', false], pullout: ['Pull-out basket', false], lights: ['LED light strip', true], rail: ['Rail with hooks', true], spice: ['Spice rack', false], lazy: ['Lazy-susan carousel', false], soft: ['Soft-close set', false] };
 /** Does a floor unit stand on a skirting (plinth) with legs? Base units do by default and tall units do not; cab.skirt overrides it either way. Wall units, appliance gaps, shelves and hoods never. */
 export function hasSkirt(cab) {
-  const t = CAB_TYPES[cab.type] || CAB_TYPES.base; if (t.wall || t.gap || t.shelf || t.hood) return false;
+  const t = CAB_TYPES[cab.type] || CAB_TYPES.base; if (t.wall || t.shelf || t.hood) return false;
+  if (t.gap) return cab.skirt === true || cab.skirt === 1 || cab.skirt === '1' || cab.skirt === 'true'; // an appliance stands on the floor unless asked to sit on a skirting
   if (cab.skirt === undefined || cab.skirt === null || cab.skirt === '') return !t.tall;
   return cab.skirt === true || cab.skirt === 1 || cab.skirt === '1' || cab.skirt === 'true';
 }
@@ -87,7 +88,11 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   const type = CAB_TYPES[cab.type] || CAB_TYPES.base;
   const panels = []; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0, shutters: 0 }; const glass = []; const frames = []; const appliances = []; const acc = {};
   const alu = s.kind === 'aluminium'; const fw = +s.frame_w || 4.5;
-  if (type.gap) { if (cab.appliance) appliances.push({ k: cab.appliance, w: W, h: H, d: D }); return { panels, hw, glass, frames, appliances, acc }; }
+  if (type.gap) {
+    if (cab.appliance) appliances.push({ k: cab.appliance, w: W, h: H, d: D });
+    if (W > 0 && hasSkirt(cab)) { const tag = cab.label ? `${cab.label} · ` : ''; const add2 = (label, w, h, qty, mat, edge) => panels.push({ label, w, h, qty, mat, edge }); if (s.plinth_profile) add2(`${tag}Skirting`, W - 2, s.plinth, 1, 'skirt', 0); else add2(`${tag}Skirting`, W - 2, s.plinth, 1, 'carcass', W - 2); hw.legs += 4; }
+    return { panels, hw, glass, frames, appliances, acc };
+  }
   if (!(W > 0 && H > 0 && D > 0)) return { panels, hw, glass, frames, appliances, acc };
   const add = (label, w, h, qty, mat, edge = 0) => { if (qty > 0 && w > 0 && h > 0) panels.push({ label, w: r1(w), h: r1(h), qty, mat, edge: r1(edge) }); };
   // an aluminium kitchen: every door / drawer front is a profile frame with an infill panel (or glass) set in it

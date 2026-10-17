@@ -32,7 +32,7 @@ export function runStarts(spec, ri) {
       for (const c of runs[k].cabinets) {
         const t = CAB_TYPES[c.type] || {}; const w = +c.w || 0; const h = +c.h || 0;
         const floorStanding = t.tall || (t.gap && ['fridge', 'freezer'].includes(c.appliance)); // a tall unit or a fridge starts at the floor
-        const base0 = t.gap ? (floorStanding ? 0 : style.plinth) : hasSkirt(c) ? style.plinth : 0; const top = base0 + h + (t.counter ? ct : 0);
+        const base0 = t.gap ? (hasSkirt(c) ? style.plinth : 0) : hasSkirt(c) ? style.plinth : 0; const top = base0 + h + (t.counter ? ct : 0);
         blockers.push([a, a + w, top]); a += w;
       }
     }
@@ -134,7 +134,8 @@ export function scene(spec, open = {}) {
       const skirt = hasSkirt(c); const y0 = t.wall ? (c.y !== undefined && c.y !== '' && Number.isFinite(+c.y) ? +c.y : style.wall_height) : skirt ? style.plinth : 0;
       if (t.gap) {
         curFront = null;
-        if (c.appliance && APPLIANCES[c.appliance]) appliance(c.appliance, u + .5, u + w - .5, c.appliance === 'fridge' || c.appliance === 'freezer' ? 0 : style.plinth, c.appliance === 'fridge' || c.appliance === 'freezer' ? Math.min(h, 200) : Math.min(h, APPLIANCES[c.appliance][1] + style.plinth), d - 2, d - 2);
+        if (c.appliance && APPLIANCES[c.appliance]) appliance(c.appliance, u + .5, u + w - .5, hasSkirt(c) ? style.plinth : 0, c.appliance === 'fridge' || c.appliance === 'freezer' ? Math.min(h, 200) : Math.min(h, APPLIANCES[c.appliance][1] + (hasSkirt(c) ? style.plinth : 0)), d - 2, d - 2);
+        if (hasSkirt(c)) put(u + 1, u + w - 1, 4, d - 4, 0, style.plinth, '#6f7885', 'plinth');
         u += w; continue;
       }
       if (t.shelf) { for (let q = 0; q < shelfCount(c); q++) { const ys = y0 + q * (h + shelfGap(c)); put(u, u + w, 0, d, ys, ys + h, '#d9c9a8', 'carcass'); } u += w; continue; }

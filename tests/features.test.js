@@ -295,3 +295,12 @@ test('kitchens: every appliance has a name and height, dryer included', async ()
   const m = kitchenModel({ runs: [{ cabinets: [{ type: 'gap', w: 60, h: 90, d: 60, appliance: 'dryer' }] }] });
   assert.ok(m.appliances.some((a) => a.k === 'dryer'));
 });
+
+test('kitchens: appliances stand on the floor unless a skirting is asked for', async () => {
+  const { kitchenModel, hasSkirt } = await import('../public/js/kitchen.js');
+  const g = { type: 'gap', w: 60, h: 85, d: 60, appliance: 'dishwasher' };
+  assert.equal(hasSkirt(g), false); assert.equal(hasSkirt({ ...g, skirt: true }), true);
+  const on = kitchenModel({ runs: [{ cabinets: [{ ...g, skirt: true }] }] });
+  assert.ok(on.panels.carcass.some((p) => p.label.endsWith('Skirting'))); assert.equal(on.hw.legs, 4);
+  assert.equal(kitchenModel({ runs: [{ cabinets: [g] }] }).panels.carcass.length, 0);
+});

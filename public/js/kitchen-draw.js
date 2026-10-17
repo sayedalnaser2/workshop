@@ -13,7 +13,7 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
   const dh = colourHex(style.door_colour); const FILL2 = dh || FILL2_; const FILL = dh ? lighten(dh, .35) : FILL_; const GLASS = style.glass ? glassHex(style.glass) : GLASS_; const TOP = stoneHex(spec.counter?.material);
   const widest = Math.max(...runs.map((r) => r.cabinets.reduce((a, c) => a + (+c.w || 0), 0)), 100);
   const k = Math.min(2.4, (maxW - 60) / widest); const padL = 34;
-  const floorOf = (t, c = {}) => (t.wall ? (c.y !== undefined && c.y !== '' && Number.isFinite(+c.y) ? +c.y : style.wall_height) : t.gap ? 0 : hasSkirt(c) ? style.plinth : 0); // cm from the floor to the carcass bottom
+  const floorOf = (t, c = {}) => (t.wall ? (c.y !== undefined && c.y !== '' && Number.isFinite(+c.y) ? +c.y : style.wall_height) : hasSkirt(c) ? style.plinth : 0); // cm from the floor to the carcass bottom
   let y0 = 0; let out = '';
   for (const run of runs) {
     // each run only gets the height it needs: a row of wall units is drawn without the empty wall below it
@@ -26,7 +26,7 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
     for (const c of run.cabinets) {
       const t = CAB_TYPES[c.type] || CAB_TYPES.base; const w = (+c.w || 0) * k; const h = (+c.h || 0) * k;
       const yTop = base - (floorOf(t, c) - bottom) * k - h;
-      if (t.gap && c.appliance && APPLIANCES[c.appliance]) { out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="#dfe3e8" stroke="${INK}" stroke-width="1.2"/><text x="${x + w / 2}" y="${yTop + h / 2}" font-size="10" text-anchor="middle" fill="${INK}">${esc(APPLIANCES[c.appliance][0])}</text><text x="${x + w / 2}" y="${base + 14}" font-size="10" text-anchor="middle" fill="currentColor">${+c.w || 0}</text>`; x += w; continue; }
+      if (t.gap && c.appliance && APPLIANCES[c.appliance]) { out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="#dfe3e8" stroke="${INK}" stroke-width="1.2"/><text x="${x + w / 2}" y="${yTop + h / 2}" font-size="10" text-anchor="middle" fill="${INK}">${esc(APPLIANCES[c.appliance][0])}</text><text x="${x + w / 2}" y="${base + 14}" font-size="10" text-anchor="middle" fill="currentColor">${+c.w || 0}</text>`; if (hasSkirt(c)) out += `<rect x="${x}" y="${yTop + h}" width="${w}" height="${style.plinth * k}" fill="#8b95a3"/>`; x += w; continue; }
       if (t.gap) { out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="none" stroke="${INK}" stroke-dasharray="4 3" stroke-width="1"/><text x="${x + w / 2}" y="${yTop + h / 2}" font-size="10" text-anchor="middle" fill="currentColor">appliance</text>`; x += w; continue; }
       out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="${FILL}" stroke="${INK}" stroke-width="1.2"/>`;
       const doors = t.corner ? 1 : Math.max(0, Math.round(+c.doors || 0)); const drawers = Math.max(0, Math.round(+c.drawers || 0)); const glazed = Math.min(doors, Math.round(+c.glazed || 0));
