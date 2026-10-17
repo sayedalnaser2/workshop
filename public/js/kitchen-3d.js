@@ -126,7 +126,7 @@ export function scene(spec, open = {}) {
           put(right ? u + w - T : u, right ? u + w : u + T, 0, w, y0, y0 + h, carcass, 'carcass');
           for (const yy of [y0, y0 + h - T]) { put(u + T, u + w - T, 0, d, yy, yy + T, inner, 'carcass'); if (w > d) put(lb[0] + (right ? 0 : T), lb[1] - (right ? T : 0), d, w, yy, yy + T, inner, 'carcass'); }
           const sh = Math.round(+c.shelves || 0); for (let i = 1; i <= sh; i++) { const yy = y0 + (h * i) / (sh + 1); put(u + T, u + w - T, 1, d - 3, yy, yy + 1.2, inner, 'carcass'); if (w > d) put(lb[0] + (right ? 0 : T), lb[1] - (right ? T : 0), d - 3, w - 1, yy, yy + 1.2, inner, 'carcass'); }
-        } else { put(u, u + w, 0, d, y0, y0 + h, carcass, 'carcass'); if (w > d) put(lb[0], lb[1], d, w, y0, y0 + h, carcass, 'carcass'); }
+        } else { put(u, u + w, 0, d, y0, y0 + h, carcass, 'carcass'); boxes.at(-1).solid = true; if (w > d) { put(lb[0], lb[1], d, w, y0, y0 + h, carcass, 'carcass'); boxes.at(-1).solid = true; } }
         if (!t.wall) { put(u + 1, u + w - 1, 4, d - 4, 0, style.plinth, '#6f7885', 'plinth'); if (w > d) put(lb[0] + 1, lb[1] - 1, d, w - 4, 0, style.plinth, '#6f7885', 'plinth'); }
         const gl0 = glazed > 0; const dwA = w - d; const fo0 = fOpen('f0'); const fo1 = fOpen('f1');
         // front door on the long leg
@@ -145,7 +145,7 @@ export function scene(spec, open = {}) {
         put(u, u + w, 0, 1, y0, y0 + h, carcass, 'carcass'); put(u, u + T, 0, d, y0, y0 + h, carcass, 'carcass'); put(u + w - T, u + w, 0, d, y0, y0 + h, carcass, 'carcass');
         put(u + T, u + w - T, 0, d, y0, y0 + T, inner, 'carcass'); put(u + T, u + w - T, 0, d, y0 + h - T, y0 + h, inner, 'carcass');
         if (!slots) { const sh = Math.round(+c.shelves || 0); for (let i = 1; i <= sh; i++) put(u + T, u + w - T, 1, d - 3, y0 + (h * i) / (sh + 1), y0 + (h * i) / (sh + 1) + 1.2, inner, 'carcass'); }
-      } else put(u, u + w, 0, d, y0, y0 + h, carcass, 'carcass');
+      } else { put(u, u + w, 0, d, y0, y0 + h, carcass, 'carcass'); boxes.at(-1).solid = true; }
       if (!t.wall && !t.tall) put(u + 1, u + w - 1, 4, d - 4, 0, style.plinth, '#6f7885', 'plinth');
       const zn = zonesOf(c);
       if (slots) { // stacked slots from the floor up
@@ -237,7 +237,8 @@ export function draw3D(canvas, boxes, view = {}) {
       const pts = q.map((c) => cam(...c)); const nc = rot(n[0], n[1], n[2]); // back-face culling with the true normal
       if (nc[0] * pts[0][0] + nc[1] * pts[0][1] + nc[2] * pts[0][2] >= 0) continue;
       const light = n[1] > 0.5 ? 1.08 : n[1] < -0.5 ? .6 : 0.78 + 0.17 * Math.abs(n[2]);
-      faces.push({ pts, depth: pts.reduce((a, p) => a + p[2], 0) / 4, fill: shade(b.color, light), ref: b.ref, kind: b.kind, on: same(b.ref, sel) ? 2 : same(b.ref, hov) ? 1 : 0 });
+      faces.push({ pts, depth: pts.reduce((a, p) => a + p[2], 0) / 4 + (b.solid ? 35 : 0), // a solid cabinet body is drawn as if a little farther away, so its doors and drawers always land on top of its big front face
+         fill: shade(b.color, light), ref: b.ref, kind: b.kind, on: same(b.ref, sel) ? 2 : same(b.ref, hov) ? 1 : 0 });
     }
   }
   faces.sort((a, b) => b.depth - a.depth);
