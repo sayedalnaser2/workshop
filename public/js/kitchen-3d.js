@@ -237,7 +237,7 @@ export function draw3D(canvas, boxes, view = {}) {
       const pts = q.map((c) => cam(...c)); const nc = rot(n[0], n[1], n[2]); // back-face culling with the true normal
       if (nc[0] * pts[0][0] + nc[1] * pts[0][1] + nc[2] * pts[0][2] >= 0) continue;
       const light = n[1] > 0.5 ? 1.08 : n[1] < -0.5 ? .6 : 0.78 + 0.17 * Math.abs(n[2]);
-      faces.push({ pts, depth: pts.reduce((a, p) => a + p[2], 0) / 4 + (b.solid ? 35 : 0), // a solid cabinet body is drawn as if a little farther away, so its doors and drawers always land on top of its big front face
+      faces.push({ pts, depth: pts.reduce((a, p) => a + p[2], 0) / 4 + (b.solid || b.kind === "plinth" ? 35 : 0), // a solid cabinet body (and its plinth, which sits under it) is drawn as if a little farther away, so its doors and drawers always land on top of its big front face
          fill: shade(b.color, light), ref: b.ref, kind: b.kind, on: same(b.ref, sel) ? 2 : same(b.ref, hov) ? 1 : 0 });
     }
   }
