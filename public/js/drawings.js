@@ -13,7 +13,10 @@ export const KINDS = {
 const COLOUR_HEX = { white: '#f2f2ee', brown: '#6b4a2f', black: '#2a2c30', bronze: '#8c6a3d', silver: '#c4cad1', wood: '#a5733b', grey: '#8a8f98', gray: '#8a8f98', gold: '#c9a227', champagne: '#d9c7a1', 'dark grey': '#555a63', natural: '#d8dadd', beige: '#d8c9a8', cream: '#ece3cf', blue: '#3f6fa8', green: '#4f7a5c', red: '#b5483c' };
 export const HAND_KINDS = ['hinged1', 'door1', 'shower_door'];
 export const SWING_KINDS = ['hinged1', 'hinged2', 'bottom', 'tilt', 'door1', 'door2', 'shower_door', 'folding'];
-export const colourHex = (name) => { const n = String(name || '').toLowerCase().trim(); if (!n) return ''; return COLOUR_HEX[n] || Object.entries(COLOUR_HEX).find(([k]) => n.includes(k))?.[1] || ''; };
+/** The shop's own colours (name + code from the Colours page) take precedence over the built-in look. */
+let CUSTOM = new Map();
+export function setColourDefs(list) { CUSTOM = new Map((list || []).filter((x) => x && x.name && /^#[0-9a-f]{6}$/i.test(x.hex || '')).map((x) => [String(x.name).toLowerCase().trim(), String(x.hex).toLowerCase()])); }
+export const colourHex = (name) => { const n = String(name || '').toLowerCase().trim(); if (!n) return ''; if (CUSTOM.has(n)) return CUSTOM.get(n); return COLOUR_HEX[n] || Object.entries(COLOUR_HEX).find(([k]) => n.includes(k))?.[1] || ''; };
 export const GLASS_HEX = [[/mirror/, '#e6eef3'], [/reflect/, '#8fb7bf'], [/tint|dark/, '#7f9bad'], [/bronze/, '#b79a7c'], [/grey|gray/, '#97a3ab'], [/sandblast|frost|obscure|satin|acid/, '#eef2f4'], [/lamin/, '#c4dfec'], [/double|insul/, '#bddcee'], [/tempered/, '#cde6f4']];
 export const glassHex = (name) => { const n = String(name || '').toLowerCase(); return (GLASS_HEX.find(([re]) => re.test(n)) || [0, '#cfe6f7'])[1]; };
 const STONE_HEX = [[/black|galaxy|nero|marquina/, '#2b2d33'], [/white|carrara|calacatta|statuario|snow/, '#e9e7e2'], [/grey|gray|ash|concrete/, '#8a8d93'], [/beige|cream|crema|travertine|sand/, '#d8c9a8'], [/brown|emperador|coffee|chocolate/, '#6b4a3a'], [/green|verde/, '#4f6b58'], [/red|rosso/, '#8c3b34'], [/blue|azul/, '#3f5f86']];

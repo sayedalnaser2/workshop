@@ -11,14 +11,14 @@ const AA = ['admin', 'account'];
 const AS = ['admin', 'account', 'sales'];
 export const PAGE_ROLES = {
   dashboard: ALL, quotes: AS, orders: AS, receipts: AA, statements: AS, models: ALL, cutting: ALL, stock: ALL, materials: AA, prices: AS,
-  mytasks: ['admin', 'account', 'worker'], tasks: AS, activity: AA, kitchens: ALL, pos: AA, suppliers: AA, purchases: AA, cashbank: AA, payments: AA, employees: AA, reports: AA, settings: ['admin'], users: ['admin'],
+  mytasks: ['admin', 'account', 'worker'], tasks: AS, activity: AA, kitchens: ALL, pos: AA, suppliers: AA, purchases: AA, cashbank: AA, payments: AA, employees: AA, reports: AA, settings: ['admin'], colours: ['admin'], users: ['admin'],
   calendar: ALL, surveys: ALL, credits: AS, customers: AS, supstatements: AA, accstatement: AA, vatitems: AA, novatitems: AA, journals: AA, coa: AA, trialbalance: AA, creditnotes: AA, approvals: AA, audit: ['admin'], targets: ALL, about: ALL,
 };
 /** Pages whose access can never be handed out: only an admin gets them. */
-export const LOCKED_PAGES = ['users', 'settings', 'audit'];
+export const LOCKED_PAGES = ['users', 'settings', 'audit', 'colours'];
 export const PAGE_LABELS = {
   dashboard: 'Dashboard', quotes: 'Quotations', orders: 'Orders & Invoices', creditnotes: 'Credit Notes', receipts: 'Customer Receipts', statements: 'Account Statements',
-  surveys: 'Site Surveys', credits: 'Customer Credit', customers: 'Customers', mytasks: 'My Tasks', tasks: 'Tasks', calendar: 'Calendar', targets: 'Targets & Prizes', activity: 'Worker Activity',
+  surveys: 'Site Surveys', credits: 'Customer Credit', colours: 'Colours', customers: 'Customers', mytasks: 'My Tasks', tasks: 'Tasks', calendar: 'Calendar', targets: 'Targets & Prizes', activity: 'Worker Activity',
   models: 'Models', kitchens: 'Kitchens', cutting: 'Cutting List & Glass', stock: 'Stock & Leftovers', materials: 'Profiles, Glass & Accessories', prices: 'Price List',
   pos: 'Purchase Orders', supstatements: 'Supplier Statements', accstatement: 'Account Statement', vatitems: 'Items with VAT', novatitems: 'Items without VAT', journals: 'Journal Vouchers', coa: 'Chart of Accounts', trialbalance: 'Trial Balance & Reports', suppliers: 'Suppliers & Catalogue', cashbank: 'Cash & Bank', payments: 'Payment Vouchers', employees: 'Employees', reports: 'Reports', approvals: 'Approvals', about: 'About Us',
 };

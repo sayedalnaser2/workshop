@@ -1,5 +1,6 @@
 import { api, $, $$, toast, esc, modal, formHTML, readForm, guard } from './ui.js';
 import { ROLES, canPage } from './perm.js';
+import { setColourDefs } from './drawings.js';
 import { initI18n, isAr, setLang } from './i18n.js';
 
 initI18n();
@@ -7,7 +8,7 @@ for (const id of ['langBtn', 'loginLang']) { const b = document.getElementById(i
 
 // Shared state, loaded once and refreshed after edits to the library tables.
 export const S = { me: null, settings: {}, price_items: [], profiles: [], accessories: [], glass_types: [], models: [], employees: [], next: {} };
-export async function refresh() { Object.assign(S, await api.get('bootstrap')); }
+export async function refresh() { Object.assign(S, await api.get('bootstrap')); setColourDefs(S.settings?.colour_defs); }
 
 const ROUTES = [
   { path: '', title: 'Dashboard', icon: '▦', mod: 'dashboard' },
@@ -56,6 +57,7 @@ const ROUTES = [
   { path: 'audit', title: 'Audit Trail', icon: '☷', mod: 'audit' },
   { path: 'users', title: 'Users', icon: '⚿', mod: 'users' },
   { path: 'about', title: 'About Us', icon: 'ℹ', mod: 'about' },
+  { path: 'colours', title: 'Colours', icon: '🎨', mod: 'colours' },
   { path: 'settings', title: 'Settings', icon: '⚙', mod: 'settings' },
 ];
 
@@ -97,6 +99,7 @@ const PAGES = {
   creditnotes: () => import('./pages/creditnotes.js'),
   credits: () => import('./pages/credits.js'),
   customers: () => import('./pages/customers.js'),
+  colours: () => import('./pages/colours.js'),
   surveys: () => import('./pages/surveys.js'),
   targets: () => import('./pages/targets.js'),
   cashbank: () => import('./pages/cashbank.js'),
@@ -162,7 +165,7 @@ async function boot() {
   S.me = me.user; buildNav();
   loginEl.hidden = true; appEl.hidden = false;
   const first = ROUTES.find((x) => !x.group && x.path === location.hash.replace(/^#\/?/, '').split('/')[0]) || ROUTES[0]; PAGES[first.mod]?.().catch(() => {});
-  const data = await early; if (data) Object.assign(S, data); else await refresh();
+  const data = await early; if (data) { Object.assign(S, data); setColourDefs(S.settings?.colour_defs); } else await refresh();
   route();
 }
 function showLogin(needsSetup) {

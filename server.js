@@ -102,7 +102,7 @@ function redact(table, r) {
   }
 }
 const bootstrap = (user = { role: 'admin' }) => user.role === 'worker' && !seesMoney(user) ? ({
-  settings: Object.fromEntries(['colours', 'bar_kerf', 'min_offcut', 'leftover_pct'].map((k) => [k, getSetting(k)]).concat([['company', { name: getSetting('company')?.name }]])),
+  settings: Object.fromEntries(['colours', 'colour_defs', 'bar_kerf', 'min_offcut', 'leftover_pct'].map((k) => [k, getSetting(k)]).concat([['company', { name: getSetting('company')?.name }]])),
   price_items: [], profiles: listRows('profiles').map((r) => redact('profiles', r)), accessories: listRows('accessories').map((r) => redact('accessories', r)),
   glass_types: listRows('glass_types').map((r) => redact('glass_types', r)), models: listRows('models'), employees: [], next: {},
 }) : ({
