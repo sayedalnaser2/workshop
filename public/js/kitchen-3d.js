@@ -1,6 +1,6 @@
 // 3D view of a kitchen: cabinets become boxes, a small painter's-algorithm renderer draws them on a canvas.
 // scene() is pure (tested); draw3D() needs a canvas. All sizes in cm; x = right, y = up, z = towards the viewer (the back wall is z = 0).
-import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, slotsOf, zonesOf, shelfCount, shelfGap } from './kitchen.js';
+import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, slotsOf, zonesOf, shelfCount, shelfGap, hasSkirt } from './kitchen.js';
 import { colourHex, stoneHex } from './drawings.js';
 
 /** Where each run stands: { x, z, rot } with rot 0/90/180/270. Run 1 = back wall, 2 = left wall, 3 = right wall, islands in front. */
@@ -32,7 +32,7 @@ export function runStarts(spec, ri) {
       for (const c of runs[k].cabinets) {
         const t = CAB_TYPES[c.type] || {}; const w = +c.w || 0; const h = +c.h || 0;
         const floorStanding = t.tall || (t.gap && ['fridge', 'freezer'].includes(c.appliance)); // a tall unit or a fridge starts at the floor
-        const top = floorStanding ? h : t.gap ? style.plinth + h : style.plinth + h + (t.counter ? ct : 0);
+        const base0 = t.gap ? (floorStanding ? 0 : style.plinth) : hasSkirt(c) ? style.plinth : 0; const top = base0 + h + (t.counter ? ct : 0);
         blockers.push([a, a + w, top]); a += w;
       }
     }
@@ -131,7 +131,7 @@ export function scene(spec, open = {}) {
     for (const [ci, c] of (run.cabinets || []).entries()) {
       curCi = ci; u = starts[ci] ?? u;
       const t = CAB_TYPES[c.type] || CAB_TYPES.base; const w = +c.w || 0; const h = +c.h || 0; const d = +c.d || 0;
-      const y0 = t.wall ? (c.y !== undefined && c.y !== '' && Number.isFinite(+c.y) ? +c.y : style.wall_height) : t.tall ? 0 : style.plinth;
+      const skirt = hasSkirt(c); const y0 = t.wall ? (c.y !== undefined && c.y !== '' && Number.isFinite(+c.y) ? +c.y : style.wall_height) : skirt ? style.plinth : 0;
       if (t.gap) {
         curFront = null;
         if (c.appliance && APPLIANCES[c.appliance]) appliance(c.appliance, u + .5, u + w - .5, c.appliance === 'fridge' || c.appliance === 'freezer' ? 0 : style.plinth, c.appliance === 'fridge' || c.appliance === 'freezer' ? Math.min(h, 200) : Math.min(h, APPLIANCES[c.appliance][1] + style.plinth), d - 2, d - 2);
@@ -155,7 +155,7 @@ export function scene(spec, open = {}) {
           for (const yy of [y0, y0 + h - T]) { put(u + T, u + w - T, 0, d, yy, yy + T, inner, 'carcass'); if (w > d) put(lb[0] + (right ? 0 : T), lb[1] - (right ? T : 0), d, w, yy, yy + T, inner, 'carcass'); }
           const sh = Math.round(+c.shelves || 0); for (let i = 1; i <= sh; i++) { const yy = y0 + (h * i) / (sh + 1); put(u + T, u + w - T, 1, d - 3, yy, yy + 1.2, inner, 'carcass'); if (w > d) put(lb[0] + (right ? 0 : T), lb[1] - (right ? T : 0), d - 3, w - 1, yy, yy + 1.2, inner, 'carcass'); }
         } else { put(u, u + w, 0, d, y0, y0 + h, carcass, 'carcass'); boxes.at(-1).solid = true; if (w > d) { put(lb[0], lb[1], d, w, y0, y0 + h, carcass, 'carcass'); boxes.at(-1).solid = true; } }
-        if (!t.wall) { put(u + 1, u + w - 1, 4, d - 4, 0, style.plinth, '#6f7885', 'plinth'); if (w > d) put(lb[0] + 1, lb[1] - 1, d, w - 4, 0, style.plinth, '#6f7885', 'plinth'); }
+        if (skirt) { put(u + 1, u + w - 1, 4, d - 4, 0, style.plinth, '#6f7885', 'plinth'); if (w > d) put(lb[0] + 1, lb[1] - 1, d, w - 4, 0, style.plinth, '#6f7885', 'plinth'); }
         const gl0 = glazed > 0; const dwA = w - d; const fo0 = fOpen('f0'); const fo1 = fOpen('f1');
         // front door on the long leg
         curFront = 'f0'; const ua = right ? u : u + d; const ub = ua + dwA;
@@ -174,7 +174,7 @@ export function scene(spec, open = {}) {
         put(u + T, u + w - T, 0, d, y0, y0 + T, inner, 'carcass'); put(u + T, u + w - T, 0, d, y0 + h - T, y0 + h, inner, 'carcass');
         if (!slots) { const sh = Math.round(+c.shelves || 0); for (let i = 1; i <= sh; i++) put(u + T, u + w - T, 1, d - 3, y0 + (h * i) / (sh + 1), y0 + (h * i) / (sh + 1) + 1.2, inner, 'carcass'); }
       } else { put(u, u + w, 0, d, y0, y0 + h, carcass, 'carcass'); boxes.at(-1).solid = true; }
-      if (!t.wall && !t.tall) put(u + 1, u + w - 1, 4, d - 4, 0, style.plinth, '#6f7885', 'plinth');
+      if (skirt) put(u + 1, u + w - 1, 4, d - 4, 0, style.plinth, '#6f7885', 'plinth');
       const zn = zonesOf(c);
       if (slots) { // stacked slots from the floor up
         const fixed = slots.reduce((a, x) => a + x.h, 0); const free = slots.filter((x) => !(x.h > 0)).length; let ys = y0;

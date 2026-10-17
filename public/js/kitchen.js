@@ -22,6 +22,12 @@ export const SLOT_KINDS = { door: 'Door', glass: 'Glass door', drawer: 'Drawer',
 export const DIRS = { auto: 'Automatic', left: 'Hinged left', right: 'Hinged right', up: 'Lifts up', down: 'Folds down', slide: 'Sliding', shutter: 'Roller shutter (rolls up)' };
 /** Accessories that can be added to a cabinet. visual = drawn in the 3D view. */
 export const ACCESSORIES = { tap: ['Tap / mixer', true], bin: ['Pull-out waste bin', false], cutlery: ['Cutlery tray', false], pullout: ['Pull-out basket', false], lights: ['LED light strip', true], rail: ['Rail with hooks', true], spice: ['Spice rack', false], lazy: ['Lazy-susan carousel', false], soft: ['Soft-close set', false] };
+/** Does a floor unit stand on a skirting (plinth) with legs? Base units do by default and tall units do not; cab.skirt overrides it either way. Wall units, appliance gaps, shelves and hoods never. */
+export function hasSkirt(cab) {
+  const t = CAB_TYPES[cab.type] || CAB_TYPES.base; if (t.wall || t.gap || t.shelf || t.hood) return false;
+  if (cab.skirt === undefined || cab.skirt === null || cab.skirt === '') return !t.tall;
+  return cab.skirt === true || cab.skirt === 1 || cab.skirt === '1' || cab.skirt === 'true';
+}
 /** How many floating shelves one shelf unit stacks above each other, and the clear space between them (cm). */
 export const shelfCount = (cab) => Math.max(1, Math.min(12, Math.round(+cab.stack || 1)));
 export const shelfGap = (cab) => (Number.isFinite(+cab.stack_gap) && cab.stack_gap !== '' && cab.stack_gap !== undefined ? Math.max(0, +cab.stack_gap) : 30);
@@ -69,6 +75,7 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   const tag = cab.label ? `${cab.label} · ` : '';
   const dd = D - b - 1; // depth of horizontal panels (back sits behind them)
   for (const a of cab.acc || []) if (ACCESSORIES[a]) acc[a] = (acc[a] || 0) + 1;
+  const skirt = hasSkirt(cab); if (skirt) { add(`${tag}Skirting`, W - 2, s.plinth, 1, 'carcass', W - 2); hw.legs += 4; } // the skirting board in front of the legs
   if (type.shelf) { const n = shelfCount(cab); add(`${tag}Floating shelf board`, W, D, n, 'carcass', W + 2 * (D - 2)); hw.hangers += 2 * n; return { panels, hw, glass, frames, appliances, acc }; }
   if (type.hood) { hw.hangers += 2; appliances.push({ k: 'hood', w: W, h: H, d: D }); return { panels, hw, glass, frames, appliances, acc }; }
   add(`${tag}Side`, dd + b + 1 > D ? D : D, H, 2, 'carcass', H); // sides: front edge banded
@@ -123,7 +130,7 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
       for (let i = 0; i < (dir === 'shutter' ? 0 : glazed); i++) glass.push({ w: r1(alu ? dw - 2 * fw + 1.2 : dw - 8), h: r1(alu ? dh - 2 * fw + 1.2 : dh - 8), qty: 1 });
     }
   }
-  if (type.wall) hw.hangers += 2; else hw.legs += type.tall ? 0 : 4;
+  if (type.wall) hw.hangers += 2;
   hw.pins += nShelf * 4;
   return { panels, hw, glass, frames, appliances, acc };
 }

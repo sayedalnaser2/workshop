@@ -1,5 +1,5 @@
 // SVG drawings for kitchens: front elevation, plan view with countertop, and sheet cut layouts.
-import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, slotsOf, zonesOf, shelfCount, shelfGap } from './kitchen.js';
+import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, slotsOf, zonesOf, shelfCount, shelfGap, hasSkirt } from './kitchen.js';
 import { colourHex, glassHex, stoneHex, lighten } from './drawings.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -13,7 +13,7 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
   const dh = colourHex(style.door_colour); const FILL2 = dh || FILL2_; const FILL = dh ? lighten(dh, .35) : FILL_; const GLASS = style.glass ? glassHex(style.glass) : GLASS_; const TOP = stoneHex(spec.counter?.material);
   const widest = Math.max(...runs.map((r) => r.cabinets.reduce((a, c) => a + (+c.w || 0), 0)), 100);
   const k = Math.min(2.4, (maxW - 60) / widest); const padL = 34;
-  const floorOf = (t, c = {}) => (t.wall ? (c.y !== undefined && c.y !== '' && Number.isFinite(+c.y) ? +c.y : style.wall_height) : t.tall || t.gap ? 0 : style.plinth); // cm from the floor to the carcass bottom
+  const floorOf = (t, c = {}) => (t.wall ? (c.y !== undefined && c.y !== '' && Number.isFinite(+c.y) ? +c.y : style.wall_height) : t.gap ? 0 : hasSkirt(c) ? style.plinth : 0); // cm from the floor to the carcass bottom
   let y0 = 0; let out = '';
   for (const run of runs) {
     // each run only gets the height it needs: a row of wall units is drawn without the empty wall below it
@@ -70,7 +70,7 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
       if (t.shelf) for (let q = 0; q < shelfCount(c); q++) out += `<rect x="${x}" y="${yTop - q * ((+c.h || 0) + shelfGap(c)) * k}" width="${w}" height="${Math.max(3, h)}" fill="#d9c9a8" stroke="${INK}" stroke-width="1"/>`;
       if (t.sink) { const cx = x + w / 2; const ty = yTop - ct * k; out += `<path d="M${x + w * .12} ${ty} L${x + w * .12} ${ty + 4} L${x + w * .88} ${ty + 4} L${x + w * .88} ${ty}" fill="#b9c0c9" stroke="${INK}" stroke-width="1"/><path d="M${cx} ${ty} L${cx} ${ty - 16} Q${cx} ${ty - 22} ${cx - 8} ${ty - 22}" fill="none" stroke="${INK}" stroke-width="2"/>`; }
       if (t.counter) out += `<rect x="${x - 1}" y="${yTop - ct * k}" width="${w + 2}" height="${ct * k}" fill="${TOP}"/>`;
-      if (!t.wall && !t.tall) out += `<rect x="${x}" y="${yTop + h}" width="${w}" height="${style.plinth * k}" fill="#8b95a3"/>`;
+      if (hasSkirt(c)) out += `<rect x="${x}" y="${yTop + h}" width="${w}" height="${style.plinth * k}" fill="#8b95a3"/>`;
       out += `<text x="${x + w / 2}" y="${base + 14 + (bottom === 0 ? 0 : 0)}" font-size="10" text-anchor="middle" fill="currentColor">${+c.w || 0}</text>`;
       if (c.label) out += `<text x="${x + w / 2}" y="${yTop + 12}" font-size="9" text-anchor="middle" fill="currentColor" opacity=".7">${esc(c.label)}</text>`;
       x += w;

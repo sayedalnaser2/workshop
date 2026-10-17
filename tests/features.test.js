@@ -253,6 +253,9 @@ test('kitchens: door directions, L-corner, slots in tall units, appliance gaps, 
   assert.deepEqual(frontsOf({ type: 'base', doors: 2, dir: 'slide' }).map((f) => f.key), ['f0']); // sliding doors share one state
   assert.equal(mk({ type: 'base', doors: 0, drawers: 0 }).panels.filter((p) => p.mat === 'door').length, 0); // no doors: stays open
   const tall = { type: 'tall', w: 60, h: 210, d: 58, slots: [{ k: 'door', h: 70 }, { k: 'oven', h: 60 }, { k: 'door', h: 80, n: 2 }] };
+  const { hasSkirt } = await import('../public/js/kitchen.js');
+  assert.equal(hasSkirt({ type: 'base' }), true); assert.equal(hasSkirt({ type: 'tall' }), false); assert.equal(hasSkirt({ type: 'tall', skirt: true }), true); assert.equal(hasSkirt({ type: 'base', skirt: false }), false); assert.equal(hasSkirt({ type: 'wall', skirt: true }), false);
+  assert.equal(mk({ type: 'base' }).panels.some((p) => p.label.endsWith('Skirting')), true); assert.equal(mk({ type: 'base', skirt: false }).hw.legs, 0); assert.equal(cabinetParts({ type: 'tall', w: 60, h: 210, d: 58, skirt: true }).hw.legs, 4);
   const tp = cabinetParts(tall); assert.equal(tp.appliances[0].k, 'oven'); assert.equal(tp.panels.filter((p) => p.label === 'Divider').length, 2);
   assert.deepEqual(frontsOf(tall).map((f) => f.key), ['s0', 's2']); assert.equal(slotsOf({ slots: [] }), null);
   const shelf = cabinetParts({ type: 'shelf', w: 80, h: 4, d: 25 }); assert.equal(shelf.panels.length, 1); assert.equal(shelf.hw.hangers, 2);
