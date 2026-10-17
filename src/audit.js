@@ -11,7 +11,7 @@ export const labelOf = (row) => { for (const k of LABEL_KEYS) if (row?.[k]) retu
 export function diff(table, before, after) {
   const out = [];
   for (const k of Object.keys(SCHEMA[table].cols)) {
-    if (!(k in after)) continue;
+    if (!(k in after) || k === 'customer_id') continue; // the customer number follows the name; it is not news
     const a = before?.[k] ?? null; const b = after[k] ?? null;
     if (JSON.stringify(a) === JSON.stringify(b)) continue;
     if ((a === null || a === '') && (b === null || b === '')) continue;

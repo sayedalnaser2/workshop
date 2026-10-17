@@ -181,6 +181,49 @@ const AUTO = { quotes: ['number', 'quote'], orders: ['inv', 'invoice'], receipts
 
 // ------------------------------------------------------------------ approvals, credit notes, files
 const bad = (m, status = 400) => Object.assign(new Error(m), { status });
+// ---- customers: everybody who buys gets a permanent number (C0001…); quotations, invoices, surveys and kitchens are linked to it
+const normName = (x) => String(x || '').trim().toLowerCase().replace(/\s+/g, ' ');
+const phoneKey = (x) => { const d = String(x || '').replace(/\D/g, ''); return d.length >= 7 ? d.slice(-8) : ''; };
+const nextCustomerCode = () => { const n = db.prepare("SELECT MAX(CAST(SUBSTR(code, 2) AS INTEGER)) m FROM customers WHERE code LIKE 'C%'").get().m || 0; return 'C' + String(n + 1).padStart(4, '0'); };
+/** The customer for a name / mobile: the one with the same mobile, else the same name; a new one when there is none. Returns its id. */
+function ensureCustomer({ client, mobile, site, gps }) {
+  const name = String(client || '').trim(); if (!name) return null; const pk = phoneKey(mobile);
+  const all = db.prepare('SELECT * FROM customers').all();
+  let c = (pk && all.find((x) => phoneKey(x.mobile) === pk || phoneKey(x.mobile2) === pk)) || all.find((x) => normName(x.name) === normName(name));
+  if (!c) return insertRow('customers', { code: nextCustomerCode(), name, mobile: mobile || '', mobile2: '', email: '', address: site || '', gps: gps || '', vat_no: '', note: '', active: 1 }).id;
+  const fill = {}; if (!c.mobile && mobile) fill.mobile = mobile; if (!c.address && site) fill.address = site; if (!c.gps && gps) fill.gps = gps;
+  if (Object.keys(fill).length) updateRow('customers', c.id, fill);
+  return c.id;
+}
+/** Put the customer number on a quotation / invoice / survey / kitchen that is being saved (body = what is being written, cur = the stored row). */
+function linkCustomer(body, cur = {}) {
+  const m = { ...cur, ...body }; if (!String(m.client || '').trim()) return;
+  if (cur.customer_id && !('client' in body) && !('mobile' in body)) return;
+  if (cur.customer_id && normName(body.client ?? cur.client) === normName(cur.client) && !('mobile' in body && !cur.mobile)) return; // same customer, keep the link
+  const id = ensureCustomer(m); if (id) body.customer_id = id;
+}
+/** Older records get their customer numbers the first time this runs (and any later record that slipped through). */
+function backfillCustomers() {
+  for (const t of ['orders', 'quotes', 'surveys', 'kitchens']) for (const r of db.prepare(`SELECT id, client, mobile, site${t === 'kitchens' ? '' : ', gps'} FROM ${t} WHERE customer_id IS NULL AND IFNULL(client,'') <> '' ORDER BY id`).all()) {
+    const id = ensureCustomer(r); if (id) db.prepare(`UPDATE ${t} SET customer_id=? WHERE id=?`).run(id, r.id);
+  }
+}
+/** Customers with their totals and every number they can be found by (customer no., mobile, invoice, quotation). */
+function customersView() {
+  const customers = listRows('customers'); const led = ordersLedger(); const byId = new Map(customers.map((c) => [c.id, { ...c, inv_nos: [], quote_nos: [], invoiced: 0, paid: 0, balance: 0, orders_n: 0, quotes_n: 0, survey_n: 0, kitchen_n: 0, credit: 0, last: '' }]));
+  const byName = new Map(); for (const c of byId.values()) byName.set(normName(c.name), c);
+  const own = (r) => byId.get(r.customer_id) || byName.get(normName(r.client));
+  for (const o of led) { const c = own(o); if (!c) continue; c.inv_nos.push(o.inv); c.orders_n++; c.invoiced += o.amount || 0; c.paid += (o.paid || 0) + (o.credit || 0); c.balance += o.balance || 0; if ((o.date || '') > c.last) c.last = o.date; }
+  for (const q of db.prepare('SELECT number, client, customer_id, date FROM quotes').all()) { const c = own(q); if (c) { c.quote_nos.push(q.number); c.quotes_n++; if ((q.date || '') > c.last) c.last = q.date; } }
+  for (const r of db.prepare('SELECT client, customer_id FROM surveys').all()) { const c = own(r); if (c) c.survey_n++; }
+  for (const r of db.prepare('SELECT client, customer_id FROM kitchens').all()) { const c = own(r); if (c) c.kitchen_n++; }
+  const today = new Date().toISOString().slice(0, 10);
+  for (const cr of db.prepare('SELECT client, amount, used, expires, status FROM customer_credits').all()) { const c = byName.get(normName(cr.client)); if (c && cr.status !== 'void' && !(cr.expires && cr.expires < today)) c.credit += Math.max(0, (cr.amount || 0) - (cr.used || 0)); }
+  return [...byId.values()].map((c) => ({ ...c, invoiced: Math.round(c.invoiced * 1000) / 1000, paid: Math.round(c.paid * 1000) / 1000, balance: Math.round(c.balance * 1000) / 1000, credit: Math.round(c.credit * 1000) / 1000, num: Number(String(c.code || '').slice(1)) || 0 })).sort((a, b) => b.num - a.num);
+}
+
+try { backfillCustomers(); } catch (e) { console.error('customer numbering failed:', e.message); }
+
 // ---- customer credit: spend enough on an invoice and earn credit towards the next purchase (optionally expiring)
 const loyaltyCfg = () => ({ enabled: false, tiers: [], expiry_months: 0, ...(getSetting('loyalty') || {}) });
 const addMonths = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 10); };
@@ -466,7 +509,7 @@ async function api(req, res, url) {
     const o = tx(() => {
       const inv = nextNumber('invoice', new Date().toISOString(), true);
       const T = quoteTotals(q);
-      const order = insertRow('orders', { inv, date: new Date().toISOString().slice(0, 10), client: q.client, site: q.site, gps: q.gps || '', mobile: q.mobile, amount: Math.round(T.grand * 1000) / 1000, vat: Math.round(Math.max(0, T.vat - T.waived) * 1000) / 1000, client_vat: q.client_vat || '', done: 0, quote_no: q.number });
+      const order = insertRow('orders', { inv, date: new Date().toISOString().slice(0, 10), client: q.client, customer_id: q.customer_id || ensureCustomer(q), site: q.site, gps: q.gps || '', mobile: q.mobile, amount: Math.round(T.grand * 1000) / 1000, vat: Math.round(Math.max(0, T.vat - T.waived) * 1000) / 1000, client_vat: q.client_vat || '', done: 0, quote_no: q.number });
       updateRow('quotes', q.id, { order_inv: inv, status: 'accepted' });
       audit(user, 'orders', order.id, 'created', `${inv} from ${q.number}`);
       const earned = issueCredit(order, user); if (earned) order.credit_earned = earned.amount;
@@ -475,6 +518,18 @@ async function api(req, res, url) {
     return send(res, 200, o);
   }
 
+  if (p[0] === 'customers-view' && m === 'GET') { needAny('customers'); return send(res, 200, customersView()); }
+  if (p[0] === 'customers' && p[1] === 'merge' && m === 'POST') { // two entries for the same person: move everything to one number
+    needEdit('customers'); const b = await readJson(req); const from = getRow('customers', Number(b.from)); const to = getRow('customers', Number(b.to));
+    if (!from || !to || from.id === to.id) throw bad('Choose two different customers.');
+    tx(() => {
+      for (const tb of ['quotes', 'orders', 'surveys', 'kitchens']) db.prepare(`UPDATE ${tb} SET client=?, customer_id=? WHERE customer_id=? OR LOWER(TRIM(client))=?`).run(to.name, to.id, from.id, normName(from.name));
+      db.prepare('UPDATE receipts SET client=? WHERE order_inv IN (SELECT inv FROM orders WHERE customer_id=?)').run(to.name, to.id); db.prepare('UPDATE customer_credits SET client=? WHERE LOWER(TRIM(client))=?').run(to.name, normName(from.name));
+      const fill = {}; for (const k of ['mobile', 'email', 'address', 'gps', 'vat_no']) if (!to[k] && from[k]) fill[k] = from[k]; if (!to.mobile2 && from.mobile2) fill.mobile2 = from.mobile2; if (Object.keys(fill).length) updateRow('customers', to.id, fill);
+      deleteRow('customers', from.id); audit(user, 'customers', to.id, 'updated', `${to.code} ${to.name}`, [{ f: 'merged', from: `${from.code} ${from.name}`, to: `${to.code} ${to.name}` }]);
+    });
+    return send(res, 200, { ok: true });
+  }
   // --- customer credit: spend it on an invoice (recorded as a receipt paid with credit, so the invoice balance and the books follow)
   if (p[0] === 'credits' && p[1] === 'redeem' && m === 'POST') {
     needEdit('credits'); const b = await readJson(req); const norm = (x) => String(x || '').trim().toLowerCase();
@@ -509,6 +564,8 @@ async function api(req, res, url) {
       const body = await readJson(req);
       const row = tx(() => {
         checkRef(t, body); moneyRules(t, body); accountingRules(t, body); freezeVat(t, body);
+        if (['quotes', 'orders', 'surveys', 'kitchens'].includes(t)) linkCustomer(body);
+        if (t === 'customers') { if (!String(body.name || '').trim()) throw bad('Enter the customer name.'); body.code = nextCustomerCode(); body.active = body.active ?? 1; }
         if (t === 'tasks') { body.status = body.status || 'todo'; body.progress = body.progress ?? 0; body.created_by = user.id; }
         if (worker && t === 'stock') { delete body.unit_cost; if (body.kind === 'leftover' && body.profile_id) { const pr = getRow('profiles', Number(body.profile_id)); body.unit_cost = pr && pr.bar_length > 0 ? Math.round((pr.price_bar / pr.bar_length) * (body.length || 0) * ((getSetting('leftover_pct') ?? 60) / 100) * 1000) / 1000 : 0; } }
         if (t === 'quotes') { body.prepared_by = user.name; quoteApproval(body, null, user); } // always the signed-in user
@@ -531,7 +588,7 @@ async function api(req, res, url) {
     }
     if (id && m === 'PUT') {
       const cur = getRow(t, id); if (!cur || !visible(cur)) return send(res, 404, { error: 'Not found' });
-      const body = await readJson(req); checkRef(t, body, cur); moneyRules(t, body, cur); accountingRules(t, body, cur); if (worker) delete body.unit_cost;
+      const body = await readJson(req); checkRef(t, body, cur); moneyRules(t, body, cur); accountingRules(t, body, cur); if (['quotes', 'orders', 'surveys', 'kitchens'].includes(t)) linkCustomer(body, cur); if (t === 'customers') delete body.code; // the customer number never changes if (worker) delete body.unit_cost;
       if (t === 'overtime' && 'status' in body) need(role === 'admin'); // only the admin approves overtime
       if (t === 'tasks' && 'hidden' in body) { need(role === 'admin'); body.hidden = body.hidden ? 1 : 0; } // only an admin hides or shows tasks
       if (t === 'tasks') { if (body.status === 'done' && cur.status !== 'done') { body.done_at = new Date().toISOString(); body.progress = 100; } else if (body.status && body.status !== 'done' && cur.status === 'done') body.done_at = null; }
@@ -553,6 +610,10 @@ async function api(req, res, url) {
       }
       if (t === 'bank_accounts' && 'key' in body) delete body.key; // the key is what records point at; it never changes
       const saved = updateRow(t, id, body); if (t === 'tasks') onTaskUpdated(cur, saved, user);
+      if (t === 'customers' && 'name' in body && body.name !== cur.name) { // a renamed customer is renamed everywhere, so statements and searches still match
+        const nn = String(body.name).trim(); for (const tb of ['quotes', 'orders', 'surveys', 'kitchens']) db.prepare(`UPDATE ${tb} SET client=? WHERE customer_id=?`).run(nn, id);
+        db.prepare('UPDATE receipts SET client=? WHERE order_inv IN (SELECT inv FROM orders WHERE customer_id=?)').run(nn, id); db.prepare('UPDATE customer_credits SET client=? WHERE LOWER(TRIM(client))=?').run(nn, normName(cur.name));
+      }
       if (t === 'bank_accounts' && saved.coa_id && ('name' in body || 'active' in body)) updateRow('accounts', saved.coa_id, { ...(body.name ? { name: body.name } : {}), ...('active' in body ? { active: saved.active === 0 ? 0 : 1 } : {}) });
       const ch = diff(t, cur, saved); if (ch.length) audit(user, t, id, 'updated', labelOf(saved), ch);
       return send(res, 200, saved);
@@ -560,6 +621,7 @@ async function api(req, res, url) {
     if (id && m === 'DELETE') {
       if (t === 'accounts') need(role === 'admin'); // …or deletes them
       if (t === 'bank_accounts') { const k = getRow(t, id)?.key; const used = k && ['receipts', 'payments', 'cash_entries'].some((tb) => db.prepare(`SELECT id FROM ${tb} WHERE account=?`).get(k)); if (used) throw bad('This bank account has receipts, vouchers or entries, so it cannot be deleted. Switch it off instead.'); if (k === 'bank') throw bad('The original bank account cannot be deleted. Switch it off or rename it.'); }
+      if (t === 'customers') { const c = customersView().find((x) => x.id === id); if (c && (c.orders_n || c.quotes_n || c.survey_n || c.kitchen_n)) throw bad('This customer has quotations, invoices or other records. Merge it into another customer instead, or switch it off.', 400); }
       if (t === 'quotes') throw bad('Quotations cannot be deleted. Set the status to Rejected instead.', 403);
       const cur = getRow(t, id);
       if (t === 'accounts') {

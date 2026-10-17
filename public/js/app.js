@@ -12,6 +12,7 @@ export async function refresh() { Object.assign(S, await api.get('bootstrap')); 
 const ROUTES = [
   { path: '', title: 'Dashboard', icon: '▦', mod: 'dashboard' },
   { group: 'Sales' },
+  { path: 'customers', title: 'Customers', icon: '👤', mod: 'customers' },
   { path: 'surveys', title: 'Site Surveys', icon: '📐', mod: 'surveys' },
   { path: 'quotes', title: 'Quotations', icon: '✎', mod: 'quotes' },
   { path: 'credits', title: 'Customer Credit', icon: '🎁', mod: 'credits' },
@@ -95,6 +96,7 @@ const PAGES = {
   calendar: () => import('./pages/calendar.js'),
   creditnotes: () => import('./pages/creditnotes.js'),
   credits: () => import('./pages/credits.js'),
+  customers: () => import('./pages/customers.js'),
   surveys: () => import('./pages/surveys.js'),
   targets: () => import('./pages/targets.js'),
   cashbank: () => import('./pages/cashbank.js'),

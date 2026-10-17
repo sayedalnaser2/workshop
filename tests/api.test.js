@@ -439,3 +439,23 @@ test('sales user, customer credit (earned, expiring, spent), order progress and 
   // priority is kept per task
   const t = (await call('boss', 'POST', '/api/t/tasks', { order_inv: inv.inv, title: 'Rush', priority: 'urgent' })).data; assert.equal(t.priority, 'urgent');
 });
+
+test('customers: every client gets a permanent number, records link to it, searchable by invoice / quotation, rename and merge follow', async () => {
+  const q1 = (await call('amina', 'POST', '/api/t/quotes', { client: 'Zayed Al Test', mobile: '36001234', date: '2026-10-20', vat_rate: 10, items: [{ desc: 'x', qty: 1, price: 200 }] })).data; assert.ok(q1.customer_id);
+  const q2 = (await call('amina', 'POST', '/api/t/quotes', { client: 'zayed  al test', mobile: '', date: '2026-10-21', vat_rate: 10, items: [{ desc: 'y', qty: 1, price: 100 }] })).data; assert.equal(q2.customer_id, q1.customer_id); // same name (any spacing / case) = same customer
+  const q3 = (await call('amina', 'POST', '/api/t/quotes', { client: 'Another Name', mobile: '+973 3600 1234', date: '2026-10-22', vat_rate: 10, items: [{ desc: 'z', qty: 1, price: 50 }] })).data; assert.equal(q3.customer_id, q1.customer_id); // same mobile = same customer
+  const inv = (await call('amina', 'POST', `/api/quotes/${q1.id}/to-order`, {})).data; assert.equal(inv.customer_id, q1.customer_id);
+  let view = (await call('amina', 'GET', '/api/customers-view')).data; const c = view.find((x) => x.id === q1.customer_id);
+  assert.match(c.code, /^C\d{4}$/); assert.ok(c.inv_nos.includes(inv.inv)); assert.ok(c.quote_nos.includes(q1.number) && c.quote_nos.includes(q3.number)); assert.equal(c.orders_n, 1); assert.equal(c.quotes_n, 3);
+  assert.equal((await call('wasim', 'GET', '/api/customers-view')).status, 403); // workers do not see customers
+  // a second customer, then merge it into the first
+  const other = (await call('amina', 'POST', '/api/t/customers', { name: 'Dup Customer', mobile: '39990000' })).data; assert.match(other.code, /^C\d{4}$/); assert.notEqual(other.code, c.code);
+  const q4 = (await call('amina', 'POST', '/api/t/quotes', { client: 'Dup Customer', date: '2026-10-23', vat_rate: 10, items: [{ desc: 'w', qty: 1, price: 10 }] })).data; assert.equal(q4.customer_id, other.id);
+  assert.equal((await call('amina', 'DELETE', `/api/t/customers/${other.id}`)).status, 400); // it has a quotation
+  assert.equal((await call('amina', 'POST', '/api/customers/merge', { from: other.id, to: c.id })).status, 200);
+  assert.equal((await call('amina', 'GET', `/api/t/quotes/${q4.id}`)).data.client, 'Zayed Al Test'); assert.equal((await call('amina', 'GET', `/api/t/quotes/${q4.id}`)).data.customer_id, c.id);
+  // renaming the customer renames it on every record
+  await call('amina', 'PUT', `/api/t/customers/${c.id}`, { name: 'Zayed Renamed', code: 'HACK' });
+  assert.equal((await call('amina', 'GET', `/api/t/quotes/${q1.id}`)).data.client, 'Zayed Renamed'); assert.equal((await call('boss', 'GET', '/api/ledger')).data.find((o) => o.inv === inv.inv).client, 'Zayed Renamed');
+  assert.equal((await call('amina', 'GET', `/api/t/customers/${c.id}`)).data.code, c.code); // the number never changes
+});
