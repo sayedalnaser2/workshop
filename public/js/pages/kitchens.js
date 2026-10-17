@@ -249,8 +249,14 @@ async function editor(el, id, tab) {
     const refresh3 = () => { for (const k2 of Object.keys(tgt)) delete tgt[k2]; for (const k2 of Object.keys(cur)) delete cur[k2]; v.selected = view3d.sel; panel(); go(); };
     const box0 = $('#k3p', pane);
     // add tools (Edit mode)
-    const ADD = [['base', '+ Base'], ['drawers', '+ Drawers'], ['sink', '+ Sink'], ['hob', '+ Hob'], ['corner', '+ Corner'], ['wall', '+ Wall'], ['wall_corner', '+ Wall corner'], ['tall', '+ Tall'], ['shelf', '+ Floating shelf'], ['hood', '+ Hood'], ['gap', '+ Gap'], ['gap:fridge', '+ Fridge'], ['gap:dishwasher', '+ Dishwasher'], ['gap:washer', '+ Washer'], ['gap:cooker', '+ Cooker']];
+    const ADD = [['base', '+ Base'], ['drawers', '+ Drawers'], ['sink', '+ Sink'], ['hob', '+ Hob'], ['corner', '+ Corner'], ['wall', '+ Wall'], ['wall_corner', '+ Wall corner'], ['tall', '+ Tall'], ['shelf', '+ Floating shelf'], ['hood', '+ Hood'], ['gap', '+ Gap'], ['gap:fridge', '+ Fridge'], ['gap:dishwasher', '+ Dishwasher'], ['gap:washer', '+ Washer'], ['gap:dryer', '+ Dryer'], ['gap:freezer', '+ Freezer'], ['gap:oven', '+ Oven'], ['gap:cooker', '+ Cooker'], ['sample', '★ One of each appliance']];
     const addCab = (spec2) => {
+      if (spec2 === 'sample') {
+        const mk = (appl) => ({ ...cabinetOf('gap'), appliance: appl, label: APPLIANCES[appl][0], h: appl === 'fridge' || appl === 'freezer' ? 190 : APPLIANCES[appl][1] + 5 });
+        const tallUnit = { ...cabinetOf('tall'), label: 'Oven, microwave & coffee', slots: [{ k: 'oven', h: 60, n: 1 }, { k: 'micro', h: 38, n: 1 }, { k: 'coffee', h: 45, n: 1 }, { k: 'door', h: 57, n: 1, dir: 'auto' }] };
+        spec.runs.push({ name: 'Appliances', cabinets: [...['fridge', 'freezer', 'dishwasher', 'washer', 'dryer', 'cooker'].map(mk), tallUnit] });
+        view3d.sel = { ri: spec.runs.length - 1, ci: 0 }; touch(); refresh3(); return;
+      }
       const [type, appl] = spec2.split(':'); const base = { ...cabinetOf(type) }; if (appl) { base.appliance = appl; base.label = APPLIANCES[appl][0]; if (appl === 'fridge' || appl === 'freezer') base.h = 190; else base.h = APPLIANCES[appl][1] + 5; }
       if (!spec.runs.length) spec.runs.push({ name: 'Run 1', cabinets: [] });
       const ri = v.selected ? v.selected.ri : 0; const arr = spec.runs[ri].cabinets; const at = v.selected ? v.selected.ci + 1 : arr.length;

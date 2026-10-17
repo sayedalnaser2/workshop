@@ -288,3 +288,10 @@ test('kitchens: skirting cut from a profile bar instead of a board', async () =>
   assert.ok(!bar.panels.carcass.some((p) => p.label.endsWith('Skirting'))); assert.equal(bar.skirtBars.pieces, 3); assert.equal(bar.skirtBars.bars.length, 1); // 58 + 58 + 88 = 204 cm fits one 300 cm bar
   const price = priceKitchen(bar, { general: {} }); assert.equal(price.lines.find((l) => l.group === 'Skirting').total, 4);
 });
+
+test('kitchens: every appliance has a name and height, dryer included', async () => {
+  const { APPLIANCES, kitchenModel } = await import('../public/js/kitchen.js');
+  for (const k of ['fridge', 'freezer', 'dishwasher', 'washer', 'dryer', 'oven', 'micro', 'coffee', 'cooker']) assert.ok(APPLIANCES[k] && APPLIANCES[k][1] > 0, k);
+  const m = kitchenModel({ runs: [{ cabinets: [{ type: 'gap', w: 60, h: 90, d: 60, appliance: 'dryer' }] }] });
+  assert.ok(m.appliances.some((a) => a.k === 'dryer'));
+});

@@ -15,7 +15,7 @@ export const CAB_TYPES = {
   gap:     { label: 'Appliance gap', w: 60, h: 85,  d: 60, doors: 0, drawers: 0, shelves: 0, gap: true },
 };
 /** Appliances that stand in a gap (cab.appliance) or fill a slot of a tall unit. h = usual opening height cm. */
-export const APPLIANCES = { fridge: ['Fridge', 180], freezer: ['Freezer', 85], dishwasher: ['Dishwasher', 82], washer: ['Washing machine', 85], oven: ['Built-in oven', 60], micro: ['Microwave', 38], coffee: ['Coffee machine', 45], cooker: ['Free-standing cooker', 85] };
+export const APPLIANCES = { fridge: ['Fridge', 180], freezer: ['Freezer', 85], dishwasher: ['Dishwasher', 82], washer: ['Washing machine', 85], dryer: ['Tumble dryer', 85], oven: ['Built-in oven', 60], micro: ['Microwave', 38], coffee: ['Coffee machine', 45], cooker: ['Free-standing cooker', 85] };
 /** What a slot of a tall unit can hold, from the floor up. */
 export const SLOT_KINDS = { door: 'Door', glass: 'Glass door', drawer: 'Drawer', open: 'Open niche', ...Object.fromEntries(['fridge', 'freezer', 'oven', 'micro', 'coffee'].map((k) => [k, APPLIANCES[k][0]])) };
 /** Opening directions for doors. auto = French doors in pairs, a single door hinged on the left. */
