@@ -349,6 +349,27 @@ export function seedBalexco() {
   }
 }
 
+// "Kitchen cabinet profiles" sheet: [code, name, dims as printed, use, note, face mm]. The shapes crossed out on the sheet (27432 and two others) are not included.
+const KITCHEN_PROFILES = [
+  ['22421', 'Cabinet post with flange and hook', '25 × 34 mm box · flange 4.2 · hook wall 1.0', 'Kitchen cabinet post / corner', 'Hollow box with a flange along one side and a J-hook: the board slides into the hook and the flange covers its edge. Edge or corner post of an aluminium cabinet.', null],
+  ['22422', 'Cabinet post with fin and hook', '25 × 34 mm box · fin 4.2 · wall 1.0', 'Kitchen cabinet post / corner', 'Same box with an up-stand fin and a hook: a post where a panel meets a second panel at right angles.', null],
+  ['22423', 'Cabinet post with two fins and hook', '25 × 34 mm box · fins 4.2 · wall 1.0', 'Kitchen cabinet post / corner', 'Box with two fins: a middle post that holds a panel on each side (between two cabinets).', null],
+  ['23564', 'Square tube 25 × 25, slotted', '25 × 25 mm · wall 1.3 · screw slot 4', 'Kitchen cabinet post / corner', 'Square section with screw channels in every face: leg, upright or corner connector.', null],
+  ['32593', 'Door frame with handle lip', '42 × 20 mm · wall 1.0 · groove 2.6 · step 16.25', 'Kitchen door frame', 'Frame with a rounded finger-grip lip along one long edge (the handle is part of the frame) and a groove for the panel or glass.', 20],
+  ['28456', 'Wide door / drawer frame', 'dimensions not printed on the sheet', 'Kitchen door frame', 'Wide channel with a centre web, two panel grooves. Enter its size from the supplier.', null],
+  ['28787', 'Door frame 24 × 17.6 with panel groove', '24 × 17.6 mm · groove 2.81 · step 1.3', 'Kitchen door frame', 'Small box frame with a groove (2.81) that holds the infill panel or glass; cut at 45°.', 24],
+  ['28785', 'Door frame 24 × 17.6, stepped', '24 × 17.6 mm · step 2.81 · wall 1.7', 'Kitchen door frame', 'Companion of 28787 with an L-shaped rebate: the panel sits in the step.', 24],
+  ['23565', 'Corner profile 52.5 × 52.5, serrated', '52.5 × 52.5 mm · wall 1.8 · leg 26.9', 'Kitchen cabinet post / corner', 'L-shaped corner with serrated outer ribs (for gluing or fixing to board) and a clip slot.', null],
+  ['206439', 'Plinth (skirting) 100 mm, flat', '100 × 10 mm · wall 1.2 · lip 4', 'Kitchen plinth (skirting)', 'Flat bar with a rounded edge: the 10 cm skirting in front of the cabinet legs.', 100],
+  ['13681', 'F-profile 15 × 20', '15 × 20 mm · wall 1.5', 'Kitchen edge / trim', 'Small F-shaped section: shelf-edge or panel trim. Use as printed on the sheet — please confirm.', null],
+  ['20277', 'Rectangular tube 100 × 15', '100 × 15 mm · wall 1.5', 'Kitchen plinth (skirting)', 'Hollow rectangle: plinth / skirting or a wide bar. Please confirm its use.', 100],
+  ['20453', 'Rectangular tube 80 × 15', '80 × 15 mm · wall 1.5', 'Kitchen plinth (skirting)', 'Same as 20277 at 80 mm: a lower plinth or a bar. Please confirm its use.', 80],
+];
+export function seedKitchenProfiles() {
+  const have = new Set(listRows('profiles').map((p) => p.code));
+  for (const [code, name, dims, use, note, face] of KITCHEN_PROFILES) if (!have.has(code)) insertRow('profiles', { code, name, series: 'Kitchen cabinet profiles', bar_length: 600, price_bar: 0, weight_m: 0, color: '', use, dims, note, face_w: face });
+}
+
 /** Aluminium-door kitchens: a frame-corner price and a few door-frame profile choices (prices left at 0). Safe to run on every start. */
 export function seedAluKitchen() {
   const has = (kind, name) => db.prepare('SELECT 1 FROM kitchen_options WHERE kind=? AND name=?').get(kind, name);

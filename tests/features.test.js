@@ -279,3 +279,12 @@ test('kitchens: a door can be added to any unit, in any place, without disturbin
   const p = cabinetParts(cab); assert.equal(p.panels.filter((x) => x.label === 'Divider').length, 2); assert.ok(p.hw.hinges >= 4); // the doors of the layout get hinges
   assert.deepEqual(slotHeights([{ k: 'door', h: 40 }, { k: 'door' }], 100), [40, 60]);
 });
+
+test('kitchens: skirting cut from a profile bar instead of a board', async () => {
+  const { kitchenModel, priceKitchen } = await import('../public/js/kitchen.js');
+  const cabs = [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }, { type: 'base', w: 60, h: 72, d: 56, doors: 1 }, { type: 'base', w: 90, h: 72, d: 56, doors: 2 }];
+  const board = kitchenModel({ runs: [{ cabinets: cabs }] }); assert.equal(board.skirtBars, null); assert.ok(board.panels.carcass.some((p) => p.label.endsWith('Skirting')));
+  const bar = kitchenModel({ style: { plinth_profile: '206439 Plinth', plinth_price: 4, plinth_bar_len: 300 }, runs: [{ cabinets: cabs }] });
+  assert.ok(!bar.panels.carcass.some((p) => p.label.endsWith('Skirting'))); assert.equal(bar.skirtBars.pieces, 3); assert.equal(bar.skirtBars.bars.length, 1); // 58 + 58 + 88 = 204 cm fits one 300 cm bar
+  const price = priceKitchen(bar, { general: {} }); assert.equal(price.lines.find((l) => l.group === 'Skirting').total, 4);
+});

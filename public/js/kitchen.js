@@ -99,7 +99,7 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   const tag = cab.label ? `${cab.label} · ` : '';
   const dd = D - b - 1; // depth of horizontal panels (back sits behind them)
   for (const a of cab.acc || []) if (ACCESSORIES[a]) acc[a] = (acc[a] || 0) + 1;
-  const skirt = hasSkirt(cab); if (skirt) { add(`${tag}Skirting`, W - 2, s.plinth, 1, 'carcass', W - 2); hw.legs += 4; } // the skirting board in front of the legs
+  const skirt = hasSkirt(cab); if (skirt) { if (s.plinth_profile) add(`${tag}Skirting`, W - 2, s.plinth, 1, 'skirt', 0); else add(`${tag}Skirting`, W - 2, s.plinth, 1, 'carcass', W - 2); hw.legs += 4; } // the skirting board in front of the legs
   if (type.shelf) { const n = shelfCount(cab); add(`${tag}Floating shelf board`, W, D, n, 'carcass', W + 2 * (D - 2)); hw.hangers += 2 * n; return { panels, hw, glass, frames, appliances, acc }; }
   if (type.hood) { hw.hangers += 2; appliances.push({ k: 'hood', w: W, h: H, d: D }); return { panels, hw, glass, frames, appliances, acc }; }
   add(`${tag}Side`, dd + b + 1 > D ? D : D, H, 2, 'carcass', H); // sides: front edge banded
@@ -193,6 +193,13 @@ export function packSheets(pieces, sheetW, sheetH, kerf = 0.3) {
 }
 
 /** Cut aluminium door-frame profile out of stock bars (first-fit decreasing, 45° corners need no allowance beyond the saw kerf). */
+/** Straight cuts from bars: pieces [{ len, qty, label }] → bars with the pieces on each, offcuts and total metres. */
+export function packLengths(list, barLen = 600, kerf = 0.5) {
+  const pieces = []; for (const f of list) for (let i = 0; i < (f.qty || 1); i++) pieces.push({ len: f.len, label: f.label });
+  pieces.sort((a, b) => b.len - a.len); const bars = []; const unfit = [];
+  for (const p of pieces) { if (p.len > barLen) { unfit.push(p); continue; } const bar = bars.find((b) => b.used + p.len + kerf <= barLen + 1e-9); if (bar) { bar.items.push(p); bar.used += p.len + kerf; } else bars.push({ items: [p], used: p.len + kerf }); }
+  return { bars: bars.map((b) => ({ ...b, free: Math.round((barLen - b.used) * 10) / 10 })), unfit, metres: pieces.reduce((a, p) => a + p.len, 0) / 100, pieces: pieces.length };
+}
 export function packBars(frames, barLen = 600, fw = 4.5, kerf = 0.5) {
   const pieces = []; for (const f of frames) for (let i = 0; i < f.qty; i++) { pieces.push({ len: f.h, label: f.label }, { len: f.h, label: f.label }, { len: f.w, label: f.label }, { len: f.w, label: f.label }); }
   pieces.sort((a, b) => b.len - a.len); const bars = []; const unfit = [];
@@ -209,12 +216,12 @@ export function packBars(frames, barLen = 600, fw = 4.5, kerf = 0.5) {
 export function kitchenModel(spec) {
   const style = { ...DEFAULT_STYLE, ...(spec.style || {}) }; const counter = { ...DEFAULT_COUNTER, ...(spec.counter || {}) };
   const runs = spec.runs || [];
-  const panels = { carcass: [], back: [], door: [] }; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0, shutters: 0 }; const glass = []; const frames = []; const appliances = []; const accessories = {};
+  const panels = { carcass: [], back: [], door: [], skirt: [] }; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0, shutters: 0 }; const glass = []; const frames = []; const appliances = []; const accessories = {};
   const meters = { base: 0, wall: 0, tall: 0, units: 0, base_n: 0, wall_n: 0, tall_n: 0 };
   let edge = 0;
   for (const run of runs) for (const cab of run.cabinets || []) {
     const type = CAB_TYPES[cab.type] || CAB_TYPES.base; const p = cabinetParts(cab, style);
-    for (const x of p.panels) { panels[x.mat].push(x); edge += x.edge * x.qty; }
+    for (const x of p.panels) { panels[x.mat].push(x); edge += x.edge * x.qty; } // (skirting cut from a profile is listed apart)
     for (const k of Object.keys(hw)) hw[k] += p.hw[k]; glass.push(...p.glass); frames.push(...p.frames); appliances.push(...p.appliances); for (const [k, n] of Object.entries(p.acc)) accessories[k] = (accessories[k] || 0) + n;
     const w = (+cab.w || 0) / 100; if (type.gap) continue;
     meters.units++; if (type.wall) { meters.wall += w; meters.wall_n++; } else if (type.tall) { meters.tall += w; meters.tall_n++; } else { meters.base += w; meters.base_n++; }
@@ -224,8 +231,9 @@ export function kitchenModel(spec) {
     const pk = packSheets(panels[mat], style.sheet_w, style.sheet_h, style.kerf);
     sheets[mat] = { ...pk, area: panels[mat].reduce((a, p) => a + p.w * p.h * p.qty, 0) / 10000 };
   }
+  const skirtBars = panels.skirt.length ? packLengths(panels.skirt.map((x) => ({ len: x.w, qty: x.qty, label: x.label })), +style.plinth_bar_len || 600) : null;
   const profile = style.kind === 'aluminium' ? packBars(frames, +style.bar_len || 600, +style.frame_w || 4.5) : null;
-  return { style, counter, panels, hw, glass, frames, appliances, accessories, profile, sheets, meters, edge_m: edge / 100, tops: counterTops(runs, counter, style) };
+  return { style, counter, panels, hw, glass, frames, appliances, accessories, profile, skirtBars, sheets, meters, edge_m: edge / 100, tops: counterTops(runs, counter, style) };
 }
 
 /** Countertop pieces: one per unbroken stretch of base cabinets in each run. */
@@ -270,6 +278,7 @@ export function priceKitchen(model, opts) {
   add('Boards', `Back panels — ${style.back || style.carcass || 'not chosen'}`, sheetCount('back'), `sheet ${style.sheet_w}×${style.sheet_h}`, back ? (back.meta?.back_price ?? back.price) : 0, { kind: 'panel', name: style.back || style.carcass });
   if (model.profile) { const pr = o('profile', style.profile); add('Door frames', `Door frame profile — ${style.profile || 'not chosen'}`, model.profile.bars.length, `bar ${style.bar_len || 600} cm`, Number(style.profile_price) > 0 ? Number(style.profile_price) : pr?.price, { kind: 'profile', name: style.profile }); add('Door frames', 'Frame corner joints / assembly', model.profile.corners, 'corners', gen('frame_corner')); }
   add('Boards', 'Edge banding', model.edge_m, 'm', gen('edge_band_m'));
+  if (model.skirtBars) add('Skirting', `Skirting profile — ${style.plinth_profile}`, model.skirtBars.bars.length, `bar ${style.plinth_bar_len || 600} cm`, Number(style.plinth_price) || 0, { kind: 'plinth', name: style.plinth_profile });
   const hinge = o('hinge', style.hinge); add('Hardware', `Hinges — ${style.hinge || 'not chosen'}`, hw.hinges, 'pcs', hinge?.price);
   const drw = o('drawer', style.drawer); add('Hardware', `Drawer sets — ${style.drawer || 'not chosen'}`, hw.slides, 'sets', drw?.price);
   const handle = o('handle', style.handle);
