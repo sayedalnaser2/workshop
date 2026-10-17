@@ -238,9 +238,11 @@ test('VAT per line: only lines with VAT are taxed, the discount is shared over t
 test('kitchens: door directions, L-corner, slots in tall units, appliance gaps, shelves and open cabinets', async () => {
   const { kitchenModel, cabinetParts, slotsOf } = await import('../public/js/kitchen.js');
   const { scene, frontsOf, placeRuns, runStarts } = await import('../public/js/kitchen-3d.js');
-  const room = { runs: [{ cabinets: [{ type: 'base', w: 60 }, { type: 'tall', w: 60 }, { type: 'base', w: 60 }] }, { cabinets: [{ type: 'wall', w: 60 }, { type: 'wall', w: 60 }, { type: 'wall', w: 60 }] }] };
+  const room = { runs: [{ cabinets: [{ type: 'base', w: 60 }, { type: 'tall', w: 60, h: 210 }, { type: 'base', w: 60 }] }, { cabinets: [{ type: 'wall', w: 60 }, { type: 'wall', w: 60 }, { type: 'wall', w: 60 }] }] };
   assert.deepEqual(runStarts(room, 1), [0, 120, 180]); // wall units slide past the tall unit instead of crossing it
   assert.deepEqual(runStarts(room, 0), [0, 60, 120]);
+  const fridgeRoom = { runs: [{ cabinets: [{ type: 'base', w: 60 }, { type: 'gap', w: 70, h: 190, appliance: 'fridge' }, { type: 'base', w: 60 }] }, { cabinets: [{ type: 'wall', w: 60, y: 140 }, { type: 'wall', w: 60, y: 140 }, { type: 'wall', w: 60, y: 200 }] }] };
+  assert.deepEqual(runStarts(fridgeRoom, 1), [0, 130, 190]); // a fridge reaching the wall units is treated like a tall unit; a unit hung above it (y 200) is not blocked
   const gapRoom = { runs: [room.runs[0], { cabinets: [{ type: 'wall', w: 60 }, { type: 'wall', w: 60, gap_before: 80 }, { type: 'wall', w: 60 }] }] };
   assert.deepEqual(runStarts(gapRoom, 1), [0, 140, 200]); // a space before a wall unit moves it (and the ones after) along; the tall unit still blocks 60–120
   const mk = (cab) => cabinetParts({ w: 60, h: 72, d: 56, ...cab });

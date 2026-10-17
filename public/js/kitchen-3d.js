@@ -22,15 +22,26 @@ export function placeRuns(spec) {
 /** Where each cabinet of a run starts (cm along the run). Wall units can have a space before them (gap_before); and those that hang over a base run make room for its tall units: they slide along to the right of them. */
 export function runStarts(spec, ri) {
   const runs = spec.runs || []; const run = runs[ri]; const cabs = (run && run.cabinets) || []; const isWall = (c) => !!(CAB_TYPES[c.type] || {}).wall;
-  let blockers = [];
+  const style = { ...DEFAULT_STYLE, ...(spec.style || {}) }; const ct = Math.max(0, +spec.counter?.thickness || 2);
+  const mountOf = (c) => (c.y !== undefined && c.y !== '' && Number.isFinite(+c.y) ? +c.y : style.wall_height);
+  let blockers = []; // [from, to, top]: what stands on the floor under the wall units and reaches up to them
   if (cabs.length && cabs.every(isWall)) {
     const pl = placeRuns(spec); const k = runs.findIndex((r, i) => i !== ri && (r.cabinets || []).length && !r.cabinets.every(isWall) && pl[i].x === pl[ri].x && pl[i].z === pl[ri].z && pl[i].rot === pl[ri].rot);
-    if (k >= 0) { let a = 0; for (const c of runs[k].cabinets) { const w = +c.w || 0; if ((CAB_TYPES[c.type] || {}).tall) blockers.push([a, a + w]); a += w; } }
+    if (k >= 0) {
+      let a = 0;
+      for (const c of runs[k].cabinets) {
+        const t = CAB_TYPES[c.type] || {}; const w = +c.w || 0; const h = +c.h || 0;
+        const floorStanding = t.tall || (t.gap && ['fridge', 'freezer'].includes(c.appliance)); // a tall unit or a fridge starts at the floor
+        const top = floorStanding ? h : t.gap ? style.plinth + h : style.plinth + h + (t.counter ? ct : 0);
+        blockers.push([a, a + w, top]); a += w;
+      }
+    }
   }
   const out = []; let u = 0;
   for (const c of cabs) {
     const w = +c.w || 0; if (isWall(c)) u += Math.max(0, +c.gap_before || 0); // a wall unit can be set away from its neighbour
-    for (let moved = blockers.length > 0; moved;) { moved = false; for (const [a, b] of blockers) if (u < b - 0.01 && u + w > a + 0.01) { u = b; moved = true; } }
+    const hit = blockers.filter((x) => x[2] > mountOf(c) + 0.01); // only what reaches up to this unit's bottom edge
+    for (let moved = hit.length > 0; moved;) { moved = false; for (const [a, b] of hit) if (u < b - 0.01 && u + w > a + 0.01) { u = b; moved = true; } }
     out.push(u); u += w;
   }
   return out;
