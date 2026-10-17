@@ -1,5 +1,5 @@
 // SVG drawings for kitchens: front elevation, plan view with countertop, and sheet cut layouts.
-import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, slotsOf, zonesOf } from './kitchen.js';
+import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, slotsOf, zonesOf, shelfCount, shelfGap } from './kitchen.js';
 import { colourHex, glassHex, stoneHex, lighten } from './drawings.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -17,7 +17,7 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
   let y0 = 0; let out = '';
   for (const run of runs) {
     // each run only gets the height it needs: a row of wall units is drawn without the empty wall below it
-    const ext = run.cabinets.map((c) => { const t = CAB_TYPES[c.type] || CAB_TYPES.base; const f = floorOf(t, c); return [t.counter || t.gap ? (t.gap ? 0 : 0) : f, f + (+c.h || 0) + (t.counter ? ct : 0)]; });
+    const ext = run.cabinets.map((c) => { const t = CAB_TYPES[c.type] || CAB_TYPES.base; const f = floorOf(t, c); return [t.counter || t.gap ? (t.gap ? 0 : 0) : f, f + (+c.h || 0) + (t.counter ? ct : 0) + (t.shelf ? (shelfCount(c) - 1) * ((+c.h || 0) + shelfGap(c)) : 0)]; });
     const bottom = Math.min(...ext.map((e) => e[0])); const top = Math.max(...ext.map((e) => e[1]));
     const rowH = (top - bottom) * k + 64; const base = y0 + 20 + (top - bottom) * k; // y of the lowest drawn level
     out += `<text x="${padL}" y="${y0 + 12}" font-size="12" font-weight="700" fill="currentColor">${esc(run.name || 'Run')}${run.island ? ' <tspan font-weight="400" opacity=".7">(island — free-standing)</tspan>' : ''}${bottom > 0 ? ` <tspan font-weight="400" opacity=".7">(hung ${bottom} cm above the floor)</tspan>` : ''}</text>`;
@@ -67,7 +67,7 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
         if (drawers) { const z = zn.drawers; const zx = x + z.x * f; const zy = yTop + (+c.h - z.y - z.h) * f; const zw = z.w * f; const dh = (z.h * f) / drawers; for (let i = 0; i < drawers; i++) out += `<rect x="${zx + 2}" y="${zy + i * dh + 2}" width="${zw - 4}" height="${dh - 4}" fill="${FILL2}" stroke="${INK}" stroke-width=".8"/><line x1="${zx + zw * .35}" y1="${zy + i * dh + dh * .4}" x2="${zx + zw * .65}" y2="${zy + i * dh + dh * .4}" stroke="${INK}" stroke-width="2"/>`; }
         if (doors) { const z = zn.doors; doorSet(x + z.x * f, yTop + (+c.h - z.y - z.h) * f, z.w * f, z.h * f, doors, dir, glazed, t.wall); }
       }
-      if (t.shelf) out += `<rect x="${x}" y="${yTop}" width="${w}" height="${Math.max(3, h)}" fill="#d9c9a8" stroke="${INK}" stroke-width="1"/>`;
+      if (t.shelf) for (let q = 0; q < shelfCount(c); q++) out += `<rect x="${x}" y="${yTop - q * ((+c.h || 0) + shelfGap(c)) * k}" width="${w}" height="${Math.max(3, h)}" fill="#d9c9a8" stroke="${INK}" stroke-width="1"/>`;
       if (t.sink) { const cx = x + w / 2; const ty = yTop - ct * k; out += `<path d="M${x + w * .12} ${ty} L${x + w * .12} ${ty + 4} L${x + w * .88} ${ty + 4} L${x + w * .88} ${ty}" fill="#b9c0c9" stroke="${INK}" stroke-width="1"/><path d="M${cx} ${ty} L${cx} ${ty - 16} Q${cx} ${ty - 22} ${cx - 8} ${ty - 22}" fill="none" stroke="${INK}" stroke-width="2"/>`; }
       if (t.counter) out += `<rect x="${x - 1}" y="${yTop - ct * k}" width="${w + 2}" height="${ct * k}" fill="${TOP}"/>`;
       if (!t.wall && !t.tall) out += `<rect x="${x}" y="${yTop + h}" width="${w}" height="${style.plinth * k}" fill="#8b95a3"/>`;

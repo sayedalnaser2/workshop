@@ -22,6 +22,9 @@ export const SLOT_KINDS = { door: 'Door', glass: 'Glass door', drawer: 'Drawer',
 export const DIRS = { auto: 'Automatic', left: 'Hinged left', right: 'Hinged right', up: 'Lifts up', down: 'Folds down', slide: 'Sliding', shutter: 'Roller shutter (rolls up)' };
 /** Accessories that can be added to a cabinet. visual = drawn in the 3D view. */
 export const ACCESSORIES = { tap: ['Tap / mixer', true], bin: ['Pull-out waste bin', false], cutlery: ['Cutlery tray', false], pullout: ['Pull-out basket', false], lights: ['LED light strip', true], rail: ['Rail with hooks', true], spice: ['Spice rack', false], lazy: ['Lazy-susan carousel', false], soft: ['Soft-close set', false] };
+/** How many floating shelves one shelf unit stacks above each other, and the clear space between them (cm). */
+export const shelfCount = (cab) => Math.max(1, Math.min(12, Math.round(+cab.stack || 1)));
+export const shelfGap = (cab) => (Number.isFinite(+cab.stack_gap) && cab.stack_gap !== '' && cab.stack_gap !== undefined ? Math.max(0, +cab.stack_gap) : 30);
 /** Slots of a tall unit, defaulting to two doors on top of each other if none are set. */
 export const slotsOf = (cab) => (Array.isArray(cab.slots) && cab.slots.length ? cab.slots.map((x) => ({ k: x.k || 'door', h: +x.h || 0, n: Math.max(1, Math.round(+x.n || 1)), dir: x.dir || 'auto' })) : null);
 export const DEFAULT_STYLE = {
@@ -66,7 +69,7 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   const tag = cab.label ? `${cab.label} · ` : '';
   const dd = D - b - 1; // depth of horizontal panels (back sits behind them)
   for (const a of cab.acc || []) if (ACCESSORIES[a]) acc[a] = (acc[a] || 0) + 1;
-  if (type.shelf) { add(`${tag}Floating shelf board`, W, D, 1, 'carcass', W + 2 * (D - 2)); hw.hangers += 2; return { panels, hw, glass, frames, appliances, acc }; }
+  if (type.shelf) { const n = shelfCount(cab); add(`${tag}Floating shelf board`, W, D, n, 'carcass', W + 2 * (D - 2)); hw.hangers += 2 * n; return { panels, hw, glass, frames, appliances, acc }; }
   if (type.hood) { hw.hangers += 2; appliances.push({ k: 'hood', w: W, h: H, d: D }); return { panels, hw, glass, frames, appliances, acc }; }
   add(`${tag}Side`, dd + b + 1 > D ? D : D, H, 2, 'carcass', H); // sides: front edge banded
   add(`${tag}Bottom`, W - 2 * t, dd, 1, 'carcass', W - 2 * t);

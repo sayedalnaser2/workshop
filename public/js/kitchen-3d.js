@@ -1,6 +1,6 @@
 // 3D view of a kitchen: cabinets become boxes, a small painter's-algorithm renderer draws them on a canvas.
 // scene() is pure (tested); draw3D() needs a canvas. All sizes in cm; x = right, y = up, z = towards the viewer (the back wall is z = 0).
-import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, slotsOf, zonesOf } from './kitchen.js';
+import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, slotsOf, zonesOf, shelfCount, shelfGap } from './kitchen.js';
 import { colourHex, stoneHex } from './drawings.js';
 
 /** Where each run stands: { x, z, rot } with rot 0/90/180/270. Run 1 = back wall, 2 = left wall, 3 = right wall, islands in front. */
@@ -126,7 +126,7 @@ export function scene(spec, open = {}) {
         if (c.appliance && APPLIANCES[c.appliance]) appliance(c.appliance, u + .5, u + w - .5, c.appliance === 'fridge' || c.appliance === 'freezer' ? 0 : style.plinth, c.appliance === 'fridge' || c.appliance === 'freezer' ? Math.min(h, 200) : Math.min(h, APPLIANCES[c.appliance][1] + style.plinth), d - 2, d - 2);
         u += w; continue;
       }
-      if (t.shelf) { put(u, u + w, 0, d, y0, y0 + h, '#d9c9a8', 'carcass'); u += w; continue; }
+      if (t.shelf) { for (let q = 0; q < shelfCount(c); q++) { const ys = y0 + q * (h + shelfGap(c)); put(u, u + w, 0, d, ys, ys + h, '#d9c9a8', 'carcass'); } u += w; continue; }
       if (t.hood) { put(u, u + w, 0, d, y0, y0 + 10, STEEL, 'carcass'); put(u + w * .3, u + w * .7, 0, Math.min(d * .5, 24), y0 + 10, y0 + h, STEEL, 'carcass'); u += w; continue; }
       const cabOp = +open[`${ri}|${ci}`] || 0;
       const fOpen = (k) => { const x = open[`${ri}|${ci}|${k}`]; return Math.max(0, Math.min(1, +(x === undefined ? cabOp : x) || 0)); }; // one drawer or door on its own, else the whole cabinet

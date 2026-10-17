@@ -254,6 +254,7 @@ test('kitchens: door directions, L-corner, slots in tall units, appliance gaps, 
   const tp = cabinetParts(tall); assert.equal(tp.appliances[0].k, 'oven'); assert.equal(tp.panels.filter((p) => p.label === 'Divider').length, 2);
   assert.deepEqual(frontsOf(tall).map((f) => f.key), ['s0', 's2']); assert.equal(slotsOf({ slots: [] }), null);
   const shelf = cabinetParts({ type: 'shelf', w: 80, h: 4, d: 25 }); assert.equal(shelf.panels.length, 1); assert.equal(shelf.hw.hangers, 2);
+  const three = cabinetParts({ type: 'shelf', w: 80, h: 4, d: 25, stack: 3 }); assert.equal(three.panels[0].qty, 3); assert.equal(three.hw.hangers, 6); // three shelves stacked above each other
   const spec = { runs: [{ name: 'A', cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }, { type: 'corner', w: 90, h: 72, d: 56, doors: 2 }] }, { name: 'B', cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }] }] };
   const m = kitchenModel(spec); assert.ok(m.tops.pieces[0].leg > 0); assert.equal(placeRuns(spec)[1].z, 62);
   const spec2 = { runs: [{ cabinets: [{ type: 'corner', w: 90, h: 72, d: 56, doors: 2 }, { type: 'base', w: 60, h: 72, d: 56, doors: 1 }] }, { cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }] }] };

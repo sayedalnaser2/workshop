@@ -1,7 +1,7 @@
 import { scene, draw3D, pick3D, placeRuns, unproject, frontsOf, runStarts } from '../kitchen-3d.js';
 import { S } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, toast, guard, confirmBox, modal, formHTML, readForm, dataTable, badge, datalist } from '../ui.js';
-import { CAB_TYPES, DEFAULT_STYLE, DEFAULT_COUNTER, APPLIANCES, SLOT_KINDS, DIRS, ACCESSORIES, slotsOf, kitchenModel, priceKitchen, mergeCabinets, splitCabinet, mergeSaving } from '../kitchen.js';
+import { shelfCount, CAB_TYPES, DEFAULT_STYLE, DEFAULT_COUNTER, APPLIANCES, SLOT_KINDS, DIRS, ACCESSORIES, slotsOf, kitchenModel, priceKitchen, mergeCabinets, splitCabinet, mergeSaving } from '../kitchen.js';
 import { elevationSVG, planSVG, sheetSVG } from '../kitchen-draw.js';
 import { docHeader, docFooter, L, AR, wordsBlock, termsBlock } from '../doc.js';
 import { openPoDialog } from '../po-dialog.js';
@@ -219,6 +219,7 @@ async function editor(el, id, tab) {
         ${t.gap ? `<label class="field full"><span>Appliance in this space</span><select data-f="appliance"><option value="">— none (empty gap) —</option>${Object.entries(APPLIANCES).map(([k2, a2]) => `<option value="${k2}" ${c.appliance === k2 ? 'selected' : ''}>${a2[0]}</option>`).join('')}</select></label>` : ''}
         ${FIELDS.filter(([k2]) => !(t.gap || t.shelf || t.hood) || ['label', 'w', 'h', 'd'].includes(k2)).map(([k2, l, ty]) => `<label class="field"><span>${l}</span><input data-f="${k2}" ${ty === 'text' ? '' : 'type="number" step="any" min="0"'} value="${esc(c[k2] ?? '')}"></label>`).join('')}
         ${t.wall ? `<label class="field"><span>Space before it cm</span><input data-f="gap_before" type="number" step="any" min="0" value="${esc(c.gap_before ?? 0)}" title="Space between this unit and the one before it (or the tall unit)"></label><label class="field"><span>Mount height cm</span><input data-f="y" type="number" step="any" value="${esc(c.y ?? '')}" placeholder="${spec.style.wall_height ?? 140}"></label>` : ''}
+        ${t.shelf ? `<label class="field"><span>Shelves stacked</span><input data-f="stack" type="number" min="1" max="12" step="1" value="${shelfCount(c)}" title="How many floating shelves above each other"></label><label class="field"><span>Space between cm</span><input data-f="stack_gap" type="number" min="0" step="any" value="${esc(c.stack_gap ?? 30)}"></label>` : ''}
         ${t.corner ? `<label class="field"><span>Return leg on the</span><select data-f="side"><option value="">automatic</option><option value="right" ${c.side === 'right' ? 'selected' : ''}>right</option><option value="left" ${c.side === 'left' ? 'selected' : ''}>left</option></select></label>` : ''}</div>
         ${!t.gap && !t.shelf && !t.hood && !slots && !t.corner && (+c.doors || 0) === 0 && nd === 0 ? '<p class="muted" style="margin:6px 0 0">No doors and no drawers: this cabinet is left <b>open</b>.</p>' : ''}
         ${hasDoors ? `<div class="form" style="grid-template-columns:1fr;margin-top:8px"><label class="field"><span>Door opening direction</span><select data-f="dir">${Object.entries(DIRS).map(([k2, l]) => `<option value="${k2}" ${(c.dir || 'auto') === k2 ? 'selected' : ''}>${l}${k2 === 'auto' ? ' (pairs open outwards)' : ''}</option>`).join('')}</select></label></div>` : ''}
