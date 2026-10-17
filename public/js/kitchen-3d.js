@@ -19,7 +19,7 @@ export function placeRuns(spec) {
   });
 }
 
-/** Where each cabinet of a run starts (cm along the run). Wall units that hang over a base run make room for its tall units: they slide along to the right of them. */
+/** Where each cabinet of a run starts (cm along the run). Wall units can have a space before them (gap_before); and those that hang over a base run make room for its tall units: they slide along to the right of them. */
 export function runStarts(spec, ri) {
   const runs = spec.runs || []; const run = runs[ri]; const cabs = (run && run.cabinets) || []; const isWall = (c) => !!(CAB_TYPES[c.type] || {}).wall;
   let blockers = [];
@@ -29,7 +29,7 @@ export function runStarts(spec, ri) {
   }
   const out = []; let u = 0;
   for (const c of cabs) {
-    const w = +c.w || 0;
+    const w = +c.w || 0; if (isWall(c)) u += Math.max(0, +c.gap_before || 0); // a wall unit can be set away from its neighbour
     for (let moved = blockers.length > 0; moved;) { moved = false; for (const [a, b] of blockers) if (u < b - 0.01 && u + w > a + 0.01) { u = b; moved = true; } }
     out.push(u); u += w;
   }

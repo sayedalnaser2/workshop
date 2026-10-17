@@ -241,6 +241,8 @@ test('kitchens: door directions, L-corner, slots in tall units, appliance gaps, 
   const room = { runs: [{ cabinets: [{ type: 'base', w: 60 }, { type: 'tall', w: 60 }, { type: 'base', w: 60 }] }, { cabinets: [{ type: 'wall', w: 60 }, { type: 'wall', w: 60 }, { type: 'wall', w: 60 }] }] };
   assert.deepEqual(runStarts(room, 1), [0, 120, 180]); // wall units slide past the tall unit instead of crossing it
   assert.deepEqual(runStarts(room, 0), [0, 60, 120]);
+  const gapRoom = { runs: [room.runs[0], { cabinets: [{ type: 'wall', w: 60 }, { type: 'wall', w: 60, gap_before: 80 }, { type: 'wall', w: 60 }] }] };
+  assert.deepEqual(runStarts(gapRoom, 1), [0, 140, 200]); // a space before a wall unit moves it (and the ones after) along; the tall unit still blocks 60–120
   const mk = (cab) => cabinetParts({ w: 60, h: 72, d: 56, ...cab });
   assert.equal(mk({ type: 'base', doors: 1, dir: 'slide' }).hw.tracks, 1); assert.equal(mk({ type: 'base', doors: 1, dir: 'slide' }).hw.hinges, 0);
   assert.equal(mk({ type: 'base', doors: 2, dir: 'up' }).hw.lifts, 2);
