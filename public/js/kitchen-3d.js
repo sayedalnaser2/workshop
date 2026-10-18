@@ -294,9 +294,25 @@ export function draw3D(canvas, boxes, view = {}) {
   for (const fc of faces) { if (fc.pts.some((p) => p[2] < 5)) continue; const p = fc.pts.map(proj); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fillStyle = fc.fill; ctx.fill();
     if (fc.tex && p.length === 4 && Math.min(Math.hypot(...[0, 1, 2].map((i) => fc.wq[1][i] - fc.wq[0][i])), Math.hypot(...[0, 1, 2].map((i) => fc.wq[3][i] - fc.wq[0][i]))) > 4) { // a picture on the face: the image is laid on the face's own corners, grain running up the face, then shaded like the plain colour
       const q = fc.wq; const e1 = [q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]]; const e3 = [q[3][0] - q[0][0], q[3][1] - q[0][1], q[3][2] - q[0][2]];
-      const [pu, pv] = Math.abs(e1[1]) > Math.abs(e3[1]) ? [p[3], p[1]] : [p[1], p[3]]; // pu: across the face, pv: up it
-      const iw = fc.tex.naturalWidth; const ih = fc.tex.naturalHeight;
-      ctx.save(); ctx.clip(); ctx.transform((pu[0] - p[0][0]) / iw, (pu[1] - p[0][1]) / iw, (pv[0] - p[0][0]) / ih, (pv[1] - p[0][1]) / ih, p[0][0], p[0][1]); ctx.drawImage(fc.tex, 0, 0); ctx.restore();
+      const swap = Math.abs(e1[1]) > Math.abs(e3[1]); // grain runs up the face
+      const c = fc.pts; const P = (s, t) => { const o = [0, 1, 2].map((i) => c[0][i] + (c[swap ? 3 : 1][i] - c[0][i]) * s + (c[swap ? 1 : 3][i] - c[0][i]) * t); return proj(o); }; // s across, t up, in camera space so the perspective is right
+      const iw = fc.tex.naturalWidth; const ih = fc.tex.naturalHeight; const xs = Math.max(...p.map((q) => q[0])) - Math.min(...p.map((q) => q[0])); const N = xs > 70 ? 6 : xs > 25 ? 3 : 1;
+      ctx.save(); ctx.clip();
+      const tri = (A, B, C, a, b, cc) => { // paint the picture's triangle a,b,cc onto the screen triangle A,B,C
+        const det = (b[0] - a[0]) * (cc[1] - a[1]) - (cc[0] - a[0]) * (b[1] - a[1]); if (!det) return;
+        const m11 = ((B[0] - A[0]) * (cc[1] - a[1]) - (C[0] - A[0]) * (b[1] - a[1])) / det; const m21 = ((C[0] - A[0]) * (b[0] - a[0]) - (B[0] - A[0]) * (cc[0] - a[0])) / det;
+        const m12 = ((B[1] - A[1]) * (cc[1] - a[1]) - (C[1] - A[1]) * (b[1] - a[1])) / det; const m22 = ((C[1] - A[1]) * (b[0] - a[0]) - (B[1] - A[1]) * (cc[0] - a[0])) / det;
+        const gx = (A[0] + B[0] + C[0]) / 3; const gy = (A[1] + B[1] + C[1]) / 3; const grow = (V) => [V[0] + Math.sign(V[0] - gx) * .6, V[1] + Math.sign(V[1] - gy) * .6];
+        const [A2, B2, C2] = [grow(A), grow(B), grow(C)];
+        ctx.save(); ctx.beginPath(); ctx.moveTo(A2[0], A2[1]); ctx.lineTo(B2[0], B2[1]); ctx.lineTo(C2[0], C2[1]); ctx.closePath(); ctx.clip();
+        ctx.transform(m11, m12, m21, m22, A[0] - m11 * a[0] - m21 * a[1], A[1] - m12 * a[0] - m22 * a[1]); ctx.drawImage(fc.tex, 0, 0); ctx.restore();
+      };
+      for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+        const s0 = i / N; const s1 = (i + 1) / N; const t0 = j / N; const t1 = (j + 1) / N;
+        const Q = [P(s0, t0), P(s1, t0), P(s1, t1), P(s0, t1)]; const T = [[s0 * iw, t0 * ih], [s1 * iw, t0 * ih], [s1 * iw, t1 * ih], [s0 * iw, t1 * ih]];
+        tri(Q[0], Q[1], Q[2], T[0], T[1], T[2]); tri(Q[0], Q[2], Q[3], T[0], T[2], T[3]);
+      }
+      ctx.restore(); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); // (the picture drawing used the path for its triangles: draw the face outline again)
       ctx.fillStyle = fc.light < 1 ? `rgba(0,0,0,${Math.min(.6, 1 - fc.light).toFixed(2)})` : `rgba(255,255,255,${Math.min(.3, fc.light - 1).toFixed(2)})`; ctx.fill();
     }
     if (fc.on) { ctx.fillStyle = fc.on === 2 ? 'rgba(255,140,0,.38)' : 'rgba(40,120,255,.22)'; ctx.fill(); } ctx.strokeStyle = fc.on === 2 ? '#e07b00' : 'rgba(30,45,62,.55)'; ctx.lineWidth = fc.on === 2 ? 1.8 : .8; ctx.stroke(); if (fc.ref && fc.ref.ci >= 0) canvas._hit.push({ poly: p, ref: fc.ref, kind: fc.kind }); }
