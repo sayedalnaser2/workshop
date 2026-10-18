@@ -310,7 +310,7 @@ test('aluminium kitchens follow the workshop cutting rules', async () => {
   const len = (p, code, label) => p.bars.filter((b) => b.code === code && b.label.includes(label)).map((b) => [b.len, b.qty]);
   const st = { kind: 'aluminium' };
   const base = cabinetParts({ type: 'base', w: 60, h: 72, d: 56, doors: 2, shelves: 1 }, st);
-  assert.deepEqual(len(base, '22421', 'Edge back top'), [[60, 2]]); assert.deepEqual(len(base, '23564', 'Square'), [[55, 1]]); assert.deepEqual(len(base, '23564', 'Column'), [[67, 1]]);
+  assert.deepEqual(len(base, '22421', 'Edge back top'), [[60, 2]]); assert.deepEqual(len(base, '23564', 'Square'), [[55, 1]]); assert.deepEqual(len(base, '23564', 'Column'), []); // 2 doors: no hinge column
   assert.deepEqual(len(base, '22421', 'Shelf (width)'), [[58.6, 2]]); assert.deepEqual(len(base, '22421', 'Shelf (depth)'), [[52.8, 2]]);
   assert.deepEqual(base.panels.filter((p) => p.mat === 'white22').map((p) => [p.label, p.w, p.h, p.qty]), [['Bottom', 54.8, 50.8, 1], ['Side', 66.8, 50.8, 2], ['Back', 54.8, 66.8, 1]]); // no top sheet: the marble sits on it
   assert.ok(cabinetParts({ type: 'base', w: 60, h: 72, d: 56, doors: 2, top_sheet: true }, st).panels.some((p) => p.label === 'Top'));
@@ -364,4 +364,11 @@ test('kitchens: open door places and the hidden handle (only over doors, one pie
   const m = kitchenModel({ style: st, runs: [{ cabinets: [{ type: 'base', w: 60, d: 60, h: 70, doors: 1 }, { type: 'sink', w: 80, d: 60, h: 70, doors: 2 }, { type: 'gap', w: 60, d: 60, h: 85 }, { type: 'base', w: 40, d: 60, h: 70, doors: 1 }] }] });
   const hidden = m.carcassBars.find((g) => g.code === 'L-shape').parts.map((p) => [p.label, p.len]);
   assert.deepEqual(hidden, [['A1+A2 · Hidden handle profile (one piece)', 140], ['A4 · Hidden handle profile', 40]]); // the gap breaks it
+});
+
+test('aluminium hinge column: (H − 5) × Int((QOD − 1) / 2) when more than 2 doors', async () => {
+  const { cabinetParts } = await import('../public/js/kitchen.js');
+  const col = (n, type = 'base') => cabinetParts({ type, w: 30 * n, d: 60, h: 70, doors: n, y: 140 }, { kind: 'aluminium' }).bars.filter((b) => b.label.includes('Column')).map((b) => [b.len, b.qty]);
+  assert.deepEqual(col(1), []); assert.deepEqual(col(2), []); assert.deepEqual(col(3), [[65, 1]]); assert.deepEqual(col(4), [[65, 1]]); assert.deepEqual(col(5), [[65, 2]]); assert.deepEqual(col(6), [[65, 2]]); assert.deepEqual(col(7), [[65, 3]]);
+  assert.deepEqual(col(2, 'wall'), []); assert.deepEqual(col(3, 'wall'), [[65, 1]]);
 });
