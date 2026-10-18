@@ -168,6 +168,13 @@ export function scene(spec, open = {}) {
         put(right ? uf - 3.2 : uf + 1.8, right ? uf - 1.8 : uf + 3.2, d + 4, d + 5.2, y0 + h * (t.wall ? .2 : .75) - 6, y0 + h * (t.wall ? .2 : .75) + 6, STEEL, 'handle', sw1);
         curFront = null;
         if (t.counter) { put(u, u + w, 0, d + over, y0 + h, y0 + h + ct, top, 'top'); if (w > d) put(lb[0], lb[1], d, w, y0 + h, y0 + h + ct, top, 'top'); }
+        { // accessories of an L-corner: the carousel sits in the elbow, a bin in the long leg, a light on the toe-kick
+          const ac = c.acc || []; const ex = right ? u + w - d / 2 : u + d / 2; const bot = y0 + T; const room = h - 2 * T;
+          if (ac.includes('lights') && skirt) put(u + 3, u + w - 3, d - 4.2, d - 3.6, style.plinth * .3, style.plinth * .3 + 2.6, '#ffe066', 'acc');
+          if (hollow && ac.includes('lazy') && room > 25) { const r = d * .36; for (const f of [.15, .6]) { const sy = bot + room * f; put(ex - r, ex + r, d / 2 - r, d / 2 + r, sy, sy + .8, '#e8e4dc', 'acc'); put(ex - r, ex + r, d / 2 - r, d / 2 - r + .8, sy + .8, sy + 3, '#e8e4dc', 'acc'); } put(ex - .8, ex + .8, d / 2 - .8, d / 2 + .8, bot, bot + room * .6 + .8, STEEL, 'acc'); }
+          if (hollow && ac.includes('bin') && room > 25 && w > d + 20) { put(ua + 8, ub - 8, d * .3, d * .85, bot + .5, bot + Math.min(34, room * .55), '#4b5563', 'acc'); }
+          if (ac.includes('tap') && t.counter) put(ex - 1.5, ex + 1.5, d / 2 - 1.5, d / 2 + 1.5, y0 + h + ct, y0 + h + ct + 22, '#d7dbe0', 'acc');
+        }
         u += w; continue;
       }
       if (hollow) { // a hollow carcass, so the inside shows when doors or drawers are open, or when the cabinet has no doors
@@ -222,9 +229,9 @@ export function scene(spec, open = {}) {
       // every accessory has a picture; inside ones show when the door or drawer is opened
       const AL = '#ffe066'; const BIN = '#4b5563'; const WIRE = '#c3c9d1'; const cw = w - 2 * T; const bot = y0 + T; const room = h - 2 * T;
       if (accs.includes('lights')) { // LED strip: under a wall unit, in the toe-kick of a floor unit, up the front edge of a tall one
-        if (t.wall) put(u + 3, u + w - 3, d * .55, d * .7, y0 - .8, y0, AL, 'acc');
+        if (t.wall) put(u + 3, u + w - 3, d - 7, d - 2.5, y0 - .8, y0, AL, 'acc');
         else if (t.tall) put(u + 1.5, u + 3, d, d + .6, y0 + 8, y0 + h - 8, AL, 'acc');
-        else if (hasSkirt(c)) put(u + 3, u + w - 3, 4.4, 6, style.plinth * .25, style.plinth * .25 + 2.4, AL, 'acc');
+        else if (hasSkirt(c)) put(u + 3, u + w - 3, d - 4.2, d - 3.6, style.plinth * .3, style.plinth * .3 + 2.6, AL, 'acc');
         else put(u + 3, u + w - 3, 1, 2.2, ytop - 1.2, ytop - .2, AL, 'acc');
       }
       if (accs.includes('rail') && t.counter) { put(u + 5, u + w - 5, 0.4, 2.4, ytop + ct + 38, ytop + ct + 39.6, STEEL, 'acc'); for (const f of [.25, .5, .75]) put(u + w * f - .6, u + w * f + .6, 0.4, 3, ytop + ct + 33, ytop + ct + 38, STEEL, 'acc'); }
@@ -285,7 +292,7 @@ export function draw3D(canvas, boxes, view = {}) {
   }
   faces.sort((a, b) => b.depth - a.depth);
   for (const fc of faces) { if (fc.pts.some((p) => p[2] < 5)) continue; const p = fc.pts.map(proj); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fillStyle = fc.fill; ctx.fill();
-    if (fc.tex && p.length === 4) { // a picture on the face: the image is laid on the face's own corners, grain running up the face, then shaded like the plain colour
+    if (fc.tex && p.length === 4 && Math.min(Math.hypot(...[0, 1, 2].map((i) => fc.wq[1][i] - fc.wq[0][i])), Math.hypot(...[0, 1, 2].map((i) => fc.wq[3][i] - fc.wq[0][i]))) > 4) { // a picture on the face: the image is laid on the face's own corners, grain running up the face, then shaded like the plain colour
       const q = fc.wq; const e1 = [q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]]; const e3 = [q[3][0] - q[0][0], q[3][1] - q[0][1], q[3][2] - q[0][2]];
       const [pu, pv] = Math.abs(e1[1]) > Math.abs(e3[1]) ? [p[3], p[1]] : [p[1], p[3]]; // pu: across the face, pv: up it
       const iw = fc.tex.naturalWidth; const ih = fc.tex.naturalHeight;
