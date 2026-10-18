@@ -250,8 +250,8 @@ export function kitchenModel(spec) {
   const panels = { carcass: [], back: [], door: [], skirt: [], white22: [], white16: [], design: [] }; const aluBars = []; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0, shutters: 0 }; const glass = []; const frames = []; const appliances = []; const accessories = {};
   const meters = { base: 0, wall: 0, tall: 0, units: 0, base_n: 0, wall_n: 0, tall_n: 0 };
   let edge = 0;
-  for (const run of runs) for (const cab of run.cabinets || []) {
-    const type = CAB_TYPES[cab.type] || CAB_TYPES.base; const p = cabinetParts(cab, style);
+  for (const [ri, run] of runs.entries()) for (const [ci, cab] of (run.cabinets || []).entries()) {
+    const type = CAB_TYPES[cab.type] || CAB_TYPES.base; const p = cabinetParts(cab.label ? cab : { ...cab, label: `${String.fromCharCode(65 + (ri % 26))}${ci + 1}` }, style); // an unnamed cabinet is called by its run and place: A1, A2…
     for (const x of p.panels) { panels[x.mat].push(x); edge += x.edge * x.qty; } // (skirting cut from a profile is listed apart)
     for (const k of Object.keys(hw)) hw[k] += p.hw[k]; glass.push(...p.glass); frames.push(...p.frames); aluBars.push(...p.bars); appliances.push(...p.appliances); for (const [k, n] of Object.entries(p.acc)) accessories[k] = (accessories[k] || 0) + n;
     const w = (+cab.w || 0) / 100; if (type.gap) continue;
