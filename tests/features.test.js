@@ -304,3 +304,22 @@ test('kitchens: appliances stand on the floor unless a skirting is asked for', a
   assert.ok(on.panels.carcass.some((p) => p.label.endsWith('Skirting'))); assert.equal(on.hw.legs, 4);
   assert.equal(kitchenModel({ runs: [{ cabinets: [g] }] }).panels.carcass.length, 0);
 });
+
+test('aluminium kitchens follow the workshop cutting rules', async () => {
+  const { kitchenModel, cabinetParts } = await import('../public/js/kitchen.js');
+  const len = (p, code, label) => p.bars.filter((b) => b.code === code && b.label.includes(label)).map((b) => [b.len, b.qty]);
+  const st = { kind: 'aluminium' };
+  const base = cabinetParts({ type: 'base', w: 60, h: 72, d: 56, doors: 2, shelves: 1 }, st);
+  assert.deepEqual(len(base, '22421', 'Edge back top'), [[60, 2]]); assert.deepEqual(len(base, '23564', 'Square'), [[55, 1]]); assert.deepEqual(len(base, '23564', 'Column'), [[67, 1]]);
+  assert.deepEqual(len(base, '22421', 'Shelf (width)'), [[58.6, 2]]); assert.deepEqual(len(base, '22421', 'Shelf (depth)'), [[52.8, 2]]);
+  assert.deepEqual(base.panels.filter((p) => p.mat === 'white22').map((p) => [p.w, p.h, p.qty]), [[54.8, 50.8, 1], [54.8, 50.8, 1], [66.8, 50.8, 2], [54.8, 66.8, 1]]);
+  assert.deepEqual(base.frames.map((f) => [f.w, f.h, f.qty]), [[28.9, 71, 2]]); // (60-2.2)/2 wide, 72-1 high
+  const hid = cabinetParts({ type: 'base', w: 60, h: 72, d: 56, doors: 1, hidden_handle: true }, st);
+  assert.deepEqual(len(hid, 'L-shape', 'Hidden'), [[60, 1]]); assert.deepEqual(hid.frames.map((f) => [f.w, f.h]), [[59, 68.5]]);
+  const wall = cabinetParts({ type: 'wall', w: 90, h: 70, d: 32, doors: 3 }, st);
+  assert.deepEqual(wall.frames.map((f) => [f.w, f.h, f.qty]), [[29.2, 69.5, 3]]); assert.deepEqual(len(wall, '23564', 'Column'), [[65, 1]]);
+  const tall = cabinetParts({ type: 'tall', w: 60, h: 210, d: 58, doors: 2 }, st);
+  assert.deepEqual(len(tall, '28456', 'Side height'), [[210, 4]]); assert.deepEqual(tall.panels.filter((p) => p.mat === 'white16').map((p) => [p.w, p.h, p.qty]), [[201.2, 49.2, 2]]);
+  const m = kitchenModel({ style: st, runs: [{ cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 2 }] }] });
+  assert.ok(m.carcassBars.find((g) => g.code === '22421') && m.sheets.white22.sheets.length === 1);
+});
