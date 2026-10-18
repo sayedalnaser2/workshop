@@ -342,3 +342,11 @@ test('kitchens: wood base units have rails, a top only when asked; sheet plans b
   const m = kitchenModel({ cut_dir: { [cutKey('carcass', { label: 'A1 · Side', w: 56, h: 72 })]: 'h' }, runs: [{ cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }] }] });
   assert.ok(m.sheets.carcass.sheets.flatMap((s) => s.items).filter((i) => i.label.endsWith('Side')).every((i) => !i.rot && i.w === 56));
 });
+
+test("workshop sample: base 100 (W) × 60 (D) × 70 (H), 2 doors, profile 28456", async () => {
+  const { cabinetParts } = await import('../public/js/kitchen.js');
+  const p = cabinetParts({ type: 'base', w: 100, d: 60, h: 70, doors: 2 }, { kind: 'aluminium' });
+  assert.deepEqual(p.frames.map((f) => [f.w, f.h, f.qty]), [[48.9, 69, 2]]); // door width ((100 − 2.2) / 2) and height (70 − 1): 4 pieces each
+  const hid = cabinetParts({ type: 'base', w: 100, d: 60, h: 70, doors: 2, hidden_handle: true }, { kind: 'aluminium' });
+  assert.deepEqual(hid.frames.map((f) => [f.w, f.h, f.qty]), [[48.9, 66.5, 2]]); // hidden handle: 70 − 3.5
+});
