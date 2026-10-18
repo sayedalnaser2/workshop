@@ -217,10 +217,23 @@ export function scene(spec, open = {}) {
       } else if (t.counter) put(u, u + w, 0, d + over, ytop, ytop + ct, top, 'top');
       // accessories
       const accs = c.acc || [];
-      if (t.sink || accs.includes('tap')) { const tx = u + w * .5; put(tx - 1.5, tx + 1.5, 3, 6, ytop + ct, ytop + ct + 22, '#d7dbe0', 'acc'); put(tx - 1.2, tx + 1.2, 3, 20, ytop + ct + 20, ytop + ct + 23, '#d7dbe0', 'acc'); }
+      if (t.sink || (accs.includes('tap') && t.counter)) { const tx = u + w * .5; put(tx - 1.5, tx + 1.5, 3, 6, ytop + ct, ytop + ct + 22, '#d7dbe0', 'acc'); put(tx - 1.2, tx + 1.2, 3, 20, ytop + ct + 20, ytop + ct + 23, '#d7dbe0', 'acc'); }
       if (t.hob) { put(u + w * .08, u + w * .92, d * .15, d * .85, ytop + ct, ytop + ct + .6, '#1d2026', 'acc'); for (const [dx, dy] of [[.3, .3], [.7, .3], [.3, .68], [.7, .68]]) { const r = Math.min(w, d) * .11; put(u + w * dx - r, u + w * dx + r, d * dy - r, d * dy + r, ytop + ct + .6, ytop + ct + 1.2, '#4a5058', 'acc'); } }
-      if (accs.includes('lights') && t.wall) put(u + 3, u + w - 3, d * .55, d * .7, y0 - .8, y0, '#fff2b0', 'acc');
-      if (accs.includes('rail') && !t.wall) { put(u + 5, u + w - 5, 0.4, 2.4, ytop + ct + 38, ytop + ct + 39.6, STEEL, 'acc'); for (const f of [.25, .5, .75]) put(u + w * f - .6, u + w * f + .6, 0.4, 3, ytop + ct + 33, ytop + ct + 38, STEEL, 'acc'); }
+      // every accessory has a picture; inside ones show when the door or drawer is opened
+      const AL = '#ffe066'; const BIN = '#4b5563'; const WIRE = '#c3c9d1'; const cw = w - 2 * T; const bot = y0 + T; const room = h - 2 * T;
+      if (accs.includes('lights')) { // LED strip: under a wall unit, in the toe-kick of a floor unit, up the front edge of a tall one
+        if (t.wall) put(u + 3, u + w - 3, d * .55, d * .7, y0 - .8, y0, AL, 'acc');
+        else if (t.tall) put(u + 1.5, u + 3, d, d + .6, y0 + 8, y0 + h - 8, AL, 'acc');
+        else if (hasSkirt(c)) put(u + 3, u + w - 3, 4.4, 6, style.plinth * .25, style.plinth * .25 + 2.4, AL, 'acc');
+        else put(u + 3, u + w - 3, 1, 2.2, ytop - 1.2, ytop - .2, AL, 'acc');
+      }
+      if (accs.includes('rail') && t.counter) { put(u + 5, u + w - 5, 0.4, 2.4, ytop + ct + 38, ytop + ct + 39.6, STEEL, 'acc'); for (const f of [.25, .5, .75]) put(u + w * f - .6, u + w * f + .6, 0.4, 3, ytop + ct + 33, ytop + ct + 38, STEEL, 'acc'); }
+      if (hollow && accs.includes('bin') && room > 25) { const bx = u + T + cw * .15; const bw2 = cw * .7; put(bx, bx + bw2, d * .3, d * .85, bot + .5, bot + Math.min(34, room * .55), BIN, 'acc'); put(bx - .3, bx + bw2 + .3, d * .3, d * .85, bot + Math.min(34, room * .55), bot + Math.min(34, room * .55) + 1, '#2f3640', 'acc'); } // pull-out waste bin: a bin standing on the floor of the cabinet
+      if (hollow && accs.includes('cutlery') && room > 12) { const ty = y0 + h - T - 9; put(u + T + 1, u + w - T - 1, 4, d - 6, ty, ty + 1, '#b08d57', 'acc'); for (let q = 1; q < 4; q++) put(u + T + 1 + (cw - 2) * q / 4 - .3, u + T + 1 + (cw - 2) * q / 4 + .3, 4, d - 6, ty + 1, ty + 4.5, '#b08d57', 'acc'); put(u + T + 1, u + w - T - 1, d - 6.6, d - 6, ty + 1, ty + 4.5, '#b08d57', 'acc'); put(u + T + 1, u + w - T - 1, 4, 4.6, ty + 1, ty + 4.5, '#b08d57', 'acc'); } // cutlery tray with dividers, high up in the cabinet
+      if (hollow && accs.includes('pullout') && room > 20) { const by = bot + 6; const bx0 = u + T + 2; const bx1 = u + w - T - 2; put(bx0, bx1, 6, d - 8, by, by + .6, WIRE, 'acc'); for (const [x, v] of [[bx0, 6], [bx1 - .6, 6], [bx0, d - 8.6], [bx1 - .6, d - 8.6]]) put(x, x + .6, v, v + .6, by, by + 16, WIRE, 'acc'); put(bx0, bx1, d - 8.6, d - 8, by + 15.4, by + 16, WIRE, 'acc'); put(bx0, bx1, 6, 6.6, by + 15.4, by + 16, WIRE, 'acc'); } // wire basket
+      if (hollow && accs.includes('spice') && room > 30) { const sx = u + T + 1; const sw2 = Math.min(15, cw - 2); const top2 = bot + Math.min(room - 2, 60); put(sx, sx + .6, 6, d - 8, bot, top2, '#9a7b4f', 'acc'); put(sx + sw2 - .6, sx + sw2, 6, d - 8, bot, top2, '#9a7b4f', 'acc'); for (let q = 0; q <= 4; q++) { const sy = bot + ((top2 - bot) * q) / 4; put(sx, sx + sw2, 6, d - 8, sy, sy + .8, '#9a7b4f', 'acc'); if (q < 4) for (const f of [.3, .7]) put(sx + sw2 * f - 1.6, sx + sw2 * f + 1.6, d * .5 - 1.6, d * .5 + 1.6, sy + .8, sy + 6, '#b34a3a', 'acc'); } } // pull-out spice rack with jars
+      if (hollow && accs.includes('lazy') && room > 25) { const cx2 = u + w / 2; const cv2 = d * .5; const r = Math.min(cw, d - 6) * .42; for (const f of [.15, .6]) { const sy = bot + room * f; put(cx2 - r, cx2 + r, cv2 - r, cv2 + r, sy, sy + .8, '#e8e4dc', 'acc'); put(cx2 - r, cx2 + r, cv2 - r, cv2 - r + .8, sy + .8, sy + 3, '#e8e4dc', 'acc'); } put(cx2 - .8, cx2 + .8, cv2 - .8, cv2 + .8, bot, bot + room * .6 + .8, STEEL, 'acc'); } // lazy-susan: two round shelves on a post
+      if (hollow && accs.includes('soft') && !t.wall) { for (const sx of [u + T + .5, u + w - T - 1.5]) put(sx, sx + 1, d - 4, d - 1, y0 + h * .5, y0 + h * .5 + 3, '#9aa1aa', 'acc'); } // soft-close dampers on the door edge (small)
       u += w;
     }
   });

@@ -21,7 +21,7 @@ export const SLOT_KINDS = { door: 'Door', glass: 'Glass door', drawer: 'Drawer',
 /** Opening directions for doors. auto = French doors in pairs, a single door hinged on the left. */
 export const DIRS = { auto: 'Automatic', left: 'Hinged left', right: 'Hinged right', up: 'Lifts up', down: 'Folds down', slide: 'Sliding', shutter: 'Roller shutter (rolls up)' };
 /** Accessories that can be added to a cabinet. visual = drawn in the 3D view. */
-export const ACCESSORIES = { tap: ['Tap / mixer', true], bin: ['Pull-out waste bin', false], cutlery: ['Cutlery tray', false], pullout: ['Pull-out basket', false], lights: ['LED light strip', true], rail: ['Rail with hooks', true], spice: ['Spice rack', false], lazy: ['Lazy-susan carousel', false], soft: ['Soft-close set', false] };
+export const ACCESSORIES = { tap: ['Tap / mixer', true], bin: ['Pull-out waste bin', true], cutlery: ['Cutlery tray', true], pullout: ['Pull-out basket', true], lights: ['LED light strip', true], rail: ['Rail with hooks', true], spice: ['Spice rack', true], lazy: ['Lazy-susan carousel', true], soft: ['Soft-close set', true] };
 /** Does a floor unit stand on a skirting (plinth) with legs? Base units do by default and tall units do not; cab.skirt overrides it either way. Wall units, appliance gaps, shelves and hoods never. */
 export function hasSkirt(cab) {
   const t = CAB_TYPES[cab.type] || CAB_TYPES.base; if (t.wall || t.shelf || t.hood) return false;
