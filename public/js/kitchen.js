@@ -22,6 +22,11 @@ export const SLOT_KINDS = { door: 'Door', glass: 'Glass door', drawer: 'Drawer',
 export const DIRS = { auto: 'Automatic', left: 'Hinged left', right: 'Hinged right', up: 'Lifts up', down: 'Folds down', slide: 'Sliding', shutter: 'Roller shutter (rolls up)' };
 /** Accessories that can be added to a cabinet. visual = drawn in the 3D view. */
 export const ACCESSORIES = { tap: ['Tap / mixer', true], bin: ['Pull-out waste bin', true], cutlery: ['Cutlery tray', true], pullout: ['Pull-out basket', true], lights: ['LED light strip', true], rail: ['Rail with hooks', true], spice: ['Spice rack', true], lazy: ['Lazy-susan carousel', true], soft: ['Soft-close set', true] };
+/** Does a cabinet get a top sheet? Wall and tall units always; floor units only when asked (cab.top_sheet, else the kitchen's style.base_top), since the marble usually covers them. */
+export function hasTopSheet(cab, style = {}) {
+  const t = CAB_TYPES[cab.type] || CAB_TYPES.base; if (t.wall || t.tall) return true; if (t.gap || t.shelf || t.hood) return false;
+  const v = cab.top_sheet ?? style.base_top; return v === true || v === 1 || v === '1' || v === 'true';
+}
 /** Does a floor unit stand on a skirting (plinth) with legs? Base units do by default and tall units do not; cab.skirt overrides it either way. Wall units, appliance gaps, shelves and hoods never. */
 export function hasSkirt(cab) {
   const t = CAB_TYPES[cab.type] || CAB_TYPES.base; if (t.wall || t.shelf || t.hood) return false;
@@ -112,6 +117,7 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   if (type.hood) { hw.hangers += 2; appliances.push({ k: 'hood', w: W, h: H, d: D }); return { panels, hw, glass, frames, appliances, acc, bars }; }
   const nShelf = layoutSlots(cab) ? 0 : shelves;
   const hidden = !!(cab.hidden_handle ?? s.hidden_handle);
+  const topSheet = hasTopSheet(cab, s); // a floor unit gets a top sheet only when asked (the marble usually sits on it)
   if (aluBox) { // the workshop's method: profile frame + fibre sheets, see ALU
     const bar = (code, label, len, qty) => { if (qty > 0 && len > 0) bars.push({ code, label: tag + label, len: r1(len), qty }); };
     const sheet = (label, w, h, qty, mat) => add(label, w, h, qty, mat, 0);
@@ -126,13 +132,14 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
       else { bar(ALU.edge, 'Edge back top & front bottom', W, 2); bar(ALU.edge, 'Edge front side', H, 2); bar(ALU.edge, 'Edge top side', D, 2); bar(ALU.deep, 'Bottom deep', D, 2); bar(ALU.deep, 'Back height', H, 2); bar(ALU.back, 'Back bottom', W, 1); if (hidden) bar(ALU.hidden, 'Hidden handle profile', W, 1); else bar(ALU.col, 'Square profile front/top', W - 5, 1); }
       bar(ALU.col, 'Column for hinged doors', H - 5, colQty);
       bar(ALU.edge, 'Shelf (width)', W - 1.4, 2 * nShelf); bar(ALU.edge, 'Shelf (depth)', D - 3.2, 2 * nShelf);
-      sheet(`${tag}Top`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Bottom`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Side`, H - 5.2, D - 5.2, 2, 'white22'); sheet(`${tag}Back`, W - 5.2, H - 5.2, 1, 'white22');
+      if (type.wall || topSheet) sheet(`${tag}Top`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Bottom`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Side`, H - 5.2, D - 5.2, 2, 'white22'); sheet(`${tag}Back`, W - 5.2, H - 5.2, 1, 'white22');
     }
   } else {
     add(`${tag}Side`, dd + b + 1 > D ? D : D, H, 2, 'carcass', H); // sides: front edge banded
     add(`${tag}Bottom`, W - 2 * t, dd, 1, 'carcass', W - 2 * t);
     if (type.wall) add(`${tag}Top`, W - 2 * t, dd, 1, 'carcass', W - 2 * t);
     else if (type.tall) { add(`${tag}Top`, W - 2 * t, dd, 1, 'carcass', W - 2 * t); }
+    else if (topSheet) add(`${tag}Top`, W - 2 * t, dd, 1, 'carcass', W - 2 * t);
     else add(`${tag}Top rail`, W - 2 * t, 8, 2, 'carcass', 0);
     add(`${tag}Back`, W - 0.4, H - 0.4, 1, 'back', 0);
     add(`${tag}Shelf`, W - 2 * t - 0.2, dd - 2, nShelf, 'carcass', W - 2 * t - 0.2);
@@ -190,37 +197,75 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   return { panels, hw, glass, frames, appliances, acc, bars };
 }
 
-/** Guillotine-style shelf packing of rectangles onto sheets. Pieces may rotate. Returns the sheets with positions. */
-export function packSheets(pieces, sheetW, sheetH, kerf = 0.3) {
-  const list = []; for (const p of pieces) for (let i = 0; i < p.qty; i++) list.push({ w: p.w, h: p.h, label: p.label });
-  list.sort((a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h));
-  const sheets = []; const unfit = [];
-  const tryPlace = (sh, w, h) => { // existing shelf first, then a new shelf
-    for (const sf of sh.shelves) if (h <= sf.h + 1e-9 && sf.x + w <= sheetW + 1e-9) { const x = sf.x; sf.x += w + kerf; return { x, y: sf.y }; }
-    const y = sh.shelves.length ? sh.shelves.at(-1).y + sh.shelves.at(-1).h + kerf : 0;
-    if (y + h <= sheetH + 1e-9 && w <= sheetW + 1e-9) { sh.shelves.push({ y, h, x: w + kerf }); return { x: 0, y }; }
-    return null;
+/** The ways a sheet can be cut: strips along the sheet's length, strips across its width, or the best of several plans. */
+export const CUT_MODES = { optimal: 'Optimal (fewest sheets)', length: 'By length (strips along the sheet)', width: 'By width (strips across the sheet)' };
+
+/**
+ * Pack rectangles onto sheets with guillotine cuts (every cut runs edge to edge, as on a panel saw).
+ * pieces: [{ w, h, qty, label, dir }] — dir 'h' keeps w along the sheet's length (sheetW), 'v' turns it across, anything else lets the planner choose.
+ * opts.mode: 'length' | 'width' | 'optimal' (default). Items come back as placed: rot = true when the piece was turned.
+ */
+export function packSheets(pieces, sheetW, sheetH, kerf = 0.3, opts = {}) {
+  const mode = CUT_MODES[opts.mode] ? opts.mode : 'optimal';
+  const list = []; for (const p of pieces) for (let i = 0; i < p.qty; i++) list.push({ w: p.w, h: p.h, label: p.label, dir: p.dir === 'h' || p.dir === 'v' ? p.dir : '' });
+  const ways = (p, W, H) => { const o = []; if (p.dir !== 'v' && p.w <= W + 1e-9 && p.h <= H + 1e-9) o.push([p.w, p.h, false]); if (p.dir !== 'h' && p.h <= W + 1e-9 && p.w <= H + 1e-9 && !(p.w === p.h && o.length)) o.push([p.h, p.w, true]); return o; };
+  const total = sheetW * sheetH; const r1x = (n) => Math.round(n * 10) / 10;
+  // strips: rows the full length of the sheet, each as tall as its first piece; a piece goes into the row it fills best
+  const strips = (items, W, H) => {
+    const sheets = []; const unfit = [];
+    for (const p of items) {
+      const o = ways(p, W, H); if (!o.length) { unfit.push(p); continue; }
+      let best = null;
+      for (const sh of sheets) for (const sf of sh.shelves) for (const [w, h, rot] of o) if (h <= sf.h + 1e-9 && sf.x + w <= W + 1e-9) { const waste = sf.h - h; if (!best || waste < best.waste) best = { sh, sf, w, h, rot, waste }; }
+      if (best) { best.sh.items.push({ x: best.sf.x, y: best.sf.y, w: best.w, h: best.h, rot: best.rot, label: p.label }); best.sf.x += best.w + kerf; continue; }
+      const [w, h, rot] = [...o].sort((m, n) => m[1] - n[1])[0]; // a new row: lay the piece flat so the row stays low
+      let sh = sheets.find((x) => x.top + h <= H + 1e-9);
+      if (!sh) { sh = { shelves: [], items: [], top: 0 }; sheets.push(sh); }
+      sh.shelves.push({ y: sh.top, h, x: w + kerf }); sh.items.push({ x: 0, y: sh.top, w, h, rot, label: p.label }); sh.top += h + kerf;
+    }
+    const freeOf = (sh) => { const out = []; for (const sf of sh.shelves) { const rw = W - sf.x; if (rw > 0.5 && sf.h > 0.5) out.push({ x: sf.x, y: sf.y, w: r1x(rw), h: r1x(sf.h) }); } if (H - sh.top > 0.5) out.push({ x: 0, y: sh.top, w: W, h: r1x(H - sh.top) }); return out; };
+    return { sheets: sheets.map((sh) => ({ items: sh.items, free: freeOf(sh) })), unfit };
   };
-  for (const p of list) {
-    if ((p.w > sheetW || p.h > sheetH) && (p.h > sheetW || p.w > sheetH)) { unfit.push(p); continue; }
-    let done = false;
-    for (const sh of sheets) {
-      for (const [w, h, rot] of [[p.w, p.h, false], [p.h, p.w, true]]) { // prefer the orientation whose height fits an existing shelf
-        const pos = (w <= sheetW && h <= sheetH) ? tryPlace(sh, w, h) : null;
-        if (pos) { sh.items.push({ ...pos, w, h, rot, label: p.label }); done = true; break; }
-      }
-      if (done) break;
+  // guillotine with free rectangles: each piece goes where it leaves the smallest sliver, the rest is split edge to edge
+  const guillotine = (items, W, H, splitRule) => {
+    const sheets = []; const unfit = [];
+    const place = (sh, p) => {
+      let best = null;
+      for (const [fi, f] of sh.free.entries()) for (const [w, h, rot] of ways(p, W, H)) if (w <= f.w + 1e-9 && h <= f.h + 1e-9) { const score = Math.min(f.w - w, f.h - h); if (!best || score < best.score) best = { fi, f, w, h, rot, score }; }
+      if (!best) return false;
+      const { f, w, h } = best; sh.free.splice(best.fi, 1); sh.items.push({ x: f.x, y: f.y, w, h, rot: best.rot, label: p.label });
+      const rw = f.w - w - kerf; const bh = f.h - h - kerf;
+      const across = splitRule === 'short' ? f.w - w < f.h - h : rw * f.h < f.w * bh; // which leftover gets the full side
+      const right = { x: f.x + w + kerf, y: f.y, w: rw, h: across ? h : f.h }; const below = { x: f.x, y: f.y + h + kerf, w: across ? f.w : w, h: bh };
+      for (const r of [right, below]) if (r.w > 0.5 && r.h > 0.5) sh.free.push(r);
+      return true;
+    };
+    for (const p of items) {
+      if (!ways(p, W, H).length) { unfit.push(p); continue; }
+      if (sheets.some((sh) => place(sh, p))) continue;
+      const sh = { free: [{ x: 0, y: 0, w: W, h: H }], items: [] }; sheets.push(sh); place(sh, p);
     }
-    if (!done) {
-      const sh = { shelves: [], items: [] }; sheets.push(sh);
-      const [w, h, rot] = p.w <= sheetW && p.h <= sheetH ? [p.w, p.h, false] : [p.h, p.w, true];
-      const pos = tryPlace(sh, w, h); sh.items.push({ ...pos, w, h, rot, label: p.label });
-    }
+    return { sheets: sheets.map((sh) => ({ items: sh.items, free: sh.free.map((f) => ({ x: f.x, y: f.y, w: r1x(f.w), h: r1x(f.h) })) })), unfit };
+  };
+  // the same plan on the sheet turned a quarter: strips across the width
+  const turned = (fn) => (items) => {
+    const t = fn(items.map((p) => ({ ...p, w: p.w, h: p.h, dir: p.dir === 'h' ? 'v' : p.dir === 'v' ? 'h' : '' })), sheetH, sheetW);
+    const flip = (i) => ({ ...i, x: i.y, y: i.x, w: i.h, h: i.w, rot: !i.rot });
+    return { sheets: t.sheets.map((sh) => ({ items: sh.items.map(flip), free: sh.free.map((f) => ({ x: f.y, y: f.x, w: f.h, h: f.w })) })), unfit: t.unfit };
+  };
+  const sorts = [(a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h) || b.w * b.h - a.w * a.h, (a, b) => b.w * b.h - a.w * a.h, (a, b) => Math.min(b.w, b.h) - Math.min(a.w, a.h) || Math.max(b.w, b.h) - Math.max(a.w, a.h)];
+  const byLength = (items) => strips(items, sheetW, sheetH); const byWidth = turned((items) => strips(items, sheetH, sheetW));
+  const plans = [];
+  for (const so of sorts) {
+    const items = [...list].sort(so);
+    if (mode === 'length' || mode === 'optimal') plans.push(byLength(items));
+    if (mode === 'width' || mode === 'optimal') plans.push(byWidth(items));
+    if (mode === 'optimal') for (const rule of ['short', 'area']) { plans.push(guillotine(items, sheetW, sheetH, rule)); plans.push(turned((it) => guillotine(it, sheetH, sheetW, rule))(items)); }
   }
-  const total = sheetW * sheetH;
-  // what is left over on each sheet: the strip at the end of every shelf and the band under the last shelf
-  const freeOf = (sh) => { const out = []; for (const sf of sh.shelves) { const rw = sheetW - sf.x; if (rw > 0.5 && sf.h > 0.5) out.push({ x: sf.x, y: sf.y, w: Math.round(rw * 10) / 10, h: Math.round(sf.h * 10) / 10 }); } const last = sh.shelves.at(-1); if (last) { const y = last.y + last.h + kerf; if (sheetH - y > 0.5) out.push({ x: 0, y, w: sheetW, h: Math.round((sheetH - y) * 10) / 10 }); } return out; };
-  return { sheets: sheets.map((s) => ({ items: s.items, used: s.items.reduce((a, i) => a + i.w * i.h, 0) / total, free: freeOf(s) })), unfit };
+  const usedOf = (sh) => sh.items.reduce((a, i) => a + i.w * i.h, 0) / total;
+  // fewest sheets; then the plan whose last sheet is emptiest (the biggest single offcut)
+  const best = plans.sort((p, q) => p.unfit.length - q.unfit.length || p.sheets.length - q.sheets.length || (p.sheets.length ? usedOf(p.sheets.at(-1)) - usedOf(q.sheets.at(-1)) : 0))[0];
+  return { mode, sheets: best.sheets.map((sh) => ({ items: sh.items, used: usedOf(sh), free: sh.free })), unfit: best.unfit };
 }
 
 /** Cut aluminium door-frame profile out of stock bars (first-fit decreasing, 45° corners need no allowance beyond the saw kerf). */
@@ -243,6 +288,8 @@ export function packBars(frames, barLen = 600, fw = 4.5, kerf = 0.5) {
   return { bars: bars.map((b) => ({ ...b, free: Math.round((barLen - b.used) * 10) / 10 })), unfit, metres, pieces: pieces.length, corners: pieces.length / 2 };
 }
 
+/** The key a part keeps its chosen cutting direction under: material, part name (without the cabinet) and size. */
+export const cutKey = (mat, p) => `${mat}|${String(p.label).replace(/^.* · /, '')}|${p.w}|${p.h}`;
 /** Everything about a kitchen: panels by material, sheets, hardware, countertop slabs. */
 export function kitchenModel(spec) {
   const style = { ...DEFAULT_STYLE, ...(spec.style || {}) }; const counter = { ...DEFAULT_COUNTER, ...(spec.counter || {}) };
@@ -260,7 +307,7 @@ export function kitchenModel(spec) {
   const sheets = {};
   for (const mat of ['carcass', 'back', 'door', 'white22', 'white16', 'design']) {
     const white = mat === 'white22' || mat === 'white16'; const sw = white ? (+style.white_w || 280) : style.sheet_w; const sh = white ? (+style.white_h || 130) : style.sheet_h;
-    const pk = packSheets(panels[mat], sw, sh, style.kerf);
+    const dirs = spec.cut_dir || {}; const pk = packSheets(panels[mat].map((x) => ({ ...x, dir: dirs[cutKey(mat, x)] || '' })), sw, sh, style.kerf, { mode: style.cut_mode });
     sheets[mat] = { ...pk, area: panels[mat].reduce((a, p) => a + p.w * p.h * p.qty, 0) / 10000 };
   }
   const byCode = new Map(); for (const x of aluBars) { const e = byCode.get(x.code) || []; e.push(x); byCode.set(x.code, e); }

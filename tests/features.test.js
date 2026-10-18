@@ -312,7 +312,9 @@ test('aluminium kitchens follow the workshop cutting rules', async () => {
   const base = cabinetParts({ type: 'base', w: 60, h: 72, d: 56, doors: 2, shelves: 1 }, st);
   assert.deepEqual(len(base, '22421', 'Edge back top'), [[60, 2]]); assert.deepEqual(len(base, '23564', 'Square'), [[55, 1]]); assert.deepEqual(len(base, '23564', 'Column'), [[67, 1]]);
   assert.deepEqual(len(base, '22421', 'Shelf (width)'), [[58.6, 2]]); assert.deepEqual(len(base, '22421', 'Shelf (depth)'), [[52.8, 2]]);
-  assert.deepEqual(base.panels.filter((p) => p.mat === 'white22').map((p) => [p.w, p.h, p.qty]), [[54.8, 50.8, 1], [54.8, 50.8, 1], [66.8, 50.8, 2], [54.8, 66.8, 1]]);
+  assert.deepEqual(base.panels.filter((p) => p.mat === 'white22').map((p) => [p.label, p.w, p.h, p.qty]), [['Bottom', 54.8, 50.8, 1], ['Side', 66.8, 50.8, 2], ['Back', 54.8, 66.8, 1]]); // no top sheet: the marble sits on it
+  assert.ok(cabinetParts({ type: 'base', w: 60, h: 72, d: 56, doors: 2, top_sheet: true }, st).panels.some((p) => p.label === 'Top'));
+  assert.ok(cabinetParts({ type: 'base', w: 60, h: 72, d: 56, doors: 2 }, { ...st, base_top: true }).panels.some((p) => p.label === 'Top'));
   assert.deepEqual(base.frames.map((f) => [f.w, f.h, f.qty]), [[28.9, 71, 2]]); // (60-2.2)/2 wide, 72-1 high
   const hid = cabinetParts({ type: 'base', w: 60, h: 72, d: 56, doors: 1, hidden_handle: true }, st);
   assert.deepEqual(len(hid, 'L-shape', 'Hidden'), [[60, 1]]); assert.deepEqual(hid.frames.map((f) => [f.w, f.h]), [[59, 68.5]]);
@@ -322,4 +324,21 @@ test('aluminium kitchens follow the workshop cutting rules', async () => {
   assert.deepEqual(len(tall, '28456', 'Side height'), [[210, 4]]); assert.deepEqual(tall.panels.filter((p) => p.mat === 'white16').map((p) => [p.w, p.h, p.qty]), [[201.2, 49.2, 2]]);
   const m = kitchenModel({ style: st, runs: [{ cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 2 }] }] });
   assert.ok(m.carcassBars.find((g) => g.code === '22421') && m.sheets.white22.sheets.length === 1);
+});
+
+test('kitchens: wood base units have rails, a top only when asked; sheet plans by length, width or optimal with a fixed direction', async () => {
+  const { cabinetParts, packSheets, kitchenModel, cutKey } = await import('../public/js/kitchen.js');
+  const b = cabinetParts({ type: 'base', w: 60, h: 72, d: 56, doors: 1 }); assert.ok(b.panels.some((p) => p.label === 'Top rail') && !b.panels.some((p) => p.label === 'Top'));
+  const bt = cabinetParts({ type: 'base', w: 60, h: 72, d: 56, doors: 1, top_sheet: true }); assert.ok(bt.panels.some((p) => p.label === 'Top') && !bt.panels.some((p) => p.label === 'Top rail'));
+  assert.ok(cabinetParts({ type: 'wall', w: 60, h: 70, d: 32, doors: 1 }).panels.some((p) => p.label === 'Top'));
+  const pcs = [{ w: 72, h: 56, qty: 6, label: 'Side' }, { w: 56.4, h: 54.4, qty: 4, label: 'Bottom' }];
+  const rows = (r) => r.sheets.flatMap((s) => s.items);
+  const L = packSheets(pcs, 244, 122, 0.3, { mode: 'length' }); const Wd = packSheets(pcs, 244, 122, 0.3, { mode: 'width' }); const O = packSheets(pcs, 244, 122, 0.3);
+  assert.equal(O.mode, 'optimal'); assert.ok(O.sheets.length <= Math.min(L.sheets.length, Wd.sheets.length));
+  // strips by length: pieces in one strip share its top edge
+  for (const s of L.sheets) { const ys = [...new Set(s.items.map((i) => i.y))]; for (const y of ys) assert.ok(s.items.filter((i) => i.y === y).every((i) => i.x >= 0)); }
+  for (const s of Wd.sheets) { const xs = [...new Set(s.items.map((i) => i.x))]; assert.ok(xs.length >= 1); }
+  const fixed = packSheets([{ w: 72, h: 56, qty: 3, label: 'Side', dir: 'v' }], 244, 122); assert.ok(rows(fixed).every((i) => i.rot && i.w === 56 && i.h === 72));
+  const m = kitchenModel({ cut_dir: { [cutKey('carcass', { label: 'A1 · Side', w: 56, h: 72 })]: 'h' }, runs: [{ cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }] }] });
+  assert.ok(m.sheets.carcass.sheets.flatMap((s) => s.items).filter((i) => i.label.endsWith('Side')).every((i) => !i.rot && i.w === 56));
 });
