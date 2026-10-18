@@ -15,7 +15,9 @@ export const HAND_KINDS = ['hinged1', 'door1', 'shower_door'];
 export const SWING_KINDS = ['hinged1', 'hinged2', 'bottom', 'tilt', 'door1', 'door2', 'shower_door', 'folding'];
 /** The shop's own colours (name + code from the Colours page) take precedence over the built-in look. */
 let CUSTOM = new Map();
-export function setColourDefs(list) { CUSTOM = new Map((list || []).filter((x) => x && x.name && /^#[0-9a-f]{6}$/i.test(x.hex || '')).map((x) => [String(x.name).toLowerCase().trim(), String(x.hex).toLowerCase()])); }
+export function setColourDefs(list) { TEX.clear(); if (typeof Image !== 'undefined') for (const x of list || []) if (x && x.name && typeof x.tex === 'string' && x.tex.startsWith('data:image/')) { const im = new Image(); im.src = x.tex; TEX.set(String(x.name).toLowerCase().trim(), im); } CUSTOM = new Map((list || []).filter((x) => x && x.name && /^#[0-9a-f]{6}$/i.test(x.hex || '')).map((x) => [String(x.name).toLowerCase().trim(), String(x.hex).toLowerCase()])); }
+const TEX = new Map(); // colour name → picture (an Image once loaded)
+export function colourTex(name) { const n = String(name || '').toLowerCase().trim(); const im = TEX.get(n); return im && im.complete && im.naturalWidth ? im : null; }
 export const colourHex = (name) => { const n = String(name || '').toLowerCase().trim(); if (!n) return ''; if (CUSTOM.has(n)) return CUSTOM.get(n); return COLOUR_HEX[n] || Object.entries(COLOUR_HEX).find(([k]) => n.includes(k))?.[1] || ''; };
 export const GLASS_HEX = [[/mirror/, '#e6eef3'], [/reflect/, '#8fb7bf'], [/tint|dark/, '#7f9bad'], [/bronze/, '#b79a7c'], [/grey|gray/, '#97a3ab'], [/sandblast|frost|obscure|satin|acid/, '#eef2f4'], [/lamin/, '#c4dfec'], [/double|insul/, '#bddcee'], [/tempered/, '#cde6f4']];
 export const glassHex = (name) => { const n = String(name || '').toLowerCase(); return (GLASS_HEX.find(([re]) => re.test(n)) || [0, '#cfe6f7'])[1]; };

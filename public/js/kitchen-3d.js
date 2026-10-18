@@ -1,7 +1,7 @@
 // 3D view of a kitchen: cabinets become boxes, a small painter's-algorithm renderer draws them on a canvas.
 // scene() is pure (tested); draw3D() needs a canvas. All sizes in cm; x = right, y = up, z = towards the viewer (the back wall is z = 0).
 import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, layoutSlots, zonesOf, shelfCount, shelfGap, hasSkirt } from './kitchen.js';
-import { colourHex, stoneHex } from './drawings.js';
+import { colourHex, colourTex, stoneHex } from './drawings.js';
 
 /** Where each run stands: { x, z, rot } with rot 0/90/180/270. Run 1 = back wall, 2 = left wall, 3 = right wall, islands in front. */
 export function placeRuns(spec) {
@@ -63,7 +63,7 @@ export function frontsOf(c) {
 /** Boxes { corners[8], color, kind, ref } for the whole kitchen. open = { 'ri|ci': 0..1 } how far each cabinet's doors / drawers are open. */
 export function scene(spec, open = {}) {
   const style = { ...DEFAULT_STYLE, ...(spec.style || {}) }; const ct = Math.max(0, +spec.counter?.thickness || 2); const over = +spec.counter?.front || 0;
-  const door = colourHex(style.door_colour) || '#d9c9a8'; const carcass = '#e8e4dc'; const inner = '#f3efe6'; const top = stoneHex(spec.counter?.material) || '#6b6f78';
+  const door = colourHex(style.door_colour) || '#d9c9a8'; const doorTex = colourTex(style.door_colour); const carcass = '#e8e4dc'; const inner = '#f3efe6'; const top = stoneHex(spec.counter?.material) || '#6b6f78';
   const alu = style.kind === 'aluminium'; const frame = colourHex(style.profile_out) || '#9aa3ad'; const T = +style.t || 1.8;
   const STEEL = '#c9ced6'; const BLACK = '#23272e'; const GLASSY = '#46525e';
   const pl = placeRuns(spec); const boxes = [];
@@ -81,7 +81,7 @@ export function scene(spec, open = {}) {
         else if (sw && sw.a) { const du = u - sw.hu; const dv = v - sw.hv; const c = Math.cos(sw.a); const sn = Math.sin(sw.a) * sw.side; u = sw.hu + du * c - dv * sn; v = sw.hv + du * sn + dv * c; }
         const [x, z] = map(u, v); C.push([x, y, z]);
       }
-      boxes.push({ corners: C, color, kind, ref: { ri, ci: curCi, front: curFront } });
+      boxes.push({ corners: C, color, kind, tex: doorTex && color === door && ['front', 'infill', 'door', 'tray'].includes(kind) ? doorTex : null, ref: { ri, ci: curCi, front: curFront } });
     };
     // one door (or a pair / set of doors) of a cabinet front: ua..ub wide, ya..yb tall, n doors side by side, opening direction dir
     const putDoors = (ua, ub, ya, yb, n, dir, glazedN, keyOf, foOf, d, t) => {
@@ -267,11 +267,19 @@ export function draw3D(canvas, boxes, view = {}) {
       if (nc[0] * pts[0][0] + nc[1] * pts[0][1] + nc[2] * pts[0][2] >= 0) continue;
       const light = n[1] > 0.5 ? 1.08 : n[1] < -0.5 ? .6 : 0.78 + 0.17 * Math.abs(n[2]);
       faces.push({ pts, depth: pts.reduce((a, p) => a + p[2], 0) / 4 + (b.solid || b.kind === "plinth" ? 35 : 0), // a solid cabinet body (and its plinth, which sits under it) is drawn as if a little farther away, so its doors and drawers always land on top of its big front face
-         fill: shade(b.color, light), ref: b.ref, kind: b.kind, on: same(b.ref, sel) ? 2 : same(b.ref, hov) ? 1 : 0 });
+         fill: shade(b.color, light), light, tex: b.tex, wq: q, ref: b.ref, kind: b.kind, on: same(b.ref, sel) ? 2 : same(b.ref, hov) ? 1 : 0 });
     }
   }
   faces.sort((a, b) => b.depth - a.depth);
-  for (const fc of faces) { if (fc.pts.some((p) => p[2] < 5)) continue; const p = fc.pts.map(proj); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fillStyle = fc.fill; ctx.fill(); if (fc.on) { ctx.fillStyle = fc.on === 2 ? 'rgba(255,140,0,.38)' : 'rgba(40,120,255,.22)'; ctx.fill(); } ctx.strokeStyle = fc.on === 2 ? '#e07b00' : 'rgba(30,45,62,.55)'; ctx.lineWidth = fc.on === 2 ? 1.8 : .8; ctx.stroke(); if (fc.ref && fc.ref.ci >= 0) canvas._hit.push({ poly: p, ref: fc.ref, kind: fc.kind }); }
+  for (const fc of faces) { if (fc.pts.some((p) => p[2] < 5)) continue; const p = fc.pts.map(proj); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fillStyle = fc.fill; ctx.fill();
+    if (fc.tex && p.length === 4) { // a picture on the face: the image is laid on the face's own corners, grain running up the face, then shaded like the plain colour
+      const q = fc.wq; const e1 = [q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]]; const e3 = [q[3][0] - q[0][0], q[3][1] - q[0][1], q[3][2] - q[0][2]];
+      const [pu, pv] = Math.abs(e1[1]) > Math.abs(e3[1]) ? [p[3], p[1]] : [p[1], p[3]]; // pu: across the face, pv: up it
+      const iw = fc.tex.naturalWidth; const ih = fc.tex.naturalHeight;
+      ctx.save(); ctx.clip(); ctx.transform((pu[0] - p[0][0]) / iw, (pu[1] - p[0][1]) / iw, (pv[0] - p[0][0]) / ih, (pv[1] - p[0][1]) / ih, p[0][0], p[0][1]); ctx.drawImage(fc.tex, 0, 0); ctx.restore();
+      ctx.fillStyle = fc.light < 1 ? `rgba(0,0,0,${Math.min(.6, 1 - fc.light).toFixed(2)})` : `rgba(255,255,255,${Math.min(.3, fc.light - 1).toFixed(2)})`; ctx.fill();
+    }
+    if (fc.on) { ctx.fillStyle = fc.on === 2 ? 'rgba(255,140,0,.38)' : 'rgba(40,120,255,.22)'; ctx.fill(); } ctx.strokeStyle = fc.on === 2 ? '#e07b00' : 'rgba(30,45,62,.55)'; ctx.lineWidth = fc.on === 2 ? 1.8 : .8; ctx.stroke(); if (fc.ref && fc.ref.ci >= 0) canvas._hit.push({ poly: p, ref: fc.ref, kind: fc.kind }); }
 }
 
 /** Which cabinet is under a canvas point (the nearest face wins). Call after draw3D. */
