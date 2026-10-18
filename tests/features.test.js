@@ -350,3 +350,18 @@ test("workshop sample: base 100 (W) × 60 (D) × 70 (H), 2 doors, profile 28456"
   const hid = cabinetParts({ type: 'base', w: 100, d: 60, h: 70, doors: 2, hidden_handle: true }, { kind: 'aluminium' });
   assert.deepEqual(hid.frames.map((f) => [f.w, f.h, f.qty]), [[48.9, 66.5, 2]]); // hidden handle: 70 − 3.5
 });
+
+test('kitchens: open door places and the hidden handle (only over doors, one piece across touching units)', async () => {
+  const { cabinetParts, kitchenModel } = await import('../public/js/kitchen.js');
+  const st = { kind: 'aluminium', hidden_handle: true };
+  const two = cabinetParts({ type: 'base', w: 100, d: 60, h: 70, doors: 2, open_doors: [1] }, st);
+  assert.deepEqual(two.frames.map((f) => [f.w, f.h, f.qty]), [[48.9, 66.5, 1]]); // the open place takes no door; the door keeps its size
+  assert.equal(two.hw.hinges, 2);
+  assert.deepEqual(two.bars.filter((b) => b.code === 'L-shape').map((b) => b.len), [50]); // hidden handle over the door only
+  assert.ok(two.bars.some((b) => b.label.includes('Square profile front/top (open part)') && b.len === 45));
+  const open = cabinetParts({ type: 'base', w: 60, d: 60, h: 70, doors: 0 }, st); assert.ok(!open.bars.some((b) => b.code === 'L-shape'));
+  assert.equal(cabinetParts({ type: 'base', w: 60, d: 60, h: 70, doors: 2, open_doors: [0, 1] }, st).frames[0].qty, 2); // all open is not allowed: both doors stay
+  const m = kitchenModel({ style: st, runs: [{ cabinets: [{ type: 'base', w: 60, d: 60, h: 70, doors: 1 }, { type: 'sink', w: 80, d: 60, h: 70, doors: 2 }, { type: 'gap', w: 60, d: 60, h: 85 }, { type: 'base', w: 40, d: 60, h: 70, doors: 1 }] }] });
+  const hidden = m.carcassBars.find((g) => g.code === 'L-shape').parts.map((p) => [p.label, p.len]);
+  assert.deepEqual(hidden, [['A1+A2 · Hidden handle profile (one piece)', 140], ['A4 · Hidden handle profile', 40]]); // the gap breaks it
+});

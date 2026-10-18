@@ -22,6 +22,24 @@ export const SLOT_KINDS = { door: 'Door', glass: 'Glass door', drawer: 'Drawer',
 export const DIRS = { auto: 'Automatic', left: 'Hinged left', right: 'Hinged right', up: 'Lifts up', down: 'Folds down', slide: 'Sliding', shutter: 'Roller shutter (rolls up)' };
 /** Accessories that can be added to a cabinet. visual = drawn in the 3D view. */
 export const ACCESSORIES = { tap: ['Tap / mixer', true], bin: ['Pull-out waste bin', true], cutlery: ['Cutlery tray', true], pullout: ['Pull-out basket', true], lights: ['LED light strip', true], rail: ['Rail with hooks', true], spice: ['Spice rack', true], lazy: ['Lazy-susan carousel', true], soft: ['Soft-close set', true] };
+/** Which door places of a cabinet are left open (no door), counted from the left: a Set of indices. Only for 2 doors or more, and never all of them. */
+export function openDoorsOf(cab) {
+  const n = Math.max(0, Math.round(+cab.doors || 0)); if (n < 2 || !Array.isArray(cab.open_doors)) return new Set();
+  const set = new Set(cab.open_doors.map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < n)); return set.size >= n ? new Set() : set;
+}
+/** Does a cabinet have the hidden (L-shape) handle? Only aluminium floor units that are not tall. */
+export function hasHiddenHandle(cab, style = {}) {
+  const t = CAB_TYPES[cab.type] || CAB_TYPES.base; if (style.kind !== 'aluminium' || t.wall || t.tall || t.gap || t.shelf || t.hood || t.corner) return false;
+  const v = cab.hidden_handle ?? style.hidden_handle; return v === true || v === 1 || v === '1' || v === 'true';
+}
+/** The stretches (cm from the cabinet's left edge) that have a door under the hidden handle: open places get none. */
+export function hiddenSegments(cab) {
+  const W = +cab.w || 0; const n = Math.max(0, Math.round(+cab.doors || 0)); const drawers = Math.max(0, Math.round(+cab.drawers || 0));
+  if (!n) return drawers ? [[0, W]] : []; // drawers only: the handle runs over them; an open cabinet gets none
+  const open = openDoorsOf(cab); const out = [];
+  for (let i = 0; i < n; i++) { if (open.has(i)) continue; const a = (W * i) / n; const b = (W * (i + 1)) / n; const last = out.at(-1); if (last && Math.abs(last[1] - a) < 1e-6) last[1] = b; else out.push([a, b]); }
+  return out;
+}
 /** Does a cabinet get a top sheet? Wall and tall units always; floor units only when asked (cab.top_sheet, else the kitchen's style.base_top), since the marble usually covers them. */
 export function hasTopSheet(cab, style = {}) {
   const t = CAB_TYPES[cab.type] || CAB_TYPES.base; if (t.wall || t.tall) return true; if (t.gap || t.shelf || t.hood) return false;
@@ -116,7 +134,7 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   if (type.shelf) { const n = shelfCount(cab); add(`${tag}Floating shelf board`, W, D, n, 'carcass', W + 2 * (D - 2)); hw.hangers += 2 * n; return { panels, hw, glass, frames, appliances, acc, bars }; }
   if (type.hood) { hw.hangers += 2; appliances.push({ k: 'hood', w: W, h: H, d: D }); return { panels, hw, glass, frames, appliances, acc, bars }; }
   const nShelf = layoutSlots(cab) ? 0 : shelves;
-  const hidden = !!(cab.hidden_handle ?? s.hidden_handle);
+  const hidden = hasHiddenHandle(cab, s); const openSet = openDoorsOf(cab); const closedN = doors - openSet.size;
   const topSheet = hasTopSheet(cab, s); // a floor unit gets a top sheet only when asked (the marble usually sits on it)
   if (aluBox) { // the workshop's method: profile frame + fibre sheets, see ALU
     const bar = (code, label, len, qty) => { if (qty > 0 && len > 0) bars.push({ code, label: tag + label, len: r1(len), qty }); };
@@ -129,7 +147,10 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
     } else {
       const colQty = doors > 2 ? Math.floor(doors / 2) : doors === 2 ? 1 : 0;
       if (type.wall) { bar(ALU.edge, 'Front top', W, 1); bar(ALU.edge, 'Front bottom', W, 1); bar(ALU.edge, 'Front side', H, 2); bar(ALU.deep, 'Deep side', D, 4); bar(ALU.deep, 'Height side', H, 2); bar(ALU.back, 'Back top & bottom', W, 2); }
-      else { bar(ALU.edge, 'Edge back top & front bottom', W, 2); bar(ALU.edge, 'Edge front side', H, 2); bar(ALU.edge, 'Edge top side', D, 2); bar(ALU.deep, 'Bottom deep', D, 2); bar(ALU.deep, 'Back height', H, 2); bar(ALU.back, 'Back bottom', W, 1); if (hidden) bar(ALU.hidden, 'Hidden handle profile', W, 1); else bar(ALU.col, 'Square profile front/top', W - 5, 1); }
+      else { bar(ALU.edge, 'Edge back top & front bottom', W, 2); bar(ALU.edge, 'Edge front side', H, 2); bar(ALU.edge, 'Edge top side', D, 2); bar(ALU.deep, 'Bottom deep', D, 2); bar(ALU.deep, 'Back height', H, 2); bar(ALU.back, 'Back bottom', W, 1); if (hidden) { // the L-shape runs only over the doors; open places get the square profile; next units' pieces are joined in kitchenModel
+        const segs = hiddenSegments(cab); for (const [a, b2] of segs) bars.push({ code: ALU.hidden, label: tag + 'Hidden handle profile', len: r1(b2 - a), qty: 1, seg: [a, b2] });
+        const covered = segs.reduce((acc, [a, b2]) => acc + b2 - a, 0); if (W - covered > 5.5) bar(ALU.col, 'Square profile front/top (open part)', W - covered - 5, 1);
+      } else bar(ALU.col, 'Square profile front/top', W - 5, 1); }
       bar(ALU.col, 'Column for hinged doors', H - 5, colQty);
       bar(ALU.edge, 'Shelf (width)', W - 1.4, 2 * nShelf); bar(ALU.edge, 'Shelf (depth)', D - 3.2, 2 * nShelf);
       if (type.wall || topSheet) sheet(`${tag}Top`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Bottom`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Side`, H - 5.2, D - 5.2, 2, 'white22'); sheet(`${tag}Back`, W - 5.2, H - 5.2, 1, 'white22');
@@ -188,8 +209,10 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
         dh = type.wall ? H + (hidden ? 1.5 : -0.5) : H - (hidden ? 3.5 : 1);
         dw = doors === 1 ? W - 1 : doors === 2 ? (W - 2.2) / 2 : (W - 2 - (doors - 1) * 0.2) / doors;
       }
-      if (dir !== 'shutter') front(`${tag}Door`, dw, dh, doors, glazed); doorHw(doors, dw, dh, dir);
-      for (let i = 0; i < (dir === 'shutter' ? 0 : glazed); i++) glass.push({ w: r1(alu ? dw - 2 * fw + 1.2 : dw - 8), h: r1(alu ? dh - 2 * fw + 1.2 : dh - 8), qty: 1 });
+      const gz = Math.min(glazed, closedN); // open places (no door) take no frame, hinges or handle
+      if (dir !== 'shutter') front(`${tag}Door`, dw, dh, closedN, gz); doorHw(closedN, dw, dh, dir);
+      if (hidden) hw.handles -= closedN, hw.handleLen -= closedN * (['up', 'down'].includes(dir) ? dw : dh); // the hidden handle replaces them
+      for (let i = 0; i < (dir === 'shutter' ? 0 : gz); i++) glass.push({ w: r1(alu ? dw - 2 * fw + 1.2 : dw - 8), h: r1(alu ? dh - 2 * fw + 1.2 : dh - 8), qty: 1 });
     }
   }
   if (type.wall) hw.hangers += 2;
@@ -297,10 +320,13 @@ export function kitchenModel(spec) {
   const panels = { carcass: [], back: [], door: [], skirt: [], white22: [], white16: [], design: [] }; const aluBars = []; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0, shutters: 0 }; const glass = []; const frames = []; const appliances = []; const accessories = {};
   const meters = { base: 0, wall: 0, tall: 0, units: 0, base_n: 0, wall_n: 0, tall_n: 0 };
   let edge = 0;
+  const joins = []; let runX = 0; let curRun = -1; // hidden-handle stretches, joined where cabinets touch
   for (const [ri, run] of runs.entries()) for (const [ci, cab] of (run.cabinets || []).entries()) {
+    if (ri !== curRun) { curRun = ri; runX = 0; }
     const type = CAB_TYPES[cab.type] || CAB_TYPES.base; const p = cabinetParts(cab.label ? cab : { ...cab, label: `${String.fromCharCode(65 + (ri % 26))}${ci + 1}` }, style); // an unnamed cabinet is called by its run and place: A1, A2…
     for (const x of p.panels) { panels[x.mat].push(x); edge += x.edge * x.qty; } // (skirting cut from a profile is listed apart)
-    for (const k of Object.keys(hw)) hw[k] += p.hw[k]; glass.push(...p.glass); frames.push(...p.frames); aluBars.push(...p.bars); appliances.push(...p.appliances); for (const [k, n] of Object.entries(p.acc)) accessories[k] = (accessories[k] || 0) + n;
+    for (const k of Object.keys(hw)) hw[k] += p.hw[k]; glass.push(...p.glass); frames.push(...p.frames); for (const b of p.bars) { if (b.seg) { const name = cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}`; const last = joins.at(-1); const a = runX + b.seg[0]; const z = runX + b.seg[1]; if (last && last.ri === ri && Math.abs(last.z - a) < 0.05) { last.z = z; if (!last.cabs.includes(name)) last.cabs.push(name); } else joins.push({ ri, a, z, cabs: [name], code: b.code }); } else aluBars.push(b); } appliances.push(...p.appliances); for (const [k, n] of Object.entries(p.acc)) accessories[k] = (accessories[k] || 0) + n;
+    runX += +cab.w || 0;
     const w = (+cab.w || 0) / 100; if (type.gap) continue;
     meters.units++; if (type.wall) { meters.wall += w; meters.wall_n++; } else if (type.tall) { meters.tall += w; meters.tall_n++; } else { meters.base += w; meters.base_n++; }
   }
@@ -310,6 +336,7 @@ export function kitchenModel(spec) {
     const dirs = spec.cut_dir || {}; const pk = packSheets(panels[mat].map((x) => ({ ...x, dir: dirs[cutKey(mat, x)] || '' })), sw, sh, style.kerf, { mode: style.cut_mode });
     sheets[mat] = { ...pk, area: panels[mat].reduce((a, p) => a + p.w * p.h * p.qty, 0) / 10000 };
   }
+  for (const j of joins) aluBars.push({ code: j.code, label: `${j.cabs.join('+')} · Hidden handle profile${j.cabs.length > 1 ? ' (one piece)' : ''}`, len: r1(j.z - j.a), qty: 1 });
   const byCode = new Map(); for (const x of aluBars) { const e = byCode.get(x.code) || []; e.push(x); byCode.set(x.code, e); }
   const barLen = +style.bar_len || 600;
   const carcassBars = [...byCode.entries()].sort((p, q) => String(p[0]).localeCompare(String(q[0]), undefined, { numeric: true })).map(([code, list]) => ({ code, ...packLengths(list.map((x) => ({ len: x.len, qty: x.qty, label: x.label })), barLen), parts: list }));

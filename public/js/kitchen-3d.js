@@ -1,6 +1,6 @@
 // 3D view of a kitchen: cabinets become boxes, a small painter's-algorithm renderer draws them on a canvas.
 // scene() is pure (tested); draw3D() needs a canvas. All sizes in cm; x = right, y = up, z = towards the viewer (the back wall is z = 0).
-import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, layoutSlots, zonesOf, shelfCount, shelfGap, hasSkirt } from './kitchen.js';
+import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, layoutSlots, zonesOf, shelfCount, shelfGap, hasSkirt, openDoorsOf, hasHiddenHandle, hiddenSegments } from './kitchen.js';
 import { colourHex, colourTex, stoneHex } from './drawings.js';
 
 /** Where each run stands: { x, z, rot } with rot 0/90/180/270. Run 1 = back wall, 2 = left wall, 3 = right wall, islands in front. */
@@ -56,7 +56,7 @@ export function frontsOf(c) {
   if (slots) { slots.forEach((sl, i) => { if (['door', 'glass', 'drawer'].includes(sl.k)) out.push({ key: 's' + i, label: `${sl.k === 'drawer' ? 'Drawer' : 'Door'} ${i + 1}` }); }); return out; }
   const nd = Math.round(+c.drawers || 0); const nf = t.corner ? 2 : Math.round(+c.doors || 0);
   for (let i = 0; i < nd; i++) out.push({ key: 'd' + i, label: 'Drawer ' + (i + 1) });
-  if (c.dir === 'slide' && nf > 1) out.push({ key: 'f0', label: 'Sliding doors' }); else for (let i = 0; i < nf; i++) out.push({ key: 'f' + i, label: 'Door ' + (i + 1) });
+  if (c.dir === 'slide' && nf > 1) out.push({ key: 'f0', label: 'Sliding doors' }); else { const op = t.corner ? new Set() : openDoorsOf(c); for (let i = 0; i < nf; i++) if (!op.has(i)) out.push({ key: 'f' + i, label: 'Door ' + (i + 1) }); }
   return out;
 }
 
@@ -84,9 +84,10 @@ export function scene(spec, open = {}) {
       boxes.push({ corners: C, color, kind, tex: doorTex && color === door && ['front', 'infill', 'door', 'tray'].includes(kind) ? doorTex : null, ref: { ri, ci: curCi, front: curFront } });
     };
     // one door (or a pair / set of doors) of a cabinet front: ua..ub wide, ya..yb tall, n doors side by side, opening direction dir
-    const putDoors = (ua, ub, ya, yb, n, dir, glazedN, keyOf, foOf, d, t) => {
+    const putDoors = (ua, ub, ya, yb, n, dir, glazedN, keyOf, foOf, d, t, skip = null, noHandle = false) => {
       const dw = (ub - ua) / n;
       for (let i = 0; i < n; i++) {
+        if (skip && skip.has(i)) continue; // an open place: no door
         const sliding = dir === 'slide' && n > 1; // sliding doors share one state: the back door runs behind the front one
         curFront = keyOf(sliding ? 0 : i); const fo = foOf(sliding ? 0 : i);
         const a = ua + i * dw; const b = a + dw; const gl = i < glazedN;
@@ -108,6 +109,7 @@ export function scene(spec, open = {}) {
         put(a + .2 + du, b - .2 + du, d + vz, d + vz + 1.8, ya + .2, yb - .2, gl ? '#bfe0f2' : alu ? frame : door, gl ? 'glass' : 'front', sw);
         if (alu && !gl) { const fw = Math.min(style.frame_w || 4.5, dw / 3); put(a + .2 + fw + du, b - .2 - fw + du, d + vz + 1.8, d + vz + 2.2, ya + .2 + fw, yb - .2 - fw, door, 'infill', sw); }
         const hy = yb - (yb - ya) * (t.wall ? .8 : .25); const hz = d + vz + 1.8;
+        if (noHandle) continue; // the hidden handle (a groove under the top) replaces it
         if (dir === 'up') put((a + b) / 2 - 6, (a + b) / 2 + 6, hz, hz + 1.4, ya + 2.5, ya + 3.7, STEEL, 'handle', sw);
         else if (dir === 'down') put((a + b) / 2 - 6, (a + b) / 2 + 6, hz, hz + 1.4, yb - 3.7, yb - 2.5, STEEL, 'handle', sw);
         else if (dir === 'slide') { const hx = (n === 1 ? !left : i % 2 === 1) ? a + 3 : b - 4; put(hx + du, hx + 1.2 + du, hz, hz + 1.4, (ya + yb) / 2 - 6, (ya + yb) / 2 + 6, STEEL, 'handle'); }
@@ -146,7 +148,8 @@ export function scene(spec, open = {}) {
       const op = Math.max(cabOp, ...fronts.map((f) => fOpen(f.key)), 0);
       const dir = c.dir && DIRS[c.dir] ? c.dir : 'auto';
       const doors = t.corner ? 2 : Math.round(+c.doors || 0); const drawers = Math.round(+c.drawers || 0); const glazed = Math.min(doors, Math.round(+c.glazed || 0));
-      const hollow = op > 0 || slots || (!doors && !drawers);
+      const openSet = t.corner ? new Set() : openDoorsOf(c); const hid = !slots && hasHiddenHandle(c, style);
+      const hollow = op > 0 || slots || (!doors && !drawers) || openSet.size > 0;
       curFront = null;
       if (t.corner) { // an L: the long leg on the wall, the return leg along the neighbouring wall
         const right = (c.side || (ci === 0 && (run.cabinets || []).length > 1 ? 'left' : 'right')) !== 'left'; const uf = right ? u + w - d : u + d; const lb = right ? [u + w - d, u + w] : [u, u + d];
@@ -195,17 +198,18 @@ export function scene(spec, open = {}) {
         });
       } else {
         if (drawers) {
-          const z = zn.drawers; const dh = z.h / drawers; const zu = u + z.x;
+          const z = zn.drawers; const dh = (z.h - (hid && z.y + z.h >= h - .01 ? 3.5 : 0)) / drawers; const zu = u + z.x; // under a hidden handle the top front stops below the groove
           for (let i = 0; i < drawers; i++) {
             curFront = 'd' + i; const o = fOpen(curFront) * Math.min(d * 0.7, 40);
             const ya = y0 + z.y + i * dh; const yb = ya + dh;
             if (o > 0.5) { const L = d - 6; put(zu + T + .3, zu + z.w - T - .3, d + o - L, d + o, ya + 3, ya + dh * 0.62, '#d9d0bd', 'tray'); }
             put(zu + .2, zu + z.w - .2, d + o, d + o + 1.8, ya + .2, yb - .2, alu ? frame : door, 'front');
-            put(zu + z.w * .35, zu + z.w * .65, d + o + 1.8, d + o + 3, ya + dh * .55, ya + dh * .62, STEEL, 'handle');
+            if (!hid) put(zu + z.w * .35, zu + z.w * .65, d + o + 1.8, d + o + 3, ya + dh * .55, ya + dh * .62, STEEL, 'handle');
           }
           curFront = null;
         }
-        if (doors) { const z = zn.doors; putDoors(u + z.x, u + z.x + z.w, y0 + z.y, y0 + z.y + z.h, doors, dir, glazed, (i) => 'f' + i, (i) => fOpen('f' + i), d, t); }
+        if (doors) { const z = zn.doors; const top = y0 + z.y + z.h - (hid && !drawers ? 3.5 : 0); putDoors(u + z.x, u + z.x + z.w, y0 + z.y, top, doors, dir, glazed, (i) => 'f' + i, (i) => fOpen('f' + i), d, t, openSet, hid); }
+        if (hid) for (const [a, b] of hiddenSegments(c)) { put(u + a, u + b, d - 3, d - .4, y0 + h - 3.3, y0 + h - .2, '#2f343b', 'handle'); put(u + a, u + b, d - .4, d + .3, y0 + h - 3.3, y0 + h - 2.6, STEEL, 'handle'); } // the hidden-handle groove: dark channel with a light lip, only over the doors
       }
       curFront = null;
       const ytop = y0 + h;

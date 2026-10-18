@@ -1,5 +1,5 @@
 // SVG drawings for kitchens: front elevation, plan view with countertop, and sheet cut layouts.
-import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, layoutSlots, zonesOf, shelfCount, shelfGap, hasSkirt } from './kitchen.js';
+import { CAB_TYPES, DEFAULT_STYLE, APPLIANCES, DIRS, layoutSlots, zonesOf, shelfCount, shelfGap, hasSkirt, openDoorsOf, hasHiddenHandle } from './kitchen.js';
 import { colourHex, glassHex, stoneHex, lighten } from './drawings.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -39,12 +39,14 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
         if (dr === 'slide') { const my = zy + zh / 2; return `<path d="M${gx + 6} ${my} L${gx + dw - 6} ${my} M${gx + dw - 11} ${my - 4} L${gx + dw - 6} ${my} L${gx + dw - 11} ${my + 4}" fill="none" stroke="${INK}" stroke-width="1"/>`; }
         return left ? `<path d="M${gx + 2} ${zy + 2} L${gx + dw - 2} ${zy + zh / 2} L${gx + 2} ${zy + zh - 2}" ${dash}/>` : `<path d="M${gx + dw - 2} ${zy + 2} L${gx + 2} ${zy + zh / 2} L${gx + dw - 2} ${zy + zh - 2}" ${dash}/>`;
       };
-      const handle = (gx, zy, dw, zh, dr, left, wall) => {
+      const handle = (gx, zy, dw, zh, dr, left, wall) => { if (hid) return ''; // the hidden handle has no knob
         if (dr === 'up') return `<line x1="${gx + dw / 2 - 8}" y1="${zy + zh - 6}" x2="${gx + dw / 2 + 8}" y2="${zy + zh - 6}" stroke="${INK}" stroke-width="2"/>`;
         if (dr === 'down') return `<line x1="${gx + dw / 2 - 8}" y1="${zy + 6}" x2="${gx + dw / 2 + 8}" y2="${zy + 6}" stroke="${INK}" stroke-width="2"/>`;
         const hx = left ? gx + dw - 6 : gx + 6; return `<line x1="${hx}" y1="${zy + zh * (wall ? 0.75 : 0.25)}" x2="${hx}" y2="${zy + zh * (wall ? 0.9 : 0.4)}" stroke="${INK}" stroke-width="2"/>`;
       };
-      const doorSet = (gx0, zy, zw, zh, n, dr, gl, wall) => { for (let i = 0; i < n; i++) { const dw = zw / n; const gx = gx0 + i * dw;
+      const openSet = t.corner ? new Set() : openDoorsOf(c); const hid = hasHiddenHandle(c, style);
+      const doorSet = (gx0, zy, zw, zh, n, dr, gl, wall, skip = null) => { for (let i = 0; i < n; i++) { const dw = zw / n; const gx = gx0 + i * dw;
+        if (skip && skip.has(i)) { out += `<rect x="${gx + 2}" y="${zy + 2}" width="${dw - 4}" height="${zh - 4}" fill="#f6f2e8" stroke="${INK}" stroke-width=".6" stroke-dasharray="2 2"/>`; continue; } // an open place
         if (dr === 'shutter') { const lines = Math.max(3, Math.round((zh - 4) / 7)); out += `<rect x="${gx + 2}" y="${zy + 2}" width="${dw - 4}" height="${zh - 4}" fill="${FILL2}" stroke="${INK}" stroke-width=".8"/>` + Array.from({ length: lines }, (_, q) => `<line x1="${gx + 3}" y1="${zy + 2 + ((q + 1) * (zh - 4)) / (lines + 1)}" x2="${gx + dw - 3}" y2="${zy + 2 + ((q + 1) * (zh - 4)) / (lines + 1)}" stroke="${INK}" stroke-width=".4" opacity=".55"/>`).join('') + `<rect x="${gx + dw * .3}" y="${zy + zh - 9}" width="${dw * .4}" height="3" fill="${INK}"/><path d="M${gx + dw / 2 - 5} ${zy + zh / 2 + 3} L${gx + dw / 2} ${zy + zh / 2 - 4} L${gx + dw / 2 + 5} ${zy + zh / 2 + 3}" fill="none" stroke="${INK}" stroke-width="1.2"/>`; continue; }
         const left = dr === 'right' ? false : dr === 'left' ? true : n === 1 || i % 2 === 0;
         out += `<rect x="${gx + 2}" y="${zy + 2}" width="${dw - 4}" height="${zh - 4}" fill="${i < gl ? GLASS : FILL2}" stroke="${INK}" stroke-width=".8"/>${handle(gx, zy, dw, zh, dr, left, wall)}`;
@@ -65,7 +67,8 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
       } else if (t.gap) { /* drawn above */ } else {
         if (!doors && !drawers) out += [1, 2, 3].slice(0, Math.max(0, Math.round(+c.shelves || 0))).map((i, _, all) => `<line x1="${x + 2}" y1="${yTop + (h * i) / (all.length + 1)}" x2="${x + w - 2}" y2="${yTop + (h * i) / (all.length + 1)}" stroke="${INK}" stroke-width="1.4"/>`).join('') + `<text x="${x + w / 2}" y="${yTop + h / 2}" font-size="9" text-anchor="middle" fill="currentColor" opacity=".55">open</text>`;
         if (drawers) { const z = zn.drawers; const zx = x + z.x * f; const zy = yTop + (+c.h - z.y - z.h) * f; const zw = z.w * f; const dh = (z.h * f) / drawers; for (let i = 0; i < drawers; i++) out += `<rect x="${zx + 2}" y="${zy + i * dh + 2}" width="${zw - 4}" height="${dh - 4}" fill="${FILL2}" stroke="${INK}" stroke-width=".8"/><line x1="${zx + zw * .35}" y1="${zy + i * dh + dh * .4}" x2="${zx + zw * .65}" y2="${zy + i * dh + dh * .4}" stroke="${INK}" stroke-width="2"/>`; }
-        if (doors) { const z = zn.doors; doorSet(x + z.x * f, yTop + (+c.h - z.y - z.h) * f, z.w * f, z.h * f, doors, dir, glazed, t.wall); }
+        if (doors) { const z = zn.doors; doorSet(x + z.x * f, yTop + (+c.h - z.y - z.h) * f, z.w * f, z.h * f, doors, dir, glazed, t.wall, openSet); }
+        if (hid) out += `<rect x="${x}" y="${yTop}" width="${w}" height="${Math.max(2, 3.5 * f)}" fill="#2f343b"/>`; // hidden-handle groove
       }
       if (t.shelf) for (let q = 0; q < shelfCount(c); q++) out += `<rect x="${x}" y="${yTop - q * ((+c.h || 0) + shelfGap(c)) * k}" width="${w}" height="${Math.max(3, h)}" fill="#d9c9a8" stroke="${INK}" stroke-width="1"/>`;
       if (t.sink) { const cx = x + w / 2; const ty = yTop - ct * k; out += `<path d="M${x + w * .12} ${ty} L${x + w * .12} ${ty + 4} L${x + w * .88} ${ty + 4} L${x + w * .88} ${ty}" fill="#b9c0c9" stroke="${INK}" stroke-width="1"/><path d="M${cx} ${ty} L${cx} ${ty - 16} Q${cx} ${ty - 22} ${cx - 8} ${ty - 22}" fill="none" stroke="${INK}" stroke-width="2"/>`; }
