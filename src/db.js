@@ -78,6 +78,8 @@ ddl.push('CREATE INDEX IF NOT EXISTS ix_orders_inv ON orders(inv);');
 db.exec(ddl.join('\n'));
 // older databases: users gained a personal shift
 if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'shift')) db.exec('ALTER TABLE users ADD COLUMN shift TEXT');
+// the creator: the admin of the admins — nobody can delete, deactivate or demote that account
+if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'creator')) db.exec('ALTER TABLE users ADD COLUMN creator INTEGER DEFAULT 0');
 // … and personal permissions on top of the role
 if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'perms')) db.exec('ALTER TABLE users ADD COLUMN perms TEXT');
 // add columns introduced after a database was first created

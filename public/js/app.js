@@ -76,7 +76,7 @@ function buildNav() {
   const link = (r) => `<a href="#/${r.path}" data-p="${r.path}"><span style="width:18px;text-align:center">${r.icon}</span>${esc(r.title)}</a>`;
   nav.innerHTML = sections.filter((g) => g.pages.length).map((g) => (g.name ? `<div class="grp-wrap" data-g="${esc(g.name)}"><div class="grp" role="button" tabindex="0" aria-expanded="false"><span class="chev">▾</span>${esc(g.name)}</div><div class="grp-body">${g.pages.map((x) => (x.sub ? (x.pages.length ? `<div class="sub-wrap shut" data-s="${esc(x.sub)}"><div class="grp sub" role="button" tabindex="0" aria-expanded="false"><span class="chev">▾</span>${esc(x.sub)}</div><div class="sub-body">${x.pages.map(link).join('')}</div></div>` : '') : link(x))).join('')}</div></div>` : g.pages.map(link).join(''))).join('');
   showGroups();
-  $('#meName').textContent = S.me?.name || ''; $('#meRole').textContent = ROLES[role] || ''; $('#meAvatar').textContent = (S.me?.name || '?').trim().charAt(0).toUpperCase();
+  $('#meName').textContent = S.me?.name || ''; $('#meRole').textContent = S.me?.creator ? 'Creator' : ROLES[role] || ''; $('#meAvatar').textContent = (S.me?.name || '?').trim().charAt(0).toUpperCase();
 }
 nav.addEventListener('click', (e) => { const h = e.target.closest('.grp'); if (!h) return;
   if (h.classList.contains('sub')) { const s = h.parentElement.dataset.s; openSub = openSub === s ? null : s; } // a sub-section opens and closes on its own, inside its section

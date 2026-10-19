@@ -8,7 +8,7 @@ const secret = () => {
   return s;
 };
 const hash = (pw, salt) => crypto.scryptSync(pw, salt, 64).toString('hex');
-const pub = (u) => { if (!u) return null; let shift = null; try { shift = u.shift ? JSON.parse(u.shift) : null; } catch {} let perms = null; try { perms = u.perms ? JSON.parse(u.perms) : null; } catch {} return { id: u.id, username: u.username, name: u.name, role: u.role, active: u.active ? 1 : 0, created_at: u.created_at, shift, perms }; };
+const pub = (u) => { if (!u) return null; let shift = null; try { shift = u.shift ? JSON.parse(u.shift) : null; } catch {} let perms = null; try { perms = u.perms ? JSON.parse(u.perms) : null; } catch {} return { id: u.id, username: u.username, name: u.name, role: u.role, creator: u.creator ? 1 : 0, active: u.active ? 1 : 0, created_at: u.created_at, shift, perms }; };
 
 // Databases from before user accounts had one shared password: keep it as the "admin" user.
 (function migrate() {
@@ -43,17 +43,28 @@ export function syncEmployees() {
     else { const r = db.prepare('INSERT INTO employees(name,salary,active,user_id,role) VALUES(?,?,?,?,?)').run(u.name, 0, u.active ? 1 : 0, u.id, ROLE_TITLE[u.role] || u.role); emps.push({ id: Number(r.lastInsertRowid), name: u.name, user_id: u.id }); }
   }
 }
-export function createUser(d) {
+const isCreator = (actor) => !!actor && !!actor.creator;
+const hasCreator = () => !!db.prepare('SELECT id FROM users WHERE creator=1').get();
+export function createUser(d, actor = null) {
+  const wantsCreator = d.role === 'creator'; if (wantsCreator) d = { ...d, role: 'admin' };
   validate(d, true);
+  if (wantsCreator && hasCreator()) throw bad('There is already a creator — there can only be one.');
+  if (d.role === 'admin' && !wantsCreator && actor && !isCreator(actor) && hasCreator()) throw bad('Only the creator can make new admins.');
   if (db.prepare('SELECT id FROM users WHERE username=?').get(d.username)) throw bad('That username is already taken.');
   const salt = crypto.randomBytes(16).toString('hex');
-  const r = db.prepare('INSERT INTO users(username,name,role,salt,hash,active) VALUES(?,?,?,?,?,1)').run(d.username, d.name || d.username, d.role || 'worker', salt, hash(d.password, salt));
+  const r = db.prepare('INSERT INTO users(username,name,role,salt,hash,active,creator) VALUES(?,?,?,?,?,1,?)').run(d.username, d.name || d.username, d.role || 'worker', salt, hash(d.password, salt), wantsCreator ? 1 : 0);
   syncEmployees();
   return getUser(Number(r.lastInsertRowid));
 }
-export function updateUser(id, d, selfId) {
+export function updateUser(id, d, selfId, actor = null) {
   const cur = db.prepare('SELECT * FROM users WHERE id=?').get(id); if (!cur) throw Object.assign(new Error('User not found'), { status: 404 });
+  if (d.role === 'creator') throw bad('The creator account is made once, when a new user is added.');
   validate(d, false);
+  if (cur.creator) { // the creator: only he can edit his own name, password and shift; nobody changes his role or switches him off
+    if (id !== selfId) throw bad('Only the creator can change the creator account.');
+    if ((d.role !== undefined && d.role !== 'admin') || d.active === false || d.active === 0) throw bad('The creator cannot be demoted or deactivated.');
+  } else if (actor && !isCreator(actor) && id !== selfId && cur.role === 'admin' && hasCreator()) throw bad('Only the creator can change an admin.');
+  else if (actor && !isCreator(actor) && d.role === 'admin' && cur.role !== 'admin' && hasCreator()) throw bad('Only the creator can make someone an admin.');
   const role = d.role ?? cur.role; const active = d.active === undefined ? cur.active : d.active ? 1 : 0;
   if ((cur.role === 'admin' && cur.active) && (role !== 'admin' || !active) && activeAdmins(id) === 0) throw bad('There must be at least one active admin.');
   if (id === selfId && !active) throw bad('You cannot deactivate your own account.');
@@ -65,8 +76,10 @@ export function updateUser(id, d, selfId) {
   if (d.password) { const salt = crypto.randomBytes(16).toString('hex'); db.prepare('UPDATE users SET salt=?, hash=? WHERE id=?').run(salt, hash(d.password, salt), id); }
   return getUser(id);
 }
-export function deleteUser(id, selfId) {
+export function deleteUser(id, selfId, actor = null) {
   const cur = db.prepare('SELECT * FROM users WHERE id=?').get(id); if (!cur) return;
+  if (cur.creator) throw bad('The creator account can never be deleted.');
+  if (actor && !isCreator(actor) && cur.role === 'admin' && hasCreator()) throw bad('Only the creator can delete an admin.');
   if (id === selfId) throw bad('You cannot delete your own account.');
   if (cur.role === 'admin' && cur.active && activeAdmins(id) === 0) throw bad('There must be at least one active admin.');
   db.prepare('UPDATE employees SET user_id=NULL, active=0, left_date=COALESCE(left_date, date(\'now\')) WHERE user_id=?').run(id); // keep the employee and their pay history, but they have left

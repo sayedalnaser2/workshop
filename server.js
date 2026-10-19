@@ -453,9 +453,9 @@ async function api(req, res, url) {
     need(role === 'admin');
     const uid = p[1] ? Number(p[1]) : null;
     if (!uid && m === 'GET') return send(res, 200, listUsers());
-    if (!uid && m === 'POST') { const b = await readJson(req); const u = createUser(b); audit(user, 'users', u.id, 'created', `${u.name} (${u.role})`); return send(res, 201, u); }
-    if (uid && m === 'PUT') { const b = await readJson(req); const before = listUsers().find((x) => x.id === uid); const u = updateUser(uid, b, user.id); audit(user, 'users', uid, 'updated', u.name, [...['name', 'username', 'role', 'active'].filter((k) => before && before[k] !== u[k]).map((k) => ({ f: k, from: String(before[k]), to: String(u[k]) })), ...(b.password ? [{ f: 'password', from: '', to: '(reset)' }] : []), ...(JSON.stringify(before?.perms || null) !== JSON.stringify(u.perms || null) ? [{ f: 'permissions', from: JSON.stringify(before?.perms?.pages || {}), to: JSON.stringify(u.perms?.pages || {}) }] : [])]); return send(res, 200, u); }
-    if (uid && m === 'DELETE') { const before = listUsers().find((x) => x.id === uid); deleteUser(uid, user.id); audit(user, 'users', uid, 'deleted', before?.name || ''); return send(res, 200, { ok: true }); }
+    if (!uid && m === 'POST') { const b = await readJson(req); const u = createUser(b, user); audit(user, 'users', u.id, 'created', `${u.name} (${u.role})`); return send(res, 201, u); }
+    if (uid && m === 'PUT') { const b = await readJson(req); const before = listUsers().find((x) => x.id === uid); const u = updateUser(uid, b, user.id, user); audit(user, 'users', uid, 'updated', u.name, [...['name', 'username', 'role', 'active'].filter((k) => before && before[k] !== u[k]).map((k) => ({ f: k, from: String(before[k]), to: String(u[k]) })), ...(b.password ? [{ f: 'password', from: '', to: '(reset)' }] : []), ...(JSON.stringify(before?.perms || null) !== JSON.stringify(u.perms || null) ? [{ f: 'permissions', from: JSON.stringify(before?.perms?.pages || {}), to: JSON.stringify(u.perms?.pages || {}) }] : [])]); return send(res, 200, u); }
+    if (uid && m === 'DELETE') { const before = listUsers().find((x) => x.id === uid); deleteUser(uid, user.id, user); audit(user, 'users', uid, 'deleted', before?.name || ''); return send(res, 200, { ok: true }); }
   }
 
   if (p[0] === 'password' && m === 'POST') {

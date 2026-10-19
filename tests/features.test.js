@@ -423,3 +423,28 @@ test('order / invoice numbers are locked once set', async () => {
     const t = await call('POST', '/api/t/tasks', { title: 'T', order_inv: o.inv }); const t2 = await call('PUT', `/api/t/tasks/${t.id}`, { order_inv: 'other' }); assert.equal(t2.order_inv, o.inv);
   } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('the creator: one only, the admin of the admins, never deleted, demoted or switched off', async () => {
+  const { spawn } = await import('node:child_process'); const { mkdtempSync, rmSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const path = await import('node:path');
+  const port = 4900 + Math.floor(Math.random() * 300); const base = `http://127.0.0.1:${port}`; const dir = mkdtempSync(path.join(tmpdir(), 'workshop-creator-'));
+  const proc = spawn(process.execPath, ['--no-warnings', 'server.js'], { env: { ...process.env, PORT: String(port), DATA_DIR: dir, WORKSHOP_DEV: '1' }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 60; i++) { try { if ((await fetch(base + '/healthz')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
+    const login = async (u, p) => { const r = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) }); return r.headers.get('set-cookie')?.split(';')[0]; };
+    const mk = (ck) => async (m, u, b) => { const r = await fetch(base + u, { method: m, headers: { 'Content-Type': 'application/json', Cookie: ck }, body: b ? JSON.stringify(b) : undefined }); return { status: r.status, data: await r.json().catch(() => null) }; };
+    const boss = mk(await login('boss', 'secret1')); // the first admin
+    const c = await boss('POST', '/api/users', { username: 'maker', name: 'The Creator', role: 'creator', password: 'create123' }); assert.equal(c.status, 201, JSON.stringify(c.data)); assert.equal(c.data.creator, 1); assert.equal(c.data.role, 'admin');
+    assert.equal((await boss('POST', '/api/users', { username: 'maker2', name: 'x', role: 'creator', password: 'create123' })).status, 400); // only one creator
+    const cid = c.data.id; const creator = mk(await login('maker', 'create123'));
+    assert.equal((await boss('DELETE', `/api/users/${cid}`)).status, 400); assert.equal((await boss('PUT', `/api/users/${cid}`, { role: 'worker' })).status, 400); assert.equal((await boss('PUT', `/api/users/${cid}`, { active: false })).status, 400); assert.equal((await boss('PUT', `/api/users/${cid}`, { name: 'Hacked' })).status, 400);
+    assert.equal((await creator('DELETE', `/api/users/${cid}`)).status, 400); assert.equal((await creator('PUT', `/api/users/${cid}`, { role: 'account' })).status, 400); assert.equal((await creator('PUT', `/api/users/${cid}`, { active: false })).status, 400);
+    assert.equal((await creator('PUT', `/api/users/${cid}`, { name: 'Founder' })).status, 200); // he can edit his own name
+    // admin of the admins: other admins cannot make, change or remove admins
+    assert.equal((await boss('POST', '/api/users', { username: 'adm2', name: 'Admin 2', role: 'admin', password: 'admin222' })).status, 400);
+    const a2 = await creator('POST', '/api/users', { username: 'adm2', name: 'Admin 2', role: 'admin', password: 'admin222' }); assert.equal(a2.status, 201, JSON.stringify(a2.data));
+    assert.equal((await boss('DELETE', `/api/users/${a2.data.id}`)).status, 400); assert.equal((await boss('PUT', `/api/users/${a2.data.id}`, { role: 'worker' })).status, 400);
+    assert.equal((await creator('PUT', `/api/users/${a2.data.id}`, { role: 'worker' })).status, 200);
+    assert.equal((await boss('POST', '/api/users', { username: 'wkr', name: 'W', role: 'worker', password: 'work1234' })).status, 201); // admins still manage everyone else
+    assert.equal((await creator('GET', '/api/me')).data.user.creator, 1);
+  } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
+});
