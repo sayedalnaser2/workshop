@@ -231,7 +231,7 @@ export function setKitchenDefaults(d, profiles) {
 /** A kitchen's style with the Settings defaults filled in where the kitchen chose nothing. */
 export function withDefaults(style) {
   const out = { ...style }; const p = KDEF.profile;
-  if (!out.profile && p) { out.profile = [p.code, p.name].filter(Boolean).join(' '); out.frame_profile_id = p.id; if (p.face_w) out.frame_w = Math.round(+p.face_w) / 10 || out.frame_w; out.bar_len = p.bar_length || out.bar_len; out.profile_price = Number(p.price_bar) || 0; }
+  if (!out.profile && p) { out.profile = [p.code, p.name].filter(Boolean).join(' '); out.frame_profile_id = p.id; if (p.face_w && (out.frame_w === undefined || out.frame_w === '')) out.frame_w = Math.round(+p.face_w) / 10 || undefined; if ((out.bar_len === undefined || out.bar_len === '') && p.bar_length) out.bar_len = p.bar_length; if (!(+out.profile_price > 0)) out.profile_price = Number(p.price_bar) || 0; }
   if (!out.handle && KDEF.handle) out.handle = KDEF.handle;
   return out;
 }
@@ -360,7 +360,7 @@ export function packBars(frames, barLen = 600, fw = 4.5, kerf = 0.5) {
 export const cutKey = (mat, p) => `${mat}|${String(p.label).replace(/^.* · /, '')}|${p.w}|${p.h}`;
 /** Everything about a kitchen: panels by material, sheets, hardware, countertop slabs. */
 export function kitchenModel(spec) {
-  const style = withDefaults({ ...DEFAULT_STYLE, ...(spec.style || {}) }); const counter = { ...DEFAULT_COUNTER, ...(spec.counter || {}) };
+  const style = { ...DEFAULT_STYLE, ...withDefaults(spec.style || {}) }; const counter = { ...DEFAULT_COUNTER, ...(spec.counter || {}) };
   const runs = spec.runs || [];
   const panels = { carcass: [], back: [], door: [], skirt: [], white22: [], white16: [], design: [], end: [] }; const aluBars = []; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0, shutters: 0 }; const glass = []; const frames = []; const appliances = []; const accessories = {};
   const meters = { base: 0, wall: 0, tall: 0, units: 0, base_n: 0, wall_n: 0, tall_n: 0 };
