@@ -97,6 +97,8 @@ function redact(table, r) {
     case 'accessories': return { ...r, price: 0 };
     case 'glass_types': return { ...r, price_m2: 0 };
     case 'stock': return { ...r, unit_cost: 0 };
+    case 'board_types': return { ...r, price: 0 };
+    case 'board_stock': return { ...r, unit_cost: 0 };
     case 'quotes': return { ...r, discount: 0, vat_waived: 0, notes: '', mobile: '', items: (r.items || []).map((i) => ({ ...i, price: 0 })) };
     default: return r;
   }
@@ -105,10 +107,12 @@ const bootstrap = (user = { role: 'admin' }) => user.role === 'worker' && !seesM
   settings: Object.fromEntries(['colours', 'colour_defs', 'bar_kerf', 'min_offcut', 'leftover_pct'].map((k) => [k, getSetting(k)]).concat([['company', { name: getSetting('company')?.name }]])),
   price_items: [], profiles: listRows('profiles').map((r) => redact('profiles', r)), accessories: listRows('accessories').map((r) => redact('accessories', r)),
   glass_types: listRows('glass_types').map((r) => redact('glass_types', r)), models: listRows('models'), employees: [], next: {},
+  board_types: listRows('board_types').map((r) => redact('board_types', r)), board_stock: listRows('board_stock').map((r) => redact('board_stock', r)),
 }) : ({
   settings: Object.fromEntries(db.prepare('SELECT key FROM settings').all().filter((r) => !['auth', 'session_secret'].includes(r.key)).map((r) => [r.key, getSetting(r.key)])),
   price_items: listRows('price_items'), profiles: listRows('profiles'), accessories: listRows('accessories'),
   glass_types: listRows('glass_types'), models: listRows('models'), employees: listRows('employees'), bank_accounts: listRows('bank_accounts'),
+  board_types: listRows('board_types'), board_stock: listRows('board_stock'),
   next: { quote: nextNumber('quote'), invoice: nextNumber('invoice'), receipt: nextNumber('receipt'), payment: nextNumber('payment'), po: nextNumber('po'), credit: nextNumber('credit') },
 });
 

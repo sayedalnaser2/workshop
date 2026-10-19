@@ -372,3 +372,28 @@ test('aluminium hinge column: (H − 5) × Int((QOD − 1) / 2) when more than 2
   assert.deepEqual(col(1), []); assert.deepEqual(col(2), []); assert.deepEqual(col(3), [[65, 1]]); assert.deepEqual(col(4), [[65, 1]]); assert.deepEqual(col(5), [[65, 2]]); assert.deepEqual(col(6), [[65, 2]]); assert.deepEqual(col(7), [[65, 3]]);
   assert.deepEqual(col(2, 'wall'), []); assert.deepEqual(col(3, 'wall'), [[65, 1]]);
 });
+
+test('sheet stock: used pieces are cut first, new sheets only for the rest, priced separately; visible ends use their own sheet', async () => {
+  const K = await import('../public/js/kitchen.js');
+  K.setBoards({ types: [{ id: 1, name: 'MDF 18 white', material: 'MDF', thickness: 18, sheet_w: 244, sheet_h: 122, price: 10 }, { id: 2, name: 'Oak veneer 18', thickness: 18, sheet_w: 244, sheet_h: 122, price: 30 }], stock: [
+    { id: 11, type_id: 1, kind: 'used', length: 150, width: 80, qty: 1, unit_cost: 4 }, { id: 12, type_id: 1, kind: 'used', length: 60, width: 40, qty: 2, unit_cost: 1 }, { id: 13, type_id: 1, kind: 'new', length: 244, width: 122, qty: 5, unit_cost: 10 }] });
+  try {
+    const parts = [{ w: 70, h: 50, qty: 2, label: 'a' }, { w: 55, h: 35, qty: 1, label: 'b' }, { w: 200, h: 100, qty: 1, label: 'big' }];
+    const r = K.planSheets(parts, 244, 122, 0.3, { used: K.usedPiecesOf(1) });
+    assert.equal(r.usedCount, 2); assert.equal(r.newCount, 1); // the 60×40 scrap takes "b", the 150×80 piece takes the 70×50s, the big one needs a new sheet
+    assert.deepEqual(r.sheets.map((s) => s.source), ['used', 'used', 'new']); assert.equal(r.sheets[0].stockId, 12);
+    assert.equal(r.sheets.flatMap((s) => s.items).length, 4);
+    const none = K.planSheets(parts, 244, 122, 0.3, { used: [] }); assert.equal(none.usedCount, 0);
+    const cab = { type: 'base', w: 60, d: 56, h: 72, doors: 1 };
+    const m = K.kitchenModel({ style: { carcass: 'MDF 18 white', end_sheet: 'Oak veneer 18' }, runs: [{ cabinets: [cab, cab, cab] }] });
+    assert.equal(m.panels.end.reduce((a, p) => a + p.qty, 0), 2); // the left of the first and the right of the last
+    assert.equal(m.panels.carcass.filter((p) => p.label.endsWith('Side')).reduce((a, p) => a + p.qty, 0), 4);
+    assert.equal(m.sheets.end.type, 'Oak veneer 18'); assert.equal(m.sheets.carcass.sheets[0].source, 'used');
+    const price = K.priceKitchen(m, { general: {} });
+    assert.ok(price.lines.some((l) => l.label.startsWith('Used sheets from stock')) && price.lines.some((l) => l.label.startsWith('Visible sides') && l.price === 30));
+    const all = K.kitchenModel({ style: { carcass: 'MDF 18 white' }, runs: [{ cabinets: [cab, cab, cab, cab, cab, cab] }] }); // three used pieces exist: no piece is used for two materials
+    assert.ok(['carcass', 'door', 'back'].reduce((a, mt) => a + all.sheets[mt].usedCount, 0) <= 3);
+    const off = K.kitchenModel({ style: { carcass: 'MDF 18 white' }, runs: [{ cabinets: [cab] }] }); assert.equal(off.panels.end.length, 0);
+    const hand = K.kitchenModel({ style: { carcass: 'MDF 18 white', end_sheet: 'Oak veneer 18' }, runs: [{ cabinets: [{ ...cab, end_left: false, end_right: false }, cab] }] }); assert.equal(hand.panels.end.reduce((a, p) => a + p.qty, 0), 1);
+  } finally { K.setBoards({ types: [], stock: [] }); }
+});

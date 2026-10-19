@@ -41,6 +41,8 @@ export const SCHEMA = {
   employee_events: { cols: { employee_id: 'INTEGER', date: 'TEXT', type: 'TEXT', amount: 'REAL', note: 'TEXT' }, order: 'date DESC, id DESC' },
   attendance: { cols: { employee_id: 'INTEGER', date: 'TEXT', status: 'TEXT', hours: 'REAL', site: 'TEXT', note: 'TEXT' }, order: 'date' },
   kitchens: { cols: { name: 'TEXT', client: 'TEXT', customer_id: 'INTEGER', order_inv: 'TEXT', quote_no: 'TEXT', status: 'TEXT', spec: 'JSON', notes: 'TEXT' }, order: 'id DESC' },
+  board_types: { cols: { name: 'TEXT', material: 'TEXT', thickness: 'REAL', sheet_w: 'REAL', sheet_h: 'REAL', price: 'REAL', colour: 'TEXT', note: 'TEXT', sort: 'INTEGER' }, order: 'sort, name' },
+  board_stock: { cols: { type_id: 'INTEGER', kind: 'TEXT', length: 'REAL', width: 'REAL', qty: 'REAL', unit_cost: 'REAL', location: 'TEXT', source: 'TEXT', date: 'TEXT', note: 'TEXT' }, order: 'type_id, kind DESC, length DESC' },
   kitchen_options: { cols: { kind: 'TEXT', name: 'TEXT', price: 'REAL', unit: 'TEXT', meta: 'JSON', note: 'TEXT', sort: 'INTEGER' }, order: 'kind, sort, name' },
   tasks: { cols: { order_inv: 'TEXT', quote_no: 'TEXT', title: 'TEXT', description: 'TEXT', stage: 'TEXT', assignee_id: 'INTEGER', team: 'JSON', hidden: 'INTEGER', needs_helper: 'INTEGER', helper_note: 'TEXT', status: 'TEXT', progress: 'REAL', estimate_min: 'REAL', due: 'TEXT', priority: 'TEXT', created_by: 'INTEGER', started_at: 'TEXT', done_at: 'TEXT', note: 'TEXT' }, order: 'id DESC' },
   task_logs: { cols: { task_id: 'INTEGER', user_id: 'INTEGER', user_name: 'TEXT', ts: 'TEXT', kind: 'TEXT', text: 'TEXT', progress: 'REAL', minutes: 'REAL' }, order: 'ts DESC' },

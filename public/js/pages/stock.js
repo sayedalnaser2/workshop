@@ -3,6 +3,7 @@ import { api, $, $$, esc, money, qty as fq, num, today, dmy, dataTable, editRow,
 import { leftoverValue, lowStock } from '../stock.js';
 import { openPoDialog } from '../po-dialog.js';
 import { seesMoney } from '../perm.js';
+import { renderSheets } from './sheets.js';
 
 const COL = { white: '#f3f3f0', brown: '#6b4a2f', black: '#222', bronze: '#8c6a3d', silver: '#bfc5cc', wood: '#a5733b', grey: '#8a8f98', gold: '#c9a227', champagne: '#d9c7a1', 'dark grey': '#555a63', natural: '#d8dadd' };
 export const dot = (c) => (c ? `<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${COL[String(c).toLowerCase()] || 'var(--muted)'};border:1px solid var(--line);vertical-align:-1px;margin-right:5px"></span>${esc(c)}` : '<span class="muted">—</span>');
@@ -11,6 +12,7 @@ const TYPES = [['profile', 'Aluminium profile'], ['glass', 'Glass'], ['accessory
 export async function render(el) {
   let tab = sessionStorage.getItem('stock-tab') || 'new';
   const draw = async () => {
+    if (tab === 'sheets') { el.innerHTML = `<div class="ph"><h1>Stock</h1><span class="sub">Sheets: types, new sheets and used pieces</span></div><div class="tbar"><div class="seg">${[['new', 'New stock'], ['leftover', 'Leftovers'], ['sheets', 'Sheets']].map(([v, l]) => `<button data-t="${v}" class="${tab === v ? 'on' : ''}">${l}</button>`).join('')}</div></div><div id="sheetsbody"></div>`; $$('.seg button', el).forEach((b) => (b.onclick = () => { tab = b.dataset.t; sessionStorage.setItem('stock-tab', tab); draw(); })); await renderSheets($('#sheetsbody', el), draw); return; }
     const raw = await api.get('t/stock'); const low = lowStock(raw, { profiles: S.profiles, glassTypes: S.glass_types, accessories: S.accessories });
     const rows = raw.map((r) => ({ ...r, label: stockName(r), value: (r.unit_cost || 0) * (r.qty || 0) }));
     const mine = rows.filter((r) => r.kind === tab);
@@ -19,7 +21,7 @@ export async function render(el) {
     el.innerHTML = `<div class="ph"><h1>Stock</h1><span class="sub">New stock (full bars, sheets, hardware) and leftovers (cut-offs you can reuse)</span><span class="grow"></span>${tab === 'leftover' ? '<button class="btn primary" id="new">+ Add leftover</button>' : '<span class="muted">New stock arrives when a purchase order is received</span>'}</div>
       <div class="cards">${seesMoney(S.me) ? `<div class="card stat"><div class="k">New stock value</div><div class="v">${money(sumv('new'), 2)}</div></div>` : ''}<div class="card stat"><div class="k">Leftover pieces</div><div class="v">${fq(pcs('leftover'))}</div></div>${S.me?.role !== 'worker' ? `<div class="card stat"><div class="k">Leftover value</div><div class="v">${money(sumv('leftover'), 2)}</div></div>` : ''}<div class="card stat"><div class="k">Reserved leftovers</div><div class="v">${fq(rows.filter((r) => r.kind === 'leftover' && r.reserved_for).reduce((s, r) => s + r.qty, 0))}</div></div></div>
       ${low.length ? `<div class="card" style="border-color:var(--bad);margin-bottom:14px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0;color:var(--bad)">⚠ Running low — ${low.length} item(s)</h3><span class="grow"></span>${S.me?.role !== 'worker' ? '<button class="btn primary" id="reorder">Create purchase order…</button>' : ''}</div><table class="grid" style="margin-top:8px"><thead><tr><th>Item</th><th class="num">In stock</th><th class="num">Alert level</th><th class="num">Suggested order</th></tr></thead><tbody>${low.map((l) => `<tr><td><b>${esc(l.name)}</b> <span class="muted">${esc(l.code)}</span></td><td class="num ${l.onHand <= 0 ? 'neg' : ''}"><b>${fq(l.onHand)}</b> ${esc(l.unit)}</td><td class="num">${fq(l.min)}</td><td class="num">${fq(l.suggest)} ${esc(l.unit)}</td></tr>`).join('')}</tbody></table><p class="muted" style="margin:6px 0 0">Alert levels are set per item under Profiles, Glass &amp; Accessories. The suggestion orders enough to reach twice the alert level.</p></div>` : ''}
-      <div class="tbar"><div class="seg"><button data-t="new" class="${tab === 'new' ? 'on' : ''}">New stock</button><button data-t="leftover" class="${tab === 'leftover' ? 'on' : ''}">Leftovers</button></div></div><div id="t"></div>`;
+      <div class="tbar"><div class="seg"><button data-t="new" class="${tab === 'new' ? 'on' : ''}">New stock</button><button data-t="leftover" class="${tab === 'leftover' ? 'on' : ''}">Leftovers</button><button data-t="sheets" class="${tab === 'sheets' ? 'on' : ''}">Sheets</button></div></div><div id="t"></div>`;
     $('#reorder', el)?.addEventListener('click', guard(async () => {
       const items = await api.get('t/items');
       const lines = low.map((l) => {

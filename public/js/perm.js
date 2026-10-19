@@ -50,7 +50,7 @@ export const TABLE_PAGE = {
   accounts: 'coa', journals: 'journals', bank_accounts: 'cashbank',
   quotes: 'quotes', orders: 'orders', credit_notes: 'creditnotes', receipts: 'receipts', payments: 'payments', purchases: 'purchases', purchase_orders: 'pos', suppliers: 'suppliers', items: 'suppliers',
   cash_entries: 'cashbank', employees: 'employees', employee_events: 'employees', attendance: 'employees', employee_docs: 'employees', price_items: 'prices',
-  profiles: 'materials', accessories: 'materials', glass_types: 'materials', models: 'models', kitchens: 'kitchens', kitchen_options: 'kitchens', stock: 'stock',
+  profiles: 'materials', accessories: 'materials', glass_types: 'materials', models: 'models', kitchens: 'kitchens', kitchen_options: 'kitchens', stock: 'stock', board_types: 'stock', board_stock: 'stock',
   tasks: 'tasks', task_logs: 'tasks', task_sessions: 'tasks', attachments: 'tasks', overtime: 'activity', events: 'calendar', surveys: 'surveys', customer_credits: 'credits', customers: 'customers', notes: 'dashboard', targets: 'targets', target_awards: 'targets',
 };
 /** Tables a page needs to read to work at all — handed out (read-only) when the page was granted to someone on top of their role. */

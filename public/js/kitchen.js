@@ -153,10 +153,12 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
       } else bar(ALU.col, 'Square profile front/top', W - 5, 1); }
       bar(ALU.col, 'Column for hinged doors', H - 5, colQty);
       bar(ALU.edge, 'Shelf (width)', W - 1.4, 2 * nShelf); bar(ALU.edge, 'Shelf (depth)', D - 3.2, 2 * nShelf);
-      if (type.wall || topSheet) sheet(`${tag}Top`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Bottom`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Side`, H - 5.2, D - 5.2, 2, 'white22'); sheet(`${tag}Back`, W - 5.2, H - 5.2, 1, 'white22');
+      if (type.wall || topSheet) sheet(`${tag}Top`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Bottom`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Side`, H - 5.2, D - 5.2, 2 - Math.min(2, +cab._ends || 0), 'white22'); sheet(`${tag}End side`, H - 5.2, D - 5.2, Math.min(2, +cab._ends || 0), 'end'); sheet(`${tag}Back`, W - 5.2, H - 5.2, 1, 'white22');
     }
   } else {
-    add(`${tag}Side`, dd + b + 1 > D ? D : D, H, 2, 'carcass', H); // sides: front edge banded
+    const ends = Math.min(2, +cab._ends || 0); // sides the customer sees are cut from the end sheet
+    add(`${tag}Side`, dd + b + 1 > D ? D : D, H, 2 - ends, 'carcass', H); // sides: front edge banded
+    add(`${tag}End side`, D, H, ends, 'end', H);
     add(`${tag}Bottom`, W - 2 * t, dd, 1, 'carcass', W - 2 * t);
     if (type.wall) add(`${tag}Top`, W - 2 * t, dd, 1, 'carcass', W - 2 * t);
     else if (type.tall) { add(`${tag}Top`, W - 2 * t, dd, 1, 'carcass', W - 2 * t); }
@@ -220,6 +222,16 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   return { panels, hw, glass, frames, appliances, acc, bars };
 }
 
+/** The sheet types and the stock the shop has (set from the data the app loads): used pieces are always cut first. */
+let BOARDS = { types: [], stock: [] };
+export function setBoards(b) { BOARDS = { types: (b && b.types) || [], stock: (b && b.stock) || [] }; }
+export const boardTypeByName = (name) => { const n = String(name || '').toLowerCase().trim(); return n ? BOARDS.types.find((t) => String(t.name).toLowerCase().trim() === n) || null : null; };
+/** The used pieces of a sheet type, one entry per piece, smallest first so the scraps go first: [{ stockId, w, h, cost }]. */
+export function usedPiecesOf(typeId) {
+  const out = []; for (const r of BOARDS.stock) if (r.type_id === typeId && r.kind === 'used' && (+r.length || 0) > 0 && (+r.width || 0) > 0) for (let i = 0; i < Math.floor(+r.qty || 0); i++) out.push({ uid: `${r.id}#${i}`, stockId: r.id, w: Math.max(+r.length, +r.width), h: Math.min(+r.length, +r.width), cost: +r.unit_cost || 0 });
+  return out.sort((a, b) => a.w * a.h - b.w * b.h);
+}
+
 /** The ways a sheet can be cut: strips along the sheet's length, strips across its width, or the best of several plans. */
 export const CUT_MODES = { optimal: 'Optimal (fewest sheets)', length: 'By length (strips along the sheet)', width: 'By width (strips across the sheet)' };
 
@@ -230,7 +242,7 @@ export const CUT_MODES = { optimal: 'Optimal (fewest sheets)', length: 'By lengt
  */
 export function packSheets(pieces, sheetW, sheetH, kerf = 0.3, opts = {}) {
   const mode = CUT_MODES[opts.mode] ? opts.mode : 'optimal';
-  const list = []; for (const p of pieces) for (let i = 0; i < p.qty; i++) list.push({ w: p.w, h: p.h, label: p.label, dir: p.dir === 'h' || p.dir === 'v' ? p.dir : '' });
+  const list = []; for (const p of pieces) for (let i = 0; i < p.qty; i++) list.push({ w: p.w, h: p.h, label: p.label, id: p.id, dir: p.dir === 'h' || p.dir === 'v' ? p.dir : '' });
   const ways = (p, W, H) => { const o = []; if (p.dir !== 'v' && p.w <= W + 1e-9 && p.h <= H + 1e-9) o.push([p.w, p.h, false]); if (p.dir !== 'h' && p.h <= W + 1e-9 && p.w <= H + 1e-9 && !(p.w === p.h && o.length)) o.push([p.h, p.w, true]); return o; };
   const total = sheetW * sheetH; const r1x = (n) => Math.round(n * 10) / 10;
   // strips: rows the full length of the sheet, each as tall as its first piece; a piece goes into the row it fills best
@@ -240,11 +252,11 @@ export function packSheets(pieces, sheetW, sheetH, kerf = 0.3, opts = {}) {
       const o = ways(p, W, H); if (!o.length) { unfit.push(p); continue; }
       let best = null;
       for (const sh of sheets) for (const sf of sh.shelves) for (const [w, h, rot] of o) if (h <= sf.h + 1e-9 && sf.x + w <= W + 1e-9) { const waste = sf.h - h; if (!best || waste < best.waste) best = { sh, sf, w, h, rot, waste }; }
-      if (best) { best.sh.items.push({ x: best.sf.x, y: best.sf.y, w: best.w, h: best.h, rot: best.rot, label: p.label }); best.sf.x += best.w + kerf; continue; }
+      if (best) { best.sh.items.push({ x: best.sf.x, y: best.sf.y, w: best.w, h: best.h, rot: best.rot, label: p.label, id: p.id }); best.sf.x += best.w + kerf; continue; }
       const [w, h, rot] = [...o].sort((m, n) => m[1] - n[1])[0]; // a new row: lay the piece flat so the row stays low
       let sh = sheets.find((x) => x.top + h <= H + 1e-9);
       if (!sh) { sh = { shelves: [], items: [], top: 0 }; sheets.push(sh); }
-      sh.shelves.push({ y: sh.top, h, x: w + kerf }); sh.items.push({ x: 0, y: sh.top, w, h, rot, label: p.label }); sh.top += h + kerf;
+      sh.shelves.push({ y: sh.top, h, x: w + kerf }); sh.items.push({ x: 0, y: sh.top, w, h, rot, label: p.label, id: p.id }); sh.top += h + kerf;
     }
     const freeOf = (sh) => { const out = []; for (const sf of sh.shelves) { const rw = W - sf.x; if (rw > 0.5 && sf.h > 0.5) out.push({ x: sf.x, y: sf.y, w: r1x(rw), h: r1x(sf.h) }); } if (H - sh.top > 0.5) out.push({ x: 0, y: sh.top, w: W, h: r1x(H - sh.top) }); return out; };
     return { sheets: sheets.map((sh) => ({ items: sh.items, free: freeOf(sh) })), unfit };
@@ -256,7 +268,7 @@ export function packSheets(pieces, sheetW, sheetH, kerf = 0.3, opts = {}) {
       let best = null;
       for (const [fi, f] of sh.free.entries()) for (const [w, h, rot] of ways(p, W, H)) if (w <= f.w + 1e-9 && h <= f.h + 1e-9) { const score = Math.min(f.w - w, f.h - h); if (!best || score < best.score) best = { fi, f, w, h, rot, score }; }
       if (!best) return false;
-      const { f, w, h } = best; sh.free.splice(best.fi, 1); sh.items.push({ x: f.x, y: f.y, w, h, rot: best.rot, label: p.label });
+      const { f, w, h } = best; sh.free.splice(best.fi, 1); sh.items.push({ x: f.x, y: f.y, w, h, rot: best.rot, label: p.label, id: p.id });
       const rw = f.w - w - kerf; const bh = f.h - h - kerf;
       const across = splitRule === 'short' ? f.w - w < f.h - h : rw * f.h < f.w * bh; // which leftover gets the full side
       const right = { x: f.x + w + kerf, y: f.y, w: rw, h: across ? h : f.h }; const below = { x: f.x, y: f.y + h + kerf, w: across ? f.w : w, h: bh };
@@ -291,6 +303,26 @@ export function packSheets(pieces, sheetW, sheetH, kerf = 0.3, opts = {}) {
   return { mode, sheets: best.sheets.map((sh) => ({ items: sh.items, used: usedOf(sh), free: sh.free })), unfit: best.unfit };
 }
 
+/**
+ * Plan the sheets of one material: the shop's used pieces first (smallest that still holds something), then new sheets.
+ * pieces: [{ w, h, qty, label, dir }]. Returns { sheets: [{ items, used, free, w, h, source: 'used' | 'new', stockId, cost }], unfit, newCount, usedCount }.
+ */
+export function planSheets(pieces, sheetW, sheetH, kerf, opts = {}) {
+  let todo = []; let n = 0; for (const p of pieces) for (let i = 0; i < p.qty; i++) todo.push({ w: p.w, h: p.h, qty: 1, label: p.label, dir: p.dir, id: ++n });
+  const out = []; const usedUp = new Set();
+  for (const u of opts.used || []) {
+    if (!todo.length) break;
+    const fit = todo.filter((p) => (p.dir !== 'v' && p.w <= u.w + 1e-9 && p.h <= u.h + 1e-9) || (p.dir !== 'h' && p.h <= u.w + 1e-9 && p.w <= u.h + 1e-9));
+    if (!fit.length) continue;
+    const r = packSheets(fit, u.w, u.h, kerf, opts); const sh = r.sheets[0]; if (!sh) continue;
+    const placed = new Set(sh.items.map((i) => i.id)); todo = todo.filter((p) => !placed.has(p.id));
+    out.push({ ...sh, w: u.w, h: u.h, source: 'used', stockId: u.stockId, uid: u.uid, cost: u.cost }); usedUp.add(u);
+  }
+  const nw = packSheets(todo, sheetW, sheetH, kerf, opts);
+  for (const sh of nw.sheets) out.push({ ...sh, w: sheetW, h: sheetH, source: 'new' });
+  return { sheets: out, unfit: nw.unfit, newCount: nw.sheets.length, usedCount: out.length - nw.sheets.length };
+}
+
 /** Cut aluminium door-frame profile out of stock bars (first-fit decreasing, 45° corners need no allowance beyond the saw kerf). */
 /** Straight cuts from bars: pieces [{ len, qty, label }] → bars with the pieces on each, offcuts and total metres. */
 export function packLengths(list, barLen = 600, kerf = 0.5) {
@@ -317,24 +349,27 @@ export const cutKey = (mat, p) => `${mat}|${String(p.label).replace(/^.* · /, '
 export function kitchenModel(spec) {
   const style = { ...DEFAULT_STYLE, ...(spec.style || {}) }; const counter = { ...DEFAULT_COUNTER, ...(spec.counter || {}) };
   const runs = spec.runs || [];
-  const panels = { carcass: [], back: [], door: [], skirt: [], white22: [], white16: [], design: [] }; const aluBars = []; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0, shutters: 0 }; const glass = []; const frames = []; const appliances = []; const accessories = {};
+  const panels = { carcass: [], back: [], door: [], skirt: [], white22: [], white16: [], design: [], end: [] }; const aluBars = []; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0, shutters: 0 }; const glass = []; const frames = []; const appliances = []; const accessories = {};
   const meters = { base: 0, wall: 0, tall: 0, units: 0, base_n: 0, wall_n: 0, tall_n: 0 };
   let edge = 0;
   const joins = []; let runX = 0; let curRun = -1; // hidden-handle stretches, joined where cabinets touch
   for (const [ri, run] of runs.entries()) for (const [ci, cab] of (run.cabinets || []).entries()) {
     if (ri !== curRun) { curRun = ri; runX = 0; }
-    const type = CAB_TYPES[cab.type] || CAB_TYPES.base; const p = cabinetParts(cab.label ? cab : { ...cab, label: `${String.fromCharCode(65 + (ri % 26))}${ci + 1}` }, style); // an unnamed cabinet is called by its run and place: A1, A2…
+    const type = CAB_TYPES[cab.type] || CAB_TYPES.base; const cabs = run.cabinets || []; const ends = style.end_sheet && !type.gap && !type.corner ? (cab.end_left ?? ci === 0 ? 1 : 0) + (cab.end_right ?? ci === cabs.length - 1 ? 1 : 0) : 0; // sides the customer sees: the ends of a run, unless set by hand
+    const p = cabinetParts({ ...cab, label: cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}`, _ends: ends }, style); // an unnamed cabinet is called by its run and place: A1, A2…
     for (const x of p.panels) { panels[x.mat].push(x); edge += x.edge * x.qty; } // (skirting cut from a profile is listed apart)
     for (const k of Object.keys(hw)) hw[k] += p.hw[k]; glass.push(...p.glass); frames.push(...p.frames); for (const b of p.bars) { if (b.seg) { const name = cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}`; const last = joins.at(-1); const a = runX + b.seg[0]; const z = runX + b.seg[1]; if (last && last.ri === ri && Math.abs(last.z - a) < 0.05) { last.z = z; if (!last.cabs.includes(name)) last.cabs.push(name); } else joins.push({ ri, a, z, cabs: [name], code: b.code }); } else aluBars.push(b); } appliances.push(...p.appliances); for (const [k, n] of Object.entries(p.acc)) accessories[k] = (accessories[k] || 0) + n;
     runX += +cab.w || 0;
     const w = (+cab.w || 0) / 100; if (type.gap) continue;
     meters.units++; if (type.wall) { meters.wall += w; meters.wall_n++; } else if (type.tall) { meters.tall += w; meters.tall_n++; } else { meters.base += w; meters.base_n++; }
   }
-  const sheets = {};
-  for (const mat of ['carcass', 'back', 'door', 'white22', 'white16', 'design']) {
-    const white = mat === 'white22' || mat === 'white16'; const sw = white ? (+style.white_w || 280) : style.sheet_w; const sh = white ? (+style.white_h || 130) : style.sheet_h;
-    const dirs = spec.cut_dir || {}; const pk = packSheets(panels[mat].map((x) => ({ ...x, dir: dirs[cutKey(mat, x)] || '' })), sw, sh, style.kerf, { mode: style.cut_mode });
-    sheets[mat] = { ...pk, area: panels[mat].reduce((a, p) => a + p.w * p.h * p.qty, 0) / 10000 };
+  const sheets = {}; const claimed = new Set(); // a used piece can only be cut for one material
+  const typeOf = (mat) => boardTypeByName({ carcass: style.carcass, door: style.door || style.carcass, back: style.back || style.carcass, white22: style.white22, white16: style.white16, design: style.design, end: style.end_sheet || style.carcass }[mat]);
+  for (const mat of ['carcass', 'back', 'door', 'white22', 'white16', 'design', 'end']) {
+    const white = mat === 'white22' || mat === 'white16'; const ty = typeOf(mat);
+    const sw = ty && +ty.sheet_w > 0 ? Math.max(+ty.sheet_w, +ty.sheet_h) : white ? (+style.white_w || 280) : style.sheet_w; const sh = ty && +ty.sheet_h > 0 ? Math.min(+ty.sheet_w, +ty.sheet_h) : white ? (+style.white_h || 130) : style.sheet_h;
+    const dirs = spec.cut_dir || {}; const pk = planSheets(panels[mat].map((x) => ({ ...x, dir: dirs[cutKey(mat, x)] || '' })), sw, sh, style.kerf, { mode: style.cut_mode, used: ty ? usedPiecesOf(ty.id).filter((u) => !claimed.has(u.uid)) : [] }); for (const sh2 of pk.sheets) if (sh2.source === 'used') claimed.add(sh2.uid);
+    sheets[mat] = { ...pk, sw, sh, type: ty ? ty.name : '', area: panels[mat].reduce((a, p) => a + p.w * p.h * p.qty, 0) / 10000 };
   }
   for (const j of joins) aluBars.push({ code: j.code, label: `${j.cabs.join('+')} · Hidden handle profile${j.cabs.length > 1 ? ' (one piece)' : ''}`, len: r1(j.z - j.a), qty: 1 });
   const byCode = new Map(); for (const x of aluBars) { const e = byCode.get(x.code) || []; e.push(x); byCode.set(x.code, e); }
@@ -380,13 +415,16 @@ export function priceKitchen(model, opts) {
   const o = (kind, name) => (opts[kind] || {})[name] || null; const gen = (k) => Number(((opts.general || {})[k]) || 0);
   const { style, counter, hw, sheets, meters } = model; const lines = [];
   const add = (group, label, qty, unit, price, extra = {}) => { if (qty > 0) lines.push({ group, label, qty: Math.round(qty * 100) / 100, unit, price: Number(price) || 0, total: (Number(price) || 0) * qty, ...extra }); };
-  const sheetCount = (m) => sheets[m].sheets.length;
-  const carc = o('panel', style.carcass); const door = o('panel', style.door || style.carcass); const back = o('panel', style.back || style.carcass);
-  add('Boards', `Carcass boards — ${style.carcass || 'not chosen'}`, sheetCount('carcass'), `sheet ${style.sheet_w}×${style.sheet_h}`, carc?.price, { kind: 'panel', name: style.carcass });
-  add('Boards', `Door & drawer fronts — ${style.door || style.carcass || 'not chosen'}`, sheetCount('door'), `sheet ${style.sheet_w}×${style.sheet_h}`, door?.price, { kind: 'panel', name: style.door || style.carcass });
-  add('Boards', `Back panels — ${style.back || style.carcass || 'not chosen'}`, sheetCount('back'), `sheet ${style.sheet_w}×${style.sheet_h}`, back ? (back.meta?.back_price ?? back.price) : 0, { kind: 'panel', name: style.back || style.carcass });
+  const unitPrice = (name) => { const t = boardTypeByName(name); return t ? Number(t.price) || 0 : o('panel', name)?.price; };
+  const sizeOf = (m) => `sheet ${sheets[m].sw}×${sheets[m].sh}`;
+  const MATS = [['carcass', 'Carcass boards', style.carcass], ['door', 'Door & drawer fronts', style.door || style.carcass], ['back', 'Back panels', style.back || style.carcass], ['white22', ALU_MATS.white22, style.white22], ['white16', ALU_MATS.white16, style.white16], ['design', ALU_MATS.design, style.design], ['end', 'Visible sides (ends)', style.end_sheet || style.carcass]];
+  for (const [m, label, name] of MATS) {
+    if (!sheets[m] || !sheets[m].newCount) continue;
+    const back = m === 'back' ? o('panel', name) : null; const price = back ? (back.meta?.back_price ?? back.price) : unitPrice(name);
+    add('Boards', `${label}${name ? ' — ' + name : m === 'carcass' ? ' — not chosen' : ''}`, sheets[m].newCount, sizeOf(m), boardTypeByName(name) ? Number(boardTypeByName(name).price) || 0 : price, { kind: 'panel', name });
+  }
+  { const used = MATS.flatMap(([m]) => (sheets[m] ? sheets[m].sheets.filter((x) => x.source === 'used') : [])); if (used.length) add('Boards', 'Used sheets from stock (cut first)', used.length, 'pieces', used.reduce((a, x) => a + (x.cost || 0), 0) / used.length); }
   if (model.profile) { const pr = o('profile', style.profile) || ((opts.alu || {})[String(style.profile || '').split(' ')[0] || ALU.door]); add('Door frames', `Door frame profile — ${style.profile || ALU.door} (height and width)`, model.profile.bars.length, `bar ${style.bar_len || 600} cm`, Number(style.profile_price) > 0 ? Number(style.profile_price) : pr?.price, { kind: 'profile', name: style.profile }); add('Door frames', 'Frame corner joints / assembly', model.profile.corners, 'corners', gen('frame_corner')); }
-  for (const [m, label] of Object.entries(ALU_MATS)) { const n = sheets[m] ? sheets[m].sheets.length : 0; const pn = o('panel', style[m])?.price; add('Boards', `${label}${style[m] ? ' — ' + style[m] : ''}`, n, `sheet ${m === 'design' ? `${style.sheet_w}×${style.sheet_h}` : `${style.white_w || 280}×${style.white_h || 130}`}`, pn, { kind: 'panel', name: style[m] }); }
   add('Boards', 'Edge banding', model.edge_m, 'm', gen('edge_band_m'));
   if (model.skirtBars) add('Skirting', `Skirting profile — ${style.plinth_profile}`, model.skirtBars.bars.length, `bar ${style.plinth_bar_len || 600} cm`, Number(style.plinth_price) || 0, { kind: 'plinth', name: style.plinth_profile });
   for (const g of model.carcassBars || []) { const cat = (opts.alu || {})[g.code] || {}; add('Aluminium profiles', `Profile ${g.code}${cat.name ? ' — ' + cat.name : ''} (cabinet frames)`, g.bars.length, `bar ${style.bar_len || 600} cm`, cat.price, { kind: 'alu', name: g.code }); }
