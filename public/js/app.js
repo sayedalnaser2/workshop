@@ -1,7 +1,7 @@
 import { api, $, $$, toast, esc, modal, formHTML, readForm, guard } from './ui.js';
 import { ROLES, canPage } from './perm.js';
 import { setColourDefs } from './drawings.js';
-import { setBoards } from './kitchen.js';
+import { setBoards, setKitchenDefaults } from './kitchen.js';
 import { initI18n, isAr, setLang } from './i18n.js';
 
 initI18n();
@@ -9,7 +9,7 @@ for (const id of ['langBtn', 'loginLang']) { const b = document.getElementById(i
 
 // Shared state, loaded once and refreshed after edits to the library tables.
 export const S = { me: null, settings: {}, price_items: [], profiles: [], accessories: [], glass_types: [], models: [], employees: [], next: {} };
-export async function refresh() { Object.assign(S, await api.get('bootstrap')); setColourDefs(S.settings?.colour_defs); setBoards({ types: S.board_types, stock: S.board_stock }); }
+export async function refresh() { Object.assign(S, await api.get('bootstrap')); setColourDefs(S.settings?.colour_defs); setBoards({ types: S.board_types, stock: S.board_stock }); setKitchenDefaults(S.settings?.kitchen_defaults, S.profiles); }
 
 const ROUTES = [
   { path: '', title: 'Dashboard', icon: '▦', mod: 'dashboard' },
@@ -166,7 +166,7 @@ async function boot() {
   S.me = me.user; buildNav();
   loginEl.hidden = true; appEl.hidden = false;
   const first = ROUTES.find((x) => !x.group && x.path === location.hash.replace(/^#\/?/, '').split('/')[0]) || ROUTES[0]; PAGES[first.mod]?.().catch(() => {});
-  const data = await early; if (data) { Object.assign(S, data); setColourDefs(S.settings?.colour_defs); setBoards({ types: S.board_types, stock: S.board_stock }); } else await refresh();
+  const data = await early; if (data) { Object.assign(S, data); setColourDefs(S.settings?.colour_defs); setBoards({ types: S.board_types, stock: S.board_stock }); setKitchenDefaults(S.settings?.kitchen_defaults, S.profiles); } else await refresh();
   route();
 }
 function showLogin(needsSetup) {

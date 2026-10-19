@@ -397,3 +397,29 @@ test('sheet stock: used pieces are cut first, new sheets only for the rest, pric
     const hand = K.kitchenModel({ style: { carcass: 'MDF 18 white', end_sheet: 'Oak veneer 18' }, runs: [{ cabinets: [{ ...cab, end_left: false, end_right: false }, cab] }] }); assert.equal(hand.panels.end.reduce((a, p) => a + p.qty, 0), 1);
   } finally { K.setBoards({ types: [], stock: [] }); }
 });
+
+test('kitchen defaults from Settings fill the frame profile and handle; order numbers are locked', async () => {
+  const K = await import('../public/js/kitchen.js');
+  K.setKitchenDefaults({ profile_id: 7, handle: 'L&C Shape Profile' }, [{ id: 7, code: '28456', name: 'Wide door / drawer frame', face_w: 45, bar_length: 580, price_bar: 12 }]);
+  try {
+    const m = K.kitchenModel({ style: { kind: 'aluminium' }, runs: [{ cabinets: [{ type: 'base', w: 100, d: 60, h: 70, doors: 2 }] }] });
+    assert.equal(m.style.profile, '28456 Wide door / drawer frame'); assert.equal(m.style.handle, 'L&C Shape Profile'); assert.equal(m.style.bar_len, 580); assert.equal(m.style.profile_price, 12);
+    const own = K.kitchenModel({ style: { kind: 'aluminium', profile: 'Other', handle: 'Knob' }, runs: [] }); assert.equal(own.style.profile, 'Other'); assert.equal(own.style.handle, 'Knob');
+  } finally { K.setKitchenDefaults(null, []); }
+});
+
+test('order / invoice numbers are locked once set', async () => {
+  const { spawn } = await import('node:child_process'); const { mkdtempSync, rmSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const path = await import('node:path');
+  const port = 4600 + Math.floor(Math.random() * 300); const base = `http://127.0.0.1:${port}`; const dir = mkdtempSync(path.join(tmpdir(), 'workshop-lock-'));
+  const proc = spawn(process.execPath, ['--no-warnings', 'server.js'], { env: { ...process.env, PORT: String(port), DATA_DIR: dir, WORKSHOP_DEV: '1' }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 60; i++) { try { if ((await fetch(base + '/healthz')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
+    const r = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'boss', password: 'secret1' }) }); const ck = r.headers.get('set-cookie').split(';')[0];
+    const call = async (m, u, b) => (await fetch(base + u, { method: m, headers: { 'Content-Type': 'application/json', Cookie: ck }, body: b ? JSON.stringify(b) : undefined })).json();
+    const o = await call('POST', '/api/t/orders', { client: 'A', date: '2026-10-10', amount: 100, vat_rate: 10 }); assert.ok(o.inv);
+    const o2 = await call('PUT', `/api/t/orders/${o.id}`, { inv: 'X999', client: 'B' }); assert.equal(o2.inv, o.inv); assert.equal(o2.client, 'B'); // the number stays, other fields change
+    const k = await call('POST', '/api/t/kitchens', { name: 'K', order_inv: '' , spec: {} }); const k2 = await call('PUT', `/api/t/kitchens/${k.id}`, { order_inv: o.inv }); assert.equal(k2.order_inv, o.inv); // filled in once
+    const k3 = await call('PUT', `/api/t/kitchens/${k.id}`, { order_inv: 'ZZZ' }); assert.equal(k3.order_inv, o.inv); // then locked
+    const t = await call('POST', '/api/t/tasks', { title: 'T', order_inv: o.inv }); const t2 = await call('PUT', `/api/t/tasks/${t.id}`, { order_inv: 'other' }); assert.equal(t2.order_inv, o.inv);
+  } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
+});

@@ -88,6 +88,8 @@ function summary() {
   };
 }
 
+/** Order / invoice numbers: once a record has one, nobody can change it (it can still be filled in when empty). */
+const LOCKED_REFS = { orders: ['inv'], kitchens: ['order_inv'], tasks: ['order_inv'], purchase_orders: ['order_inv'], events: ['order_inv'], receipts: ['order_inv'], purchases: ['order_inv'], credit_notes: ['order_inv'], customer_credits: ['order_inv'], stock: ['order_inv'], quotes: ['order_inv'] };
 const forbid = () => Object.assign(new Error('You do not have permission to do that.'), { status: 403 });
 /** Workers see quantities and sizes, never prices, costs or money. */
 function redact(table, r) {
@@ -609,6 +611,7 @@ async function api(req, res, url) {
     if (id && m === 'PUT') {
       const cur = getRow(t, id); if (!cur || !visible(cur)) return send(res, 404, { error: 'Not found' });
       const body = await readJson(req); checkRef(t, body, cur); moneyRules(t, body, cur); accountingRules(t, body, cur); if (['quotes', 'orders', 'surveys', 'kitchens'].includes(t)) linkCustomer(body, cur); if (t === 'customers') { delete body.code; if (Array.isArray(body.locations)) { body.locations = body.locations.filter((l) => String(l.address || '').trim() || l.gps).map((l) => ({ label: String(l.label || '').trim(), address: String(l.address || '').trim(), gps: String(l.gps || '').trim() })); body.address = body.locations[0]?.address || ''; body.gps = body.locations[0]?.gps || ''; } } // the customer number never changes; the main address is the first location if (worker) delete body.unit_cost;
+      for (const f of LOCKED_REFS[t] || []) if (f in body && String(cur[f] ?? '').trim() && String(body[f] ?? '').trim() !== String(cur[f]).trim()) delete body[f]; // an order / invoice number is set once and never changed
       if (t === 'overtime' && 'status' in body) need(role === 'admin'); // only the admin approves overtime
       if (t === 'tasks' && 'hidden' in body) { need(role === 'admin'); body.hidden = body.hidden ? 1 : 0; } // only an admin hides or shows tasks
       if (t === 'tasks') { if (body.status === 'done' && cur.status !== 'done') { body.done_at = new Date().toISOString(); body.progress = 100; } else if (body.status && body.status !== 'done' && cur.status === 'done') body.done_at = null; }

@@ -60,16 +60,19 @@ export const confirmBox = (msg, label = 'Delete', kind = 'danger') => new Promis
 
 // ------------------------------------------------------------------ forms
 /** fields: [{key,label,type:text|number|date|select|textarea|check,options,list,step,required,full,hint}] */
+/** Order / invoice numbers are fixed once a record has one. */
+export const LOCKED_REFS = ['order_inv', 'inv'];
 export function formHTML(fields, v = {}) {
   return `<div class="form">${fields.map((f) => {
     const val = v[f.key] ?? f.default ?? '';
+    const locked = !!v.id && LOCKED_REFS.includes(f.key) && String(val).trim() !== '';
     const id = 'f_' + f.key;
     let input;
-    if (f.type === 'select') input = `<select id="${id}" name="${f.key}">${(f.options || []).map((o) => { const [ov, ol] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(ov)}" ${String(ov) === String(val) ? 'selected' : ''}>${esc(ol)}</option>`; }).join('')}</select>`;
+    if (f.type === 'select') input = `<select id="${id}" name="${f.key}" ${locked ? 'disabled' : ''}>${(f.options || []).map((o) => { const [ov, ol] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(ov)}" ${String(ov) === String(val) ? 'selected' : ''}>${esc(ol)}</option>`; }).join('')}</select>`;
     else if (f.type === 'textarea') input = `<textarea id="${id}" name="${f.key}" rows="${f.rows || 3}">${esc(val)}</textarea>`;
     else if (f.type === 'check') input = `<input type="checkbox" id="${id}" name="${f.key}" ${val ? 'checked' : ''}>`;
-    else input = `<input id="${id}" name="${f.key}" type="${f.type || 'text'}" value="${esc(val)}" ${f.step ? `step="${f.step}"` : f.type === 'number' ? 'step="any"' : ''} ${f.list ? `list="${f.list}"` : ''} ${f.required ? 'required' : ''} ${f.placeholder ? `placeholder="${esc(f.placeholder)}"` : ''} autocomplete="off">`;
-    return `<label class="field ${f.full ? 'full' : ''} ${f.type === 'check' ? 'check' : ''}"><span>${esc(f.label)}</span>${input}${f.hint ? `<small>${esc(f.hint)}</small>` : ''}</label>`;
+    else input = `<input id="${id}" name="${f.key}" type="${f.type || 'text'}" value="${esc(val)}" ${locked ? 'readonly style="background:var(--soft);cursor:not-allowed"' : ''} ${f.step ? `step="${f.step}"` : f.type === 'number' ? 'step="any"' : ''} ${f.list ? `list="${f.list}"` : ''} ${f.required ? 'required' : ''} ${f.placeholder ? `placeholder="${esc(f.placeholder)}"` : ''} autocomplete="off">`;
+    return `<label class="field ${f.full ? 'full' : ''} ${f.type === 'check' ? 'check' : ''}"><span>${esc(f.label)}</span>${input}${locked ? '<small>🔒 Locked — this number can never be changed</small>' : f.hint ? `<small>${esc(f.hint)}</small>` : ''}</label>`;
   }).join('')}</div>`;
 }
 export function readForm(root, fields) {

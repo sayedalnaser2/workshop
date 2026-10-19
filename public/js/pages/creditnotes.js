@@ -42,7 +42,7 @@ async function form(el, id, orderInv) {
     <div class="card" style="max-width:900px"><div class="form" style="grid-template-columns:repeat(3,1fr)">
       <label class="field"><span>Credit note #</span><input id="no" value="${esc(cn.no || '')}" placeholder="Auto: ${esc(S.next.credit || '')}"></label>
       <label class="field"><span>Date</span><input id="date" type="date" value="${esc(cn.date)}"></label>
-      <label class="field"><span>Against invoice #</span><input id="order_inv" list="dl-inv" value="${esc(cn.order_inv || '')}" autocomplete="off"></label>
+      <label class="field"><span>Against invoice #</span><input id="order_inv" list="dl-inv" value="${esc(cn.order_inv || '')}" autocomplete="off" ${cn.id && cn.order_inv ? 'readonly style="background:var(--soft);cursor:not-allowed" title="Locked — an invoice number can never be changed"' : ''}></label>
       <label class="field"><span>Client</span><input id="client" value="${esc(cn.client || '')}"></label>
       <label class="field"><span>Client VAT number</span><input id="client_vat" value="${esc(cn.client_vat || '')}"></label>
       <label class="field"><span>VAT rate %</span><input id="vat_rate" type="number" step="any" value="${cn.vat_rate ?? 0}"></label>
