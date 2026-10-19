@@ -45,6 +45,13 @@ export function syncEmployees() {
 }
 const isCreator = (actor) => !!actor && !!actor.creator;
 const hasCreator = () => !!db.prepare('SELECT id FROM users WHERE creator=1').get();
+/** An admin makes his own account the creator — once, only while there is no creator, and only with his own password. */
+export function claimCreator(id, password) {
+  const u = db.prepare('SELECT * FROM users WHERE id=?').get(id); if (!u || u.role !== 'admin' || !u.active) throw bad('Only an admin can become the creator.');
+  if (hasCreator()) throw bad('There is already a creator — there can only be one.');
+  if (!checkHash(u, String(password || ''))) throw Object.assign(new Error('Wrong password.'), { status: 403 });
+  db.prepare('UPDATE users SET creator=1 WHERE id=?').run(id); return getUser(id);
+}
 export function createUser(d, actor = null) {
   const wantsCreator = d.role === 'creator'; if (wantsCreator) d = { ...d, role: 'admin' };
   validate(d, true);

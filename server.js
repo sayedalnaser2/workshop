@@ -7,7 +7,7 @@ import os from 'node:os';
 import {
   db, SCHEMA, getSetting, setSetting, nextNumber, insertRow, updateRow, deleteRow, getRow, listRows, tx,
 } from './src/db.js';
-import { needsSetup, syncEmployees, authenticate, createUser, updateUser, deleteUser, listUsers, setOwnPassword, makeToken, userFromToken, cookieOf, verifyOwnPassword } from './src/auth.js';
+import { needsSetup, syncEmployees, authenticate, createUser, updateUser, deleteUser, listUsers, setOwnPassword, makeToken, userFromToken, cookieOf, verifyOwnPassword, claimCreator } from './src/auth.js';
 import { tableAccess, hasAny, hasEditAny, seesMoney } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
 import { DEFAULT_CHART, buildEntries, trialBalance, statements, accountLedger, DEBIT_TYPES } from './public/js/accounting.js';
@@ -449,6 +449,7 @@ async function api(req, res, url) {
       return send(res, 200, buf, { 'Content-Type': a.mime || 'application/octet-stream', 'Content-Disposition': `${FILE_TYPES[a.mime] || 'attachment'}; filename="${encodeURIComponent(a.file_name || 'file')}"`, 'Cache-Control': 'private, max-age=3600' });
     }
   }
+  if (p[0] === 'users' && p[1] === 'claim-creator' && m === 'POST') { need(role === 'admin'); const b = await readJson(req); const u = claimCreator(user.id, b.password); audit(user, 'users', u.id, 'updated', `${u.name} became the creator`); return send(res, 200, u); }
   if (p[0] === 'users') {
     need(role === 'admin');
     const uid = p[1] ? Number(p[1]) : null;

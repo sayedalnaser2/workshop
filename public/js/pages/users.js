@@ -1,4 +1,4 @@
-import { S } from '../app.js';
+import { S, refresh } from '../app.js';
 import { api, $, $$, esc, dmy, dataTable, editRow, confirmBox, toast, guard, badge, modal } from '../ui.js';
 import { cfgOf, parseBreaks } from '../shift.js';
 import { ROLES, ROLE_INFO, PAGE_LABELS, roleLevel } from '../perm.js';
@@ -7,6 +7,13 @@ export async function render(el) {
   const rows = await api.get('users');
   el.innerHTML = `<div class="ph"><h1>Users</h1><span class="sub">Who can sign in, and what they can see</span><span class="grow"></span><button class="btn primary" id="new">+ New user</button></div>
   <div class="cards">${Object.entries(ROLES).map(([k, l]) => `<div class="card"><h3>${l}</h3><p class="muted" style="margin:0">${esc(ROLE_INFO[k])}</p></div>`).join('')}<div class="card"><h3>Creator</h3><p class="muted" style="margin:0">The admin of the admins: everything an admin can do, and the only one who can make, change or remove admins. The account can never be deleted, deactivated or demoted by anyone.</p></div></div><div id="t"></div>`;
+  if (!rows.some((x) => x.creator) && S.me.role === 'admin') { // no creator yet: this admin can make his own account the creator, once
+    const bar = document.createElement('div'); bar.className = 'card'; bar.style.cssText = 'margin-bottom:14px;border-color:var(--warn);display:flex;gap:12px;align-items:center;flex-wrap:wrap';
+    bar.innerHTML = `<div style="flex:1;min-width:260px"><b>There is no creator yet.</b><div class="muted">The creator is the admin of the admins: he alone makes, changes and removes admins, and his account can never be deleted, deactivated or demoted. You are signed in as <b>${esc(S.me.name)}</b>.</div></div><button class="btn primary" id="claim">Make my account (${esc(S.me.username)}) the creator</button>`;
+    $('.cards', el).before(bar);
+    $('#claim', el).onclick = () => { const w = document.createElement('div'); w.innerHTML = `<p style="margin-top:0">This is permanent: <b>${esc(S.me.name)}</b> becomes the creator and nobody, including you, can undo it. Enter your password to confirm.</p><label class="field"><span>Your password</span><input type="password" id="cpw" autocomplete="current-password"></label>`;
+      modal({ title: 'Become the creator', body: w, buttons: [{ label: 'Cancel' }, { label: 'Make me the creator', kind: 'primary', onClick: async () => { const r = await api.post('users/claim-creator', { password: $('#cpw', w).value }); if (r?.error) { toast(r.error, 'err'); return false; } await refresh(); S.me = await api.get('me').then((r) => r.user || S.me); $('#meRole').textContent = 'Creator'; toast('You are the creator'); render(el); } }] }); };
+  }
   const fields = (row) => [
     { key: 'name', label: 'Full name', required: true }, { key: 'username', label: 'Username', required: true, hint: 'Letters, numbers, dots or dashes' },
     { key: 'role', label: 'Role', type: 'select', options: [...Object.entries(ROLES), ...(!row && !rows.some((x) => x.creator) ? [['creator', 'Creator — the admin of the admins (one only, can never be removed or demoted)']] : [])], ...(row?.creator ? { hint: 'The creator can never be demoted or switched off' } : {}) },

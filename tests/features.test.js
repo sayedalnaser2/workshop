@@ -448,3 +448,22 @@ test('the creator: one only, the admin of the admins, never deleted, demoted or 
     assert.equal((await creator('GET', '/api/me')).data.user.creator, 1);
   } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('an admin can make his own current account the creator, once, with his password', async () => {
+  const { spawn } = await import('node:child_process'); const { mkdtempSync, rmSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const path = await import('node:path');
+  const port = 5200 + Math.floor(Math.random() * 300); const base = `http://127.0.0.1:${port}`; const dir = mkdtempSync(path.join(tmpdir(), 'workshop-claim-'));
+  const proc = spawn(process.execPath, ['--no-warnings', 'server.js'], { env: { ...process.env, PORT: String(port), DATA_DIR: dir, WORKSHOP_DEV: '1' }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 60; i++) { try { if ((await fetch(base + '/healthz')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
+    const login = async (u, p) => (await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) })).headers.get('set-cookie')?.split(';')[0];
+    const mk = (ck) => async (m, u, b) => { const r = await fetch(base + u, { method: m, headers: { 'Content-Type': 'application/json', Cookie: ck }, body: b ? JSON.stringify(b) : undefined }); return { status: r.status, data: await r.json().catch(() => null) }; };
+    const boss = mk(await login('boss', 'secret1'));
+    await boss('POST', '/api/users', { username: 'acc', name: 'Acc', role: 'account', password: 'acc12345' }); const acc = mk(await login('acc', 'acc12345'));
+    assert.equal((await acc('POST', '/api/users/claim-creator', { password: 'acc12345' })).status, 403); // not an admin
+    assert.equal((await boss('POST', '/api/users/claim-creator', { password: 'wrong' })).status, 403);
+    const ok = await boss('POST', '/api/users/claim-creator', { password: 'secret1' }); assert.equal(ok.status, 200); assert.equal(ok.data.creator, 1); assert.equal(ok.data.username, 'boss');
+    assert.equal((await boss('GET', '/api/me')).data.user.creator, 1);
+    assert.equal((await boss('POST', '/api/users/claim-creator', { password: 'secret1' })).status, 400); // only once
+    const me = (await boss('GET', '/api/me')).data.user; assert.equal((await boss('DELETE', `/api/users/${me.id}`)).status, 400); assert.equal((await boss('PUT', `/api/users/${me.id}`, { role: 'worker' })).status, 400);
+  } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
+});
