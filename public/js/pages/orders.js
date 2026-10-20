@@ -4,7 +4,7 @@ import { openTaskForm, addStandardTasks } from '../task-form.js';
 import { fmtMin, variance } from '../time.js';
 import { levelOf } from '../perm.js';
 import { creditLeft, creditState, creditBalance, useCredit } from './credits.js';
-import { api, $, esc, money, qty as fq, num, dmy, today, dataTable, editRow, confirmBox, toast, guard, badge, modal, mapLink, orderBar } from '../ui.js';
+import { api, $, $$, esc, money, qty as fq, num, dmy, today, dataTable, editRow, confirmBox, toast, guard, badge, modal, mapLink, orderBar } from '../ui.js';
 import { quoteTotals, hasVat } from '../calc.js';
 import { orderVat } from '../vat.js';
 import { printView, docHeader, L, AR, wordsBlock, termsBlock } from '../doc.js';
@@ -64,8 +64,10 @@ async function detail(el, id) {
    <div class="card"><h3>Purchases charged to this order (${pur.length})</h3><table class="grid"><thead><tr><th>Date</th><th>Supplier</th><th class="num">Amount</th></tr></thead><tbody>${pur.map((p) => `<tr><td>${dmy(p.date)}</td><td>${esc(p.supplier)}</td><td class="num">${money(p.amount, 2)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">None</td></tr>'}</tbody></table></div></div>
   ${cns.length ? `<div class="card" style="margin-top:14px"><h3>Credit notes (${cns.length})</h3><table class="grid"><tbody>${cns.map((c) => `<tr class="click" onclick="location.hash='#/creditnotes/${c.id}/print'"><td><b>${esc(c.no)}</b></td><td>${dmy(c.date)}</td><td>${esc(c.reason || '')}</td><td class="num">${money(c.total, 2)}</td><td>${c.status === 'approved' ? badge('Approved', 'ok') : c.status === 'pending' ? badge('Waiting for admin', 'warn') : badge('Rejected', 'bad')}</td></tr>`).join('')}</tbody></table></div>` : ''}
   <div class="card" style="margin-top:14px" id="photos"></div>
+  <div class="card" style="margin-top:14px" id="portal"></div>
   <div class="card" style="margin-top:14px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Tasks (${tasks.length})</h3><span class="grow"></span><button class="btn sm" id="stdt">Add standard tasks</button><button class="btn sm primary" id="newt">+ Task</button></div><table class="grid" style="margin-top:8px"><thead><tr><th>Task</th><th>Worker</th><th>Status</th><th class="num">Progress</th><th class="num">Estimate</th><th class="num">Actual</th><th>Vs est.</th></tr></thead><tbody>${tasks.map((t) => `<tr class="click" onclick="location.hash='#/tasks/${t.id}'"><td><b>${esc(t.title)}</b> <span class="muted">${esc(t.stage || '')}</span></td><td>${esc([t.assignee_name, ...(t.team_names || [])].filter(Boolean).join(', ') || '—')}</td><td>${badge({ todo: 'To do', doing: 'In progress', blocked: 'Blocked', done: 'Done' }[t.status], t.status === 'done' ? 'ok' : t.status === 'blocked' ? 'bad' : t.status === 'doing' ? 'warn' : '')}${t.ticking ? ' <span class="pos">●</span>' : ''}</td><td class="num">${Math.round(t.progress || 0)}%</td><td class="num">${t.estimate_min ? fmtMin(t.estimate_min) : '—'}</td><td class="num">${fmtMin(t.actual_min)}</td><td>${t.actual_min ? variance(t.estimate_min, t.actual_min) : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">No tasks yet</td></tr>'}</tbody></table></div>
   <div class="sticky-actions"><a class="btn primary" ${ro ? 'hidden' : ''} href="#/receipts/new/${o.id}">+ Receive payment</a><a class="btn" href="#/orders/${o.id}/invoice">Tax invoice</a><button class="btn" id="sched" ${ro ? 'hidden' : ''}>Schedule installation</button><a class="btn" ${ro ? 'hidden' : ''} href="#/creditnotes/new/${encodeURIComponent(o.inv)}">Credit note</a><a class="btn" href="#/statements/${encodeURIComponent(o.client)}">Customer statement</a><button class="btn" id="po" ${ro ? 'hidden' : ''}>Purchase order</button><button class="btn" id="done" ${ro ? 'hidden' : ''}>${o.done ? 'Re-open order' : 'Mark as done'}</button><button class="btn danger" id="del" ${ro ? 'hidden' : ''}>Delete order</button></div>`;
+  if (!ro) portalCard($('#portal', el), o); else $('#portal', el).hidden = true;
   attachmentsPanel($('#photos', el), { type: 'order', key: o.inv, title: 'Photos & files', kinds: [['before', 'Before'], ['after', 'After'], ['file', 'Document']], tag: '' });
   $('#usecr', el)?.addEventListener('click', () => useCredit(myCredits[0], ledger, () => detail(el, id), o.inv));
   $('#sched', el).onclick = () => openEventDialog({ order: o, onSaved: () => toast('Added to the calendar') });
@@ -103,4 +105,27 @@ async function invoicePrint(el, id) {
     <div class="sign"><div>${L('prepared', 'Prepared')}</div><div>${L('custSign', 'Customer')}</div></div>
     ${termsBlock(S.settings.invoice_notes?.length ? S.settings.invoice_notes : [], [])}`;
   printView(el, { back: `#/orders/${id}`, html });
+}
+
+/** The customer's page for this order: a code to send, and what the customer may see (progress is always shown; photos and kitchens only when you tick them). */
+async function portalCard(box, o) {
+  let d; try { d = await api.get(`order-portal/${o.id}`); } catch { box.hidden = true; return; }
+  const host = location.host.replace(/^(www\.|client\.)/, ''); const link = `https://client.${host}`;
+  const draw = () => {
+    const sel = new Set(d.portal.photos); const ks = new Set(d.portal.kitchens);
+    const msg = `${link}\nOrder: ${o.inv}\nCode: ${d.code}`;
+    box.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Customer page</h3>${d.enabled ? badge('On', 'ok') : badge('Off', '')}<span class="muted">The customer enters the order number and a code at ${esc(link.replace('https://', ''))} and sees the progress of this order${d.enabled ? '' : ' — switch it on to make a code'}.</span></div>
+      ${d.enabled ? `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px"><div><div class="muted" style="font-size:12px">Order number</div><b style="font-size:18px">${esc(o.inv)}</b></div><div><div class="muted" style="font-size:12px">Code</div><b style="font-size:18px;letter-spacing:.08em">${esc(d.code)}</b></div><span class="grow"></span><button class="btn" id="pcopy">Copy message for the customer</button><button class="btn" id="pnew">New code</button><button class="btn danger" id="poff">Switch off</button></div>
+      <div style="margin-top:14px"><b>Message shown on top (optional)</b><input id="pmsg" maxlength="500" value="${esc(d.portal.message || '')}" placeholder="e.g. Installation is planned for next week" style="width:100%;margin-top:4px"></div>
+      <div style="margin-top:14px"><b>Photos the customer can see</b> <span class="muted">— tick the ones to show (none are shown unless you tick them)</span>${d.photos.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:6px">${d.photos.map((a) => `<label style="display:block;cursor:pointer;position:relative"><input type="checkbox" data-ph="${a.id}" ${sel.has(a.id) ? 'checked' : ''} style="position:absolute;top:6px;left:6px;width:18px;height:18px;z-index:1"><img src="/api/files/${a.id}" alt="" style="width:100%;height:84px;object-fit:cover;border-radius:6px;display:block;border:2px solid ${sel.has(a.id) ? 'var(--ok)' : 'transparent'}"><span class="muted" style="font-size:11px">${esc(a.tag || a.file_name)}</span></label>`).join('')}</div>` : '<p class="muted" style="margin:6px 0 0">No photos yet — add some under Photos & files above, or on this order\'s tasks.</p>'}</div>
+      <div style="margin-top:14px"><b>Kitchen models the customer can see in 3D</b> ${d.kitchens.length ? `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:6px">${d.kitchens.map((x) => `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-kt="${x.id}" ${ks.has(x.id) ? 'checked' : ''}> ${esc(x.name)}</label>`).join('')}</div>` : '<span class="muted">— none linked to this order (link a kitchen to this order number first)</span>'}</div>
+      <div style="margin-top:14px"><button class="btn primary" id="psave">Save what the customer sees</button></div>` : `<div style="margin-top:12px"><button class="btn primary" id="pon">Switch on and make a code</button></div>`}`;
+    const post = async (b) => { d = { ...d, ...(await api.post(`order-portal/${o.id}`, b)) }; draw(); };
+    $('#pon', box)?.addEventListener('click', guard(async () => { await post({ action: 'generate' }); toast('Customer page is on'); }));
+    $('#pnew', box)?.addEventListener('click', guard(async () => { if (await confirmBox('Make a new code? The old code stops working.')) { await post({ action: 'generate' }); toast('New code'); } }));
+    $('#poff', box)?.addEventListener('click', guard(async () => { if (await confirmBox('Switch the customer page off? The customer can no longer open it.')) { await post({ action: 'off' }); toast('Switched off'); } }));
+    $('#pcopy', box)?.addEventListener('click', async () => { try { await navigator.clipboard.writeText(msg); toast('Copied — paste it into WhatsApp'); } catch { prompt('Copy this message:', msg); } });
+    $('#psave', box)?.addEventListener('click', guard(async () => { await post({ photos: $$('[data-ph]', box).filter((x) => x.checked).map((x) => Number(x.dataset.ph)), kitchens: $$('[data-kt]', box).filter((x) => x.checked).map((x) => Number(x.dataset.kt)), message: $('#pmsg', box).value }); toast('Saved'); }));
+  };
+  draw();
 }

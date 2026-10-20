@@ -106,6 +106,12 @@ export function authenticate(username, password) {
 }
 
 const sign = (payload) => crypto.createHmac('sha256', secret()).update(payload).digest('hex');
+/** A customer's pass to one order's portal page (a different cookie and a different kind of token from staff sign-in). */
+export function makePortalToken(orderId, days = 30) { const p = `p${orderId}.${Date.now() + days * 864e5}`; return `${p}.${sign(p)}`; }
+export function portalOrderId(tok) {
+  if (!tok) return 0; const [pid, exp, sig] = tok.split('.'); if (!/^p\d+$/.test(pid || '') || !exp || !sig || Number(exp) < Date.now()) return 0;
+  const good = Buffer.from(sign(`${pid}.${exp}`)); const got = Buffer.from(sig); if (good.length !== got.length || !crypto.timingSafeEqual(good, got)) return 0; return Number(pid.slice(1));
+}
 export function makeToken(uid, days = 30) { const p = `${uid}.${Date.now() + days * 864e5}`; return `${p}.${sign(p)}`; }
 /** The signed-in user (re-read from the database, so role changes and deactivation apply at once), or null. */
 export function userFromToken(tok) {

@@ -20,6 +20,7 @@ import { purgeOldPhotos, photoStats } from './src/retention.js';
 import { quoteTotals, approvalFor, discountPct } from './public/js/calc.js';
 import { vatReport, orderVat, vatIn } from './public/js/vat.js';
 import { audit, diff, labelOf, listAudit, notable, withUpd } from './src/audit.js';
+import { portalApi, newPortalCode, showCode, portalOf } from './src/portal.js';
 import { respond, staticServer, throttleCheck, throttleFail, throttleOk, runBackup, listBackups, backupDir } from './src/web.js';
 
 syncEmployees(); seedChart(DEFAULT_CHART); ensureLoyaltyAccount(); seedBankAccounts(); freezeAllVat(); seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets(); seedBalexco(); seedKitchenProfiles(); seedAluKitchen();
@@ -320,6 +321,25 @@ async function api(req, res, url) {
   const needAny = (...pages) => need(hasAny(user, pages)); // at least view access to one of these pages
   const needEdit = (...pages) => need(hasEditAny(user, pages));
 
+  // --- the customer portal of an order: the code you send, the photos and kitchens the customer may see
+  if (p[0] === 'order-portal' && p[1]) {
+    const oid = Number(p[1]); const o = getRow('orders', oid); if (!o) return send(res, 404, { error: 'Not found' });
+    if (m === 'GET') {
+      needAny('orders');
+      const taskIds = db.prepare('SELECT id FROM tasks WHERE order_inv=?').all(o.inv).map((t) => String(t.id));
+      const att = db.prepare("SELECT id, ref_type, ref_key, file_name, note, tag, created_at FROM attachments WHERE mime LIKE 'image/%' AND ((ref_type='order' AND ref_key=?)" + (taskIds.length ? ` OR (ref_type='task' AND ref_key IN (${taskIds.map(() => '?').join(',')}))` : '') + ') ORDER BY id DESC').all(o.inv, ...taskIds);
+      const kit = db.prepare('SELECT id, name FROM kitchens WHERE order_inv=? ORDER BY id').all(o.inv);
+      return send(res, 200, { code: showCode(o.portal_code), enabled: !!o.portal_code, portal: portalOf(o), photos: att, kitchens: kit });
+    }
+    if (m === 'POST') {
+      needEdit('orders'); const b = await readJson(req); const cur = portalOf(o); const patch = {};
+      if (b.action === 'generate') { patch.portal_code = newPortalCode(); audit(user, 'orders', oid, 'updated', `customer portal code ${o.portal_code ? 'changed' : 'made'}`); }
+      else if (b.action === 'off') { patch.portal_code = ''; audit(user, 'orders', oid, 'updated', 'customer portal switched off'); }
+      if ('photos' in b || 'kitchens' in b || 'message' in b) patch.portal = { photos: Array.isArray(b.photos) ? b.photos.map(Number).filter(Boolean) : cur.photos, kitchens: Array.isArray(b.kitchens) ? b.kitchens.map(Number).filter(Boolean) : cur.kitchens, message: 'message' in b ? String(b.message || '').slice(0, 500) : cur.message };
+      const saved = Object.keys(patch).length ? updateRow('orders', oid, patch) : o;
+      return send(res, 200, { code: showCode(saved.portal_code), enabled: !!saved.portal_code, portal: portalOf(saved) });
+    }
+  }
   if (p[0] === 'bootstrap') return send(res, 200, bootstrap(user));
   if (p[0] === 'summary') { needAny('reports', 'orders', 'receipts', 'payments', 'cashbank', 'quotes'); return send(res, 200, summary()); }
   if (p[0] === 'ledger') { needAny('orders', 'receipts', 'statements', 'reports', 'creditnotes', 'purchases', 'payments', 'cashbank', 'tasks'); return send(res, 200, ordersLedger()); }
@@ -672,7 +692,12 @@ const server = http.createServer(async (req, res) => {
       const buf = own || await readFile(path.join(PUBLIC, 'img/logo.png'));
       return await send(res, 200, buf, { 'Content-Type': own ? lg.mime : 'image/png', 'Cache-Control': 'no-cache', ETag: `"logo-${own ? lg.v : 'default'}"` });
     }
+    const host = String(req.headers.host || '').toLowerCase(); const onClientHost = /^client\./.test(host); // client.<your domain> shows the customer page only
+    if (url.pathname.startsWith('/api/portal/')) return await portalApi(req, res, url, { send, readJson, filesDir });
+    if (onClientHost && url.pathname.startsWith('/api/')) return await send(res, 404, { error: 'Not found' });
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
+    const isAsset = /^\/(assets|js|css|img)\//.test(url.pathname) || url.pathname === '/favicon.ico';
+    if (onClientHost && !isAsset || url.pathname === '/client' || url.pathname === '/client/') return await serveStatic(req, res, '/client.html');
     return await serveStatic(req, res, decodeURIComponent(url.pathname));
   } catch (e) {
     if (!e.status) console.error(e);

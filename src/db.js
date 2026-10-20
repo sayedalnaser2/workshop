@@ -24,7 +24,7 @@ export const SCHEMA = {
     cols: { number: 'TEXT', date: 'TEXT', client: 'TEXT', mobile: 'TEXT', site: 'TEXT', gps: 'TEXT', customer_id: 'INTEGER', title: 'TEXT', items: 'JSON', discount: 'REAL', vat_rate: 'REAL', vat_waived: 'REAL', status: 'TEXT', prepared_by: 'TEXT', notes: 'TEXT', order_inv: 'TEXT', colour: 'TEXT', client_vat: 'TEXT', disc_mode: 'TEXT', approval: 'TEXT', approved_disc: 'REAL', approval_note: 'TEXT' },
     order: 'date DESC, id DESC',
   },
-  orders: { cols: { inv: 'TEXT', date: 'TEXT', client: 'TEXT', site: 'TEXT', gps: 'TEXT', customer_id: 'INTEGER', mobile: 'TEXT', amount: 'REAL', done: 'INTEGER', quote_no: 'TEXT', note: 'TEXT', vat: 'REAL', client_vat: 'TEXT' }, order: 'date DESC, id DESC' },
+  orders: { cols: { inv: 'TEXT', date: 'TEXT', client: 'TEXT', site: 'TEXT', gps: 'TEXT', customer_id: 'INTEGER', mobile: 'TEXT', amount: 'REAL', done: 'INTEGER', quote_no: 'TEXT', note: 'TEXT', vat: 'REAL', client_vat: 'TEXT', portal_code: 'TEXT', portal: 'JSON' }, order: 'date DESC, id DESC' },
   receipts: { cols: { no: 'TEXT', date: 'TEXT', order_inv: 'TEXT', client: 'TEXT', amount: 'REAL', method: 'TEXT', ref: 'TEXT', note: 'TEXT', account: 'TEXT' }, order: 'date DESC, id DESC' },
   payments: { cols: { no: 'TEXT', date: 'TEXT', paid_to: 'TEXT', amount: 'REAL', done: 'INTEGER', category: 'TEXT', lines: 'JSON', note: 'TEXT', account: 'TEXT', employee_id: 'INTEGER', method: 'TEXT', ref: 'TEXT' }, order: 'date DESC, id DESC' },
   purchases: { cols: { date: 'TEXT', pv: 'TEXT', invoice: 'TEXT', supplier: 'TEXT', amount: 'REAL', order_inv: 'TEXT', note: 'TEXT', vat: 'REAL', hidden: 'INTEGER' }, order: 'date DESC, id DESC' },

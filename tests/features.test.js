@@ -467,3 +467,37 @@ test('an admin can make his own current account the creator, once, with his pass
     const me = (await boss('GET', '/api/me')).data.user; assert.equal((await boss('DELETE', `/api/users/${me.id}`)).status, 400); assert.equal((await boss('PUT', `/api/users/${me.id}`, { role: 'worker' })).status, 400);
   } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('customer portal: order number + code, progress only, chosen photos and kitchens, nothing else', async () => {
+  const { spawn } = await import('node:child_process'); const { mkdtempSync, rmSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const path = await import('node:path');
+  const port = 5500 + Math.floor(Math.random() * 300); const base = `http://127.0.0.1:${port}`; const dir = mkdtempSync(path.join(tmpdir(), 'workshop-portal-'));
+  const proc = spawn(process.execPath, ['--no-warnings', 'server.js'], { env: { ...process.env, PORT: String(port), DATA_DIR: dir, WORKSHOP_DEV: '1' }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 60; i++) { try { if ((await fetch(base + '/healthz')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
+    const r0 = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'boss', password: 'secret1' }) }); const ck = r0.headers.get('set-cookie').split(';')[0];
+    const call = async (m, u, b, cookie = ck, host) => { const r = await fetch(base + u, { method: m, headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}), ...(host ? { Host: host } : {}) }, body: b ? JSON.stringify(b) : undefined }); const ct = r.headers.get('content-type') || ''; return { status: r.status, data: ct.includes('json') ? await r.json() : null, text: ct.includes('json') ? '' : await r.text(), headers: r.headers, buf: ct.startsWith('image') ? Buffer.from(await r.arrayBuffer()) : null }; };
+    const o = (await call('POST', '/api/t/orders', { client: 'Fatima', date: '2026-10-10', amount: 500, vat_rate: 10 })).data;
+    assert.equal((await call('POST', '/api/portal/login', { order: o.inv, code: '12345678' }, '')).status, 401); // no code yet
+    const on = (await call('POST', `/api/order-portal/${o.id}`, { action: 'generate' })).data; assert.ok(/^\d{4} \d{4}$/.test(on.code)); assert.equal(on.enabled, true);
+    assert.equal((await call('POST', '/api/portal/login', { order: o.inv, code: '00000000' }, '')).status, 401);
+    const li = await call('POST', '/api/portal/login', { order: o.inv.toLowerCase(), code: on.code }, ''); assert.equal(li.status, 200); const cp = li.headers.get('set-cookie').split(';')[0];
+    await call('POST', '/api/t/tasks', { title: 'Cut glass', stage: 'Cutting', order_inv: o.inv, status: 'done', estimate_min: 60 }); await call('POST', '/api/t/tasks', { title: 'Assemble', stage: 'Assembly', order_inv: o.inv, status: 'doing', progress: 50, estimate_min: 60 });
+    const me = await call('GET', '/api/portal/me', null, cp); assert.equal(me.status, 200); assert.equal(me.data.client, 'Fatima'); assert.equal(me.data.percent, 75); assert.equal(me.data.stages.length, 2); assert.deepEqual(me.data.photos, []); assert.equal(me.data.amount, undefined); assert.equal(me.data.paid, undefined);
+    assert.equal((await call('GET', '/api/portal/photo/1', null, cp)).status, 404); // not chosen
+    assert.equal((await call('GET', '/api/t/orders', null, cp)).status, 401); // the portal pass opens nothing in the workshop app
+    assert.equal((await call('GET', '/api/portal/me', null, '')).status, 401);
+    const k = (await call('POST', '/api/t/kitchens', { name: 'K1', order_inv: o.inv, spec: { style: { profile_price: 9 }, runs: [] } })).data;
+    assert.equal((await call('GET', `/api/portal/kitchen/${k.id}`, null, cp)).status, 404); // not allowed yet
+    await call('POST', `/api/order-portal/${o.id}`, { kitchens: [k.id], message: 'Hello' });
+    const kv = await call('GET', `/api/portal/kitchen/${k.id}`, null, cp); assert.equal(kv.status, 200); assert.equal(kv.data.spec.style.profile_price, undefined);
+    assert.equal((await call('GET', '/api/portal/me', null, cp)).data.message, 'Hello');
+    // the client host serves the customer page only, and staff endpoints are closed there
+    const http = await import('node:http'); const raw = (u, headers) => new Promise((res, rej) => http.request({ host: '127.0.0.1', port, path: u, headers }, (r) => { let s = ''; r.on('data', (c) => (s += c)); r.on('end', () => res({ status: r.statusCode, text: s })); }).on('error', rej).end());
+    assert.ok((await raw('/', { Host: 'client.example.com' })).text.includes('/js/client.js')); assert.equal((await raw('/api/t/orders', { Host: 'client.example.com', Cookie: ck })).status, 404);
+    assert.ok((await raw('/', { Host: 'workshop.example.com' })).text.includes('Workshop')); assert.ok((await raw('/client', {})).text.includes('/js/client.js'));
+    // a new code ends the old visit; switching off ends it too
+    const nc = (await call('POST', `/api/order-portal/${o.id}`, { action: 'generate' })).data; assert.notEqual(nc.code, on.code);
+    assert.equal((await call('POST', '/api/portal/login', { order: o.inv, code: on.code }, '')).status, 401);
+    await call('POST', `/api/order-portal/${o.id}`, { action: 'off' }); assert.equal((await call('GET', '/api/portal/me', null, cp)).status, 401);
+  } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
+});

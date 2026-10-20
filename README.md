@@ -85,3 +85,9 @@ The starter models/profiles use generic deductions and zero prices — edit them
 ## Online demo
 
 `docs/index.html` is a self-contained demo (sample data, runs fully in the browser) for GitHub Pages: Settings → Pages → deploy from branch, folder `/docs`.
+
+## Customer page (client.<your domain>)
+
+Each order has a **Customer page** card (open the order): switch it on to make an 8-digit code, then send the customer the link, the order number and the code (the "Copy message" button). The customer opens `https://client.<your domain>` (also `/client` on any address), types the order number and the code, and sees **only** the progress of that order (percent and stages), the photos you ticked, the kitchen models you ticked (3D, no prices) and an optional message. No money, no other orders, no staff pages. A new code or "Switch off" ends every open visit; 10 wrong codes lock that order for 15 minutes.
+
+To use the subdomain: add a DNS record `client` pointing to the same place as the main site, and add `client.<your domain>` to your hosting so it gets HTTPS. The app recognises any host name that starts with `client.`; on it only the customer page is served and the workshop's API is closed.
