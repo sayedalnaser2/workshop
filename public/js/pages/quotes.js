@@ -70,7 +70,7 @@ async function editor(el, id) {
 
   el.innerHTML = `
   <div class="ph"><h1>${id ? 'Quotation ' + esc(q.number) : 'New quotation'}</h1>${id ? badge(...(STATUS[q.status] || STATUS.draft)) : ''}<span class="grow"></span><a class="btn" href="#/quotes">← All quotations</a></div>
-  ${datalist('dl-clients', clients)}${datalist('dl-prices', S.price_items.filter((p) => p.type !== 'note').map((p) => p.name))}
+  ${datalist('dl-clients', clients)}
   <div id="apr"></div>
   <div class="card"><div class="qhead">
     <label class="field"><span>Quote #</span><input id="number" value="${esc(q.number)}" placeholder="Auto: ${esc(S.next.quote)}"></label>
@@ -84,7 +84,7 @@ async function editor(el, id) {
     <label class="field"><span>Status</span><select id="status">${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label class="field" style="grid-column: 1 / -1"><span>Heading line (printed above the items)</span><input id="title" value="${esc(q.title)}"></label>
   </div></div>
-  <div class="card" style="margin-top:14px"><div class="items-wrap"><table class="items"><thead><tr><th></th><th>Description (pick from the price list first)</th><th>Model</th><th>Width cm</th><th>Height cm</th><th>Hand / opens</th><th>Glass</th><th>Colour</th><th>Qty</th><th>Unit price</th><th title="Tick if VAT is charged on this line">VAT</th><th class="tot">Amount</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="card" style="margin-top:14px"><div class="items-wrap"><table class="items"><tbody id="rows"></tbody></table></div>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="addItem">+ Add item</button><button class="btn" id="addNote">+ Add heading / note line</button></div>
   </div>
   <div class="card" style="margin-top:14px" id="lo"></div>
@@ -110,21 +110,21 @@ async function editor(el, id) {
   const drawRows = () => {
     tbody.innerHTML = q.items.map((it, i) => {
       const isNote = it.kind === 'note';
-      if (isNote) return `<tr data-i="${i}"><td class="n">${i + 1}</td><td colspan="12"><input data-k="desc" value="${esc(it.desc)}" placeholder="Heading or note line (e.g. MAINTENANCE:)" style="font-weight:600"></td><td>${rowBtns(i)}</td></tr>`;
+      if (isNote) return `<tr data-i="${i}" class="note-row"><td class="n">${i + 1}</td><td class="c-note"><input data-k="desc" value="${esc(it.desc)}" placeholder="Heading or note line (e.g. MAINTENANCE:)" style="font-weight:600"></td><td class="c-act">${rowBtns(i)}</td></tr>`;
       return `<tr data-i="${i}" class="${it.manual ? 'manual' : ''}">
         <td class="n">${i + 1}</td>
-        <td style="min-width:300px"><input data-k="desc" list="dl-prices" value="${esc(it.desc)}" autocomplete="off">${it.kitchen_id ? `<a href="#/kitchens/${it.kitchen_id}" style="font-size:12px">🍳 open the kitchen design</a>` : ''}<div class="sub"><textarea data-k="note" rows="1" placeholder="Sub-description (e.g. W/1 – one side swing, other side fix)">${esc(it.note || '')}</textarea></div></td>
-        <td><select data-k="model_id" style="width:130px">${modelOpts(it)}</select><div class="mini-draw" data-draw></div></td>
-        <td><input class="w-s" data-k="w" type="number" step="any" value="${it.w ?? ''}"></td>
-        <td><input class="w-s" data-k="h" type="number" step="any" value="${it.h ?? ''}"></td>
-        <td style="min-width:104px">${handCell(it)}</td>
-        <td><select data-k="glass_id" style="width:110px">${glassOpts(it.glass_id)}</select><div class="cost" data-fit style="text-align:left;max-width:150px"></div></td>
-        <td><select data-k="colour" style="width:92px">${colourOptions(S.settings.colours, it.colour, '(as quote)')}</select></td>
-        <td><input class="w-q" data-k="qty" type="number" step="any" value="${it.qty ?? 1}"></td>
-        <td><input class="w-m price" data-k="price" type="number" step="any" value="${it.price ?? 0}" title="${it.manual ? 'Manual price' : 'Calculated from price list'}"></td>
-        <td style="text-align:center"><input type="checkbox" data-k="vat" style="width:auto" ${hasVat(it) ? 'checked' : ''} title="${hasVat(it) ? 'VAT is charged on this line' : 'No VAT on this line'}"></td>
-        <td class="tot"><span data-tot>${money(num(it.qty) * num(it.price))}</span><div class="cost" data-cost></div><div class="cost" data-lo style="color:var(--ok)"></div></td>
-        <td>${rowBtns(i)}</td></tr>`;
+        <td class="c-desc" data-l="Description — pick from the price list first"><input data-k="desc" value="${esc(it.desc)}" autocomplete="off" placeholder="Click and choose from the price list — or type to search">${it.kitchen_id ? `<a href="#/kitchens/${it.kitchen_id}" style="font-size:12px">🍳 open the kitchen design</a>` : ''}<div class="sub"><textarea data-k="note" rows="1" placeholder="Sub-description (e.g. W/1 – one side swing, other side fix)">${esc(it.note || '')}</textarea></div></td>
+        <td class="c-act">${rowBtns(i)}</td>
+        <td class="c-model" data-l="Model"><select data-k="model_id">${modelOpts(it)}</select><div class="mini-draw" data-draw></div></td>
+        <td class="c-w" data-l="Width cm"><input class="w-s" data-k="w" type="number" step="any" value="${it.w ?? ''}"></td>
+        <td class="c-h" data-l="Height cm"><input class="w-s" data-k="h" type="number" step="any" value="${it.h ?? ''}"></td>
+        <td class="c-hand" data-l="Hand / opens">${handCell(it)}</td>
+        <td class="c-glass" data-l="Glass"><select data-k="glass_id">${glassOpts(it.glass_id)}</select><div class="cost" data-fit style="text-align:left"></div></td>
+        <td class="c-col" data-l="Colour"><select data-k="colour">${colourOptions(S.settings.colours, it.colour, '(as quote)')}</select></td>
+        <td class="c-qty" data-l="Qty"><input class="w-q" data-k="qty" type="number" step="any" value="${it.qty ?? 1}"></td>
+        <td class="c-price" data-l="Unit price"><input class="w-m price" data-k="price" type="number" step="any" value="${it.price ?? 0}" title="${it.manual ? 'Manual price' : 'Calculated from price list'}"></td>
+        <td class="c-vat" data-l="VAT" title="Tick if VAT is charged on this line"><label class="vatl"><input type="checkbox" data-k="vat" ${hasVat(it) ? 'checked' : ''} title="${hasVat(it) ? 'VAT is charged on this line' : 'No VAT on this line'}"> VAT</label></td>
+        <td class="tot c-tot" data-l="Amount"><span data-tot>${money(num(it.qty) * num(it.price))}</span><div class="cost" data-cost></div><div class="cost" data-lo style="color:var(--ok)"></div></td></tr>`;
     }).join('');
     update();
   };
@@ -224,6 +224,28 @@ async function editor(el, id) {
     const p = pi(it.desc);
     if (p) { if (!it.manual) it.price = priceFor(p, num(it.w), num(it.h)); }
   };
+  // ---- the price list picker: click the description to see the items grouped by kind, type to narrow them down
+  const catOf = (p) => { const m = S.models.find((x) => x.id === p.model_id); if (m?.category) return m.category; const n = p.name.toLowerCase(); return /kitchen|closet/.test(n) ? 'Kitchen' : /door/.test(n) ? 'Door' : /window|fly|screen/.test(n) ? 'Window' : /mirror/.test(n) ? 'Mirror' : /partition|shower/.test(n) ? 'Partition & shower' : /rail/.test(n) ? 'Railing' : /glass/.test(n) ? 'Glass' : 'Other'; };
+  const shortName = (n) => n.replace(/^fabrication( & installation)? of\s+/i, '').replace(/^\w/, (c) => c.toUpperCase());
+  const pickList = (() => { const seen = new Set(); return S.price_items.filter((p) => p.type !== 'note' && p.name && !seen.has(p.name.trim().toLowerCase()) && seen.add(p.name.trim().toLowerCase())).map((p) => ({ p, cat: catOf(p), hay: p.name.toLowerCase() })); })();
+  const unitOf = (p) => (p.type === 'area' ? 'm²' : p.type === 'length' ? 'm' : p.unit || 'each');
+  let pp = null; let ppInput = null; let ppActive = 0; let ppShown = [];
+  const ppClose = () => { pp?.remove(); pp = null; ppInput = null; };
+  const ppRender = () => {
+    if (!ppInput) return; const words = ppInput.value.toLowerCase().split(/\s+/).filter(Boolean); const exact = pickList.some((x) => x.hay === ppInput.value.trim().toLowerCase());
+    ppShown = (exact ? pickList : pickList.filter((x) => words.every((w) => x.hay.includes(w)))).slice(0, 60); ppActive = Math.min(ppActive, Math.max(0, ppShown.length - 1));
+    if (!pp) { pp = document.createElement('div'); pp.className = 'pp'; document.body.appendChild(pp); pp.addEventListener('mousedown', (e) => { e.preventDefault(); const row = e.target.closest('[data-pp]'); if (row) ppPick(Number(row.dataset.pp)); }); }
+    const r = ppInput.getBoundingClientRect(); const below = window.innerHeight - r.bottom; const h = Math.min(340, Math.max(160, below > 220 ? below - 12 : r.top - 12));
+    Object.assign(pp.style, { left: Math.max(8, r.left) + 'px', width: Math.max(360, r.width) + 'px', maxHeight: h + 'px', top: (below > 220 ? r.bottom + 4 : Math.max(8, r.top - h - 4)) + 'px' });
+    let lastCat = ''; pp.innerHTML = ppShown.length ? ppShown.map((x, i) => { const head = x.cat !== lastCat ? `<div class="pp-h">${esc(lastCat = x.cat)}</div>` : ''; return `${head}<div class="pp-i ${i === ppActive ? 'on' : ''}" data-pp="${i}"><span class="pp-n">${esc(shortName(x.p.name))}</span><span class="pp-r">${money(x.p.rate, 2)} / ${esc(unitOf(x.p))}</span></div>`; }).join('') : `<div class="pp-e">No item in the price list matches “${esc(ppInput.value)}”. You can still type your own description.</div>`;
+    pp.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
+  };
+  const ppPick = (i) => { const x = ppShown[i]; const inp = ppInput; if (!x || !inp) return; inp.value = x.p.name; ppClose(); inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true })); setTimeout(() => $('[data-k=w]', inp.closest('tr'))?.focus(), 0); };
+  tbody.addEventListener('focusin', (e) => { const t = e.target; if (t.dataset?.k === 'desc' && !t.closest('.note-row')) { ppInput = t; ppActive = 0; t.select(); ppRender(); } });
+  tbody.addEventListener('input', (e) => { if (e.target === ppInput) { ppActive = 0; ppRender(); } });
+  tbody.addEventListener('keydown', (e) => { if (e.target !== ppInput || !pp) return; if (e.key === 'ArrowDown') { e.preventDefault(); ppActive = Math.min(ppShown.length - 1, ppActive + 1); ppRender(); } else if (e.key === 'ArrowUp') { e.preventDefault(); ppActive = Math.max(0, ppActive - 1); ppRender(); } else if (e.key === 'Enter' && ppShown[ppActive]) { e.preventDefault(); ppPick(ppActive); } else if (e.key === 'Escape') { ppClose(); } });
+  tbody.addEventListener('focusout', (e) => { if (e.target === ppInput) setTimeout(() => { if (document.activeElement !== ppInput) ppClose(); }, 120); });
+  window.addEventListener('scroll', () => ppInput && ppRender(), true);
   tbody.addEventListener('input', (e) => {
     const tr = e.target.closest('tr[data-i]'); if (!tr) return;
     const it = q.items[Number(tr.dataset.i)]; const k = e.target.dataset.k; if (!k) return;
@@ -260,7 +282,7 @@ async function editor(el, id) {
   });
   // a manual price can be released again by double-clicking it
   tbody.addEventListener('dblclick', (e) => { if (e.target.dataset.k === 'price') { const it = q.items[Number(e.target.closest('tr').dataset.i)]; it.manual = false; reprice(it); drawRows(); toast('Price recalculated from the price list'); } });
-  $('#addItem', el).onclick = () => { q.items.push(blankItem()); drawRows(); $$('tr[data-i]:last-child input', tbody)[1]?.focus(); };
+  $('#addItem', el).onclick = () => { q.items.push(blankItem()); drawRows(); $$('tr[data-i]:last-child input', tbody)[0]?.focus(); };
   $('#addNote', el).onclick = () => { q.items.push({ kind: 'note', desc: '', qty: 0, price: 0 }); drawRows(); };
 
   { // the customer number, and the customer's details filled in when an existing customer is picked
