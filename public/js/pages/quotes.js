@@ -104,16 +104,27 @@ async function editor(el, id) {
   const handCell = (it) => { const k = modelOf(it)?.kind; return `${HAND_KINDS.includes(k) ? `<select data-k="hand" title="Hinge side, seen from outside"><option value="L" ${it.hand !== 'R' ? 'selected' : ''}>Left hand</option><option value="R" ${it.hand === 'R' ? 'selected' : ''}>Right hand</option></select>` : ''}${SWING_KINDS.includes(k) ? `<select data-k="swing" title="Which way it opens"><option value="out" ${it.swing !== 'in' ? 'selected' : ''}>Opens outside</option><option value="in" ${it.swing === 'in' ? 'selected' : ''}>Opens inside</option></select>` : ''}${!HAND_KINDS.includes(k) && !SWING_KINDS.includes(k) ? '<span class="muted">—</span>' : ''}`; };
   /** Drop what no longer applies to the chosen model (hand, opening direction, glass on a model without glass). */
   const normalise = (it) => { const m = modelOf(it); const k = m?.kind; if (HAND_KINDS.includes(k)) it.hand ||= 'L'; else delete it.hand; if (SWING_KINDS.includes(k)) it.swing ||= 'out'; else delete it.swing; if (m && !(m.spec?.glass || []).length) it.glass_id = null; };
-  for (const it of q.items) if (it.kind !== 'note') { it.pi_id = pi(it.desc)?.id || null; normalise(it); }
+  for (const it of q.items) if (it.kind !== 'note') { it.pi_id = it.pi_id && S.price_items.some((x) => x.id === it.pi_id) ? it.pi_id : pi(it.desc)?.id || null; normalise(it); }
   const glassOpts = (sel) => `<option value="">—</option>` + S.glass_types.map((g) => `<option value="${g.id}" ${Number(sel) === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
 
+  // ---- step 1: what is it (door, window, partition…); step 2: which type of it, from the price list
+  const catOf = (p) => { const m = S.models.find((x) => x.id === p.model_id); if (m?.category) return m.category; const n = p.name.toLowerCase(); return /kitchen|closet/.test(n) ? 'Kitchen' : /door/.test(n) ? 'Door' : /window|fly|screen/.test(n) ? 'Window' : /mirror/.test(n) ? 'Mirror' : /partition|shower/.test(n) ? 'Partition & shower' : /rail/.test(n) ? 'Railing' : /glass/.test(n) ? 'Glass' : 'Other'; };
+  const shortName = (n) => n.replace(/^fabrication( & installation)? of\s+/i, '').replace(/^\w/, (c) => c.toUpperCase());
+  const CUSTOM = '__custom';
+  const priceList = (() => { const seen = new Set(); return S.price_items.filter((p) => p.type !== 'note' && p.name && !seen.has(p.name.trim().toLowerCase()) && seen.add(p.name.trim().toLowerCase())).map((p) => ({ p, cat: catOf(p) })); })();
+  const cats = [...new Set(priceList.map((x) => x.cat))].sort((a, b) => (a === 'Other') - (b === 'Other') || a.localeCompare(b));
+  const catFor = (it) => it.cat || (() => { const p = piOf(it) || pi(it.desc); return p ? catOf(p) : it.desc ? CUSTOM : ''; })();
+  const catOpts = (it) => { const c = catFor(it); return `<option value="">— choose —</option>` + cats.map((x) => `<option value="${esc(x)}" ${c === x ? 'selected' : ''}>${esc(x)}</option>`).join('') + `<option value="${CUSTOM}" ${c === CUSTOM ? 'selected' : ''}>Other / my own item</option>`; };
+  const typeOpts = (it) => { const c = catFor(it); if (!c) return '<option value="">Choose what it is first</option>'; if (c === CUSTOM) return '<option value="">Type your own description below</option>'; const cur = piOf(it)?.id; const list = priceList.filter((x) => x.cat === c); return `<option value="">— choose the type (${list.length}) —</option>` + list.map((x) => `<option value="${x.p.id}" ${cur === x.p.id ? 'selected' : ''}>${esc(shortName(x.p.name))} — ${money(x.p.rate, 2)} / ${x.p.type === 'area' ? 'm²' : x.p.type === 'length' ? 'm' : esc(x.p.unit || 'each')}</option>`).join('') + `<option value="${CUSTOM}">Something else (type my own)…</option>`; };
   const drawRows = () => {
     tbody.innerHTML = q.items.map((it, i) => {
       const isNote = it.kind === 'note';
       if (isNote) return `<tr data-i="${i}" class="note-row"><td class="n">${i + 1}</td><td class="c-note"><input data-k="desc" value="${esc(it.desc)}" placeholder="Heading or note line (e.g. MAINTENANCE:)" style="font-weight:600"></td><td class="c-act">${rowBtns(i)}</td></tr>`;
       return `<tr data-i="${i}" class="${it.manual ? 'manual' : ''}">
         <td class="n">${i + 1}</td>
-        <td class="c-desc" data-l="Description — pick from the price list first"><input data-k="desc" value="${esc(it.desc)}" autocomplete="off" placeholder="Click and choose from the price list — or type to search">${it.kitchen_id ? `<a href="#/kitchens/${it.kitchen_id}" style="font-size:12px">🍳 open the kitchen design</a>` : ''}<div class="sub"><textarea data-k="note" rows="1" placeholder="Sub-description (e.g. W/1 – one side swing, other side fix)">${esc(it.note || '')}</textarea></div></td>
+        <td class="c-cat" data-l="1 · What is it?"><select data-k="cat">${catOpts(it)}</select></td>
+        <td class="c-type" data-l="2 · Which type?"><select data-k="type" ${catFor(it) ? '' : 'disabled'}>${typeOpts(it)}</select></td>
+        <td class="c-desc" data-l="Printed on the quotation"><input data-k="desc" value="${esc(it.desc)}" autocomplete="off" placeholder="${catFor(it) ? 'Filled in when you choose the type — you can reword it' : 'Choose what it is first'}">${it.kitchen_id ? `<a href="#/kitchens/${it.kitchen_id}" style="font-size:12px">🍳 open the kitchen design</a>` : ''}<div class="sub"><textarea data-k="note" rows="1" placeholder="Sub-description (e.g. W/1 – one side swing, other side fix)">${esc(it.note || '')}</textarea></div></td>
         <td class="c-act">${rowBtns(i)}</td>
         <td class="c-model" data-l="Model"><select data-k="model_id">${modelOpts(it)}</select><div class="mini-draw" data-draw></div></td>
         <td class="c-w" data-l="Width cm"><input class="w-s" data-k="w" type="number" step="any" value="${it.w ?? ''}"></td>
@@ -221,31 +232,9 @@ async function editor(el, id) {
   };
 
   const reprice = (it) => {
-    const p = pi(it.desc);
+    const p = piOf(it) || pi(it.desc); // the chosen type (kept even when the wording is changed)
     if (p) { if (!it.manual) it.price = priceFor(p, num(it.w), num(it.h)); }
   };
-  // ---- the price list picker: click the description to see the items grouped by kind, type to narrow them down
-  const catOf = (p) => { const m = S.models.find((x) => x.id === p.model_id); if (m?.category) return m.category; const n = p.name.toLowerCase(); return /kitchen|closet/.test(n) ? 'Kitchen' : /door/.test(n) ? 'Door' : /window|fly|screen/.test(n) ? 'Window' : /mirror/.test(n) ? 'Mirror' : /partition|shower/.test(n) ? 'Partition & shower' : /rail/.test(n) ? 'Railing' : /glass/.test(n) ? 'Glass' : 'Other'; };
-  const shortName = (n) => n.replace(/^fabrication( & installation)? of\s+/i, '').replace(/^\w/, (c) => c.toUpperCase());
-  const pickList = (() => { const seen = new Set(); return S.price_items.filter((p) => p.type !== 'note' && p.name && !seen.has(p.name.trim().toLowerCase()) && seen.add(p.name.trim().toLowerCase())).map((p) => ({ p, cat: catOf(p), hay: p.name.toLowerCase() })); })();
-  const unitOf = (p) => (p.type === 'area' ? 'm²' : p.type === 'length' ? 'm' : p.unit || 'each');
-  let pp = null; let ppInput = null; let ppActive = 0; let ppShown = [];
-  const ppClose = () => { pp?.remove(); pp = null; ppInput = null; };
-  const ppRender = () => {
-    if (!ppInput) return; const words = ppInput.value.toLowerCase().split(/\s+/).filter(Boolean); const exact = pickList.some((x) => x.hay === ppInput.value.trim().toLowerCase());
-    ppShown = (exact ? pickList : pickList.filter((x) => words.every((w) => x.hay.includes(w)))).slice(0, 60); ppActive = Math.min(ppActive, Math.max(0, ppShown.length - 1));
-    if (!pp) { pp = document.createElement('div'); pp.className = 'pp'; document.body.appendChild(pp); pp.addEventListener('mousedown', (e) => { e.preventDefault(); const row = e.target.closest('[data-pp]'); if (row) ppPick(Number(row.dataset.pp)); }); }
-    const r = ppInput.getBoundingClientRect(); const below = window.innerHeight - r.bottom; const h = Math.min(340, Math.max(160, below > 220 ? below - 12 : r.top - 12));
-    Object.assign(pp.style, { left: Math.max(8, r.left) + 'px', width: Math.max(360, r.width) + 'px', maxHeight: h + 'px', top: (below > 220 ? r.bottom + 4 : Math.max(8, r.top - h - 4)) + 'px' });
-    let lastCat = ''; pp.innerHTML = ppShown.length ? ppShown.map((x, i) => { const head = x.cat !== lastCat ? `<div class="pp-h">${esc(lastCat = x.cat)}</div>` : ''; return `${head}<div class="pp-i ${i === ppActive ? 'on' : ''}" data-pp="${i}"><span class="pp-n">${esc(shortName(x.p.name))}</span><span class="pp-r">${money(x.p.rate, 2)} / ${esc(unitOf(x.p))}</span></div>`; }).join('') : `<div class="pp-e">No item in the price list matches “${esc(ppInput.value)}”. You can still type your own description.</div>`;
-    pp.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
-  };
-  const ppPick = (i) => { const x = ppShown[i]; const inp = ppInput; if (!x || !inp) return; inp.value = x.p.name; ppClose(); inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true })); setTimeout(() => $('[data-k=w]', inp.closest('tr'))?.focus(), 0); };
-  tbody.addEventListener('focusin', (e) => { const t = e.target; if (t.dataset?.k === 'desc' && !t.closest('.note-row')) { ppInput = t; ppActive = 0; t.select(); ppRender(); } });
-  tbody.addEventListener('input', (e) => { if (e.target === ppInput) { ppActive = 0; ppRender(); } });
-  tbody.addEventListener('keydown', (e) => { if (e.target !== ppInput || !pp) return; if (e.key === 'ArrowDown') { e.preventDefault(); ppActive = Math.min(ppShown.length - 1, ppActive + 1); ppRender(); } else if (e.key === 'ArrowUp') { e.preventDefault(); ppActive = Math.max(0, ppActive - 1); ppRender(); } else if (e.key === 'Enter' && ppShown[ppActive]) { e.preventDefault(); ppPick(ppActive); } else if (e.key === 'Escape') { ppClose(); } });
-  tbody.addEventListener('focusout', (e) => { if (e.target === ppInput) setTimeout(() => { if (document.activeElement !== ppInput) ppClose(); }, 120); });
-  window.addEventListener('scroll', () => ppInput && ppRender(), true);
   tbody.addEventListener('input', (e) => {
     const tr = e.target.closest('tr[data-i]'); if (!tr) return;
     const it = q.items[Number(tr.dataset.i)]; const k = e.target.dataset.k; if (!k) return;
@@ -261,11 +250,18 @@ async function editor(el, id) {
   });
   tbody.addEventListener('change', (e) => {
     const tr = e.target.closest('tr[data-i]'); if (!tr) return; const it = q.items[Number(tr.dataset.i)]; const k = e.target.dataset.k;
+    if (k === 'cat') { it.cat = e.target.value; it.pi_id = null; it.desc = ''; it.model_id = null; it.manual = false; it.price = 0; delete it.hand; delete it.swing; it.glass_id = null; drawRows(); (it.cat === CUSTOM ? $('[data-k=desc]', $$('tr[data-i]', tbody)[Number(tr.dataset.i)]) : $('[data-k=type]', $$('tr[data-i]', tbody)[Number(tr.dataset.i)]))?.focus(); return; }
+    if (k === 'type') {
+      const v = e.target.value; if (v === CUSTOM) { it.cat = CUSTOM; it.pi_id = null; it.model_id = null; it.manual = false; drawRows(); $('[data-k=desc]', $$('tr[data-i]', tbody)[Number(tr.dataset.i)])?.focus(); return; }
+      const p = S.price_items.find((x) => x.id === Number(v)); if (!p) { it.pi_id = null; it.desc = ''; it.model_id = null; it.price = 0; drawRows(); return; }
+      it.pi_id = p.id; it.desc = p.name; it.model_id = p.model_id || null; it.manual = false; it.vat = p.vat !== 0; it.price = priceFor(p, num(it.w), num(it.h)); delete it.hand; delete it.swing; normalise(it); drawRows();
+      $('[data-k=w]', $$('tr[data-i]', tbody)[Number(tr.dataset.i)])?.focus(); return;
+    }
     if (k === 'desc' && it.kind !== 'note') {
       // choosing a different description replaces what no longer matches it: the model (and so hand / opening / glass) follows the new item
       const p = pi(it.desc);
       if (p && it.pi_id !== p.id) { it.pi_id = p.id; it.model_id = p.model_id || null; it.manual = false; it.vat = p.vat !== 0; /* the price item decides whether VAT applies; the box on the line can still be changed */ it.price = priceFor(p, num(it.w), num(it.h)); delete it.hand; delete it.swing; normalise(it); drawRows(); }
-      else if (!p && it.pi_id) { it.pi_id = null; it.model_id = null; delete it.hand; delete it.swing; drawRows(); toast('The description no longer matches the price list, so the model was cleared'); }
+      // rewording a description keeps the chosen type, model and price; only choosing another type changes them
       return;
     }
     if (k === 'model_id') { it.model_id = e.target.value ? Number(e.target.value) : null; delete it.hand; delete it.swing; normalise(it); drawRows(); return; }
@@ -282,7 +278,7 @@ async function editor(el, id) {
   });
   // a manual price can be released again by double-clicking it
   tbody.addEventListener('dblclick', (e) => { if (e.target.dataset.k === 'price') { const it = q.items[Number(e.target.closest('tr').dataset.i)]; it.manual = false; reprice(it); drawRows(); toast('Price recalculated from the price list'); } });
-  $('#addItem', el).onclick = () => { q.items.push(blankItem()); drawRows(); $$('tr[data-i]:last-child input', tbody)[0]?.focus(); };
+  $('#addItem', el).onclick = () => { q.items.push(blankItem()); drawRows(); $$('tr[data-i]:last-child select', tbody)[0]?.focus(); };
   $('#addNote', el).onclick = () => { q.items.push({ kind: 'note', desc: '', qty: 0, price: 0 }); drawRows(); };
 
   { // the customer number, and the customer's details filled in when an existing customer is picked
