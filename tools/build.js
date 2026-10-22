@@ -28,4 +28,5 @@ await writeFile(path.join(out, 'index.html'), html);
 // the customer page (client.<domain>) is its own small bundle
 let chtml = await readFile(path.join(pub, 'client.html'), 'utf8'); chtml = chtml.replace('/js/client.js', `/assets/${clientFile}`); await writeFile(path.join(out, 'client.html'), chtml);
 await cp(path.join(pub, 'img'), path.join(out, 'img'), { recursive: true });
+import('node:child_process').then(async ({ execSync }) => { let commit = ''; try { commit = execSync('git rev-parse --short HEAD', { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch {} await writeFile(path.join(out, 'build.json'), JSON.stringify({ built: new Date().toISOString(), commit })); });
 console.log(`Built dist/: ${jsFile}, ${cssFile}`);

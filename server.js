@@ -683,11 +683,13 @@ async function api(req, res, url) {
   return send(res, 404, { error: 'Unknown endpoint' });
 }
 
+/** When this copy of the site was built (so you can tell whether the live site has your latest update). */
+const buildInfo = async () => { try { return JSON.parse(await readFile(path.join(PUBLIC, 'build.json'), 'utf8')); } catch { return { built: DEV ? 'development (no build)' : 'unknown (no build.json — run npm start to rebuild)' }; } };
 const serveStatic = staticServer(PUBLIC, { dev: DEV });
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
-    if (url.pathname === '/healthz') return await send(res, 200, { ok: true });
+    if (url.pathname === '/healthz') return await send(res, 200, { ok: true, ...(await buildInfo()) });
     if (url.pathname === '/logo') { // public: the login page needs it before anyone is signed in
       const lg = getSetting('logo'); const own = lg?.mime ? await readFile(path.join(filesDir(), 'logo.bin')).catch(() => null) : null;
       const buf = own || await readFile(path.join(PUBLIC, 'img/logo.png'));
