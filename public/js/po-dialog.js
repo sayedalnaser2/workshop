@@ -39,7 +39,11 @@ export async function openPoDialog({ quote = null, orderInv = '', lines: given =
   draw();
   modal({
     title: orderInv ? `Purchase order for ${orderInv}` : 'New purchase order', body: wrap, wide: true, buttons: [
-      { label: 'Skip for now', close: true },
+      { label: 'Skip for now — save as draft', onClick: async () => { // keeps the ticked lines as draft purchase order(s); a supplier is not needed yet
+        const on = lines.filter((l) => l.on && num(l.qty) > 0 && l.name); if (!on.length) return; // nothing ticked: just close
+        const groups = {}; on.forEach((l) => (groups[l.supplier || ''] ||= []).push(l)); const made = [];
+        for (const [supplier, ls] of Object.entries(groups)) { const clean = ls.map(({ on: _o, need, inStock, ...r }) => r); made.push(await api.post('t/purchase_orders', { date: today(), supplier, order_inv: orderInv || '', quote_no: quote?.number || '', status: 'draft', note: 'Draft', lines: clean, total: Math.round(clean.reduce((s, l) => s + num(l.qty) * num(l.price), 0) * 1000) / 1000 })); }
+        toast(`Saved as draft: ${made.map((m) => m.po).join(', ')}`); onDone?.(made); } },
       {
         label: 'Create purchase order(s)', kind: 'primary', onClick: async () => {
           const on = lines.filter((l) => l.on && num(l.qty) > 0 && l.name);
@@ -49,7 +53,7 @@ export async function openPoDialog({ quote = null, orderInv = '', lines: given =
           const made = [];
           for (const [supplier, ls] of Object.entries(groups)) {
             const clean = ls.map(({ on: _o, need, inStock, ...r }) => r);
-            made.push(await api.post('t/purchase_orders', { date: today(), supplier, order_inv: orderInv || '', quote_no: quote?.number || '', status: 'draft', lines: clean, total: Math.round(clean.reduce((s, l) => s + num(l.qty) * num(l.price), 0) * 1000) / 1000 }));
+            made.push(await api.post('t/purchase_orders', { date: today(), supplier, order_inv: orderInv || '', quote_no: quote?.number || '', status: 'sent', lines: clean, total: Math.round(clean.reduce((s, l) => s + num(l.qty) * num(l.price), 0) * 1000) / 1000 }));
           }
           toast(`Created ${made.map((m) => m.po).join(', ')}`);
           onDone?.(made);
