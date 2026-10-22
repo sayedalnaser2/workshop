@@ -73,7 +73,7 @@ async function editor(el, id) {
   ${datalist('dl-clients', clients)}
   <div id="apr"></div>
   <div class="card"><div class="qhead">
-    <label class="field"><span>Quote #</span><input id="number" value="${esc(q.number)}" placeholder="Auto: ${esc(S.next.quote)}"></label>
+    <label class="field"><span>Quote # 🔒</span><input id="number" value="${esc(q.number || 'Automatic — ' + S.next.quote)}" readonly style="background:var(--soft);cursor:not-allowed;${q.number ? 'font-weight:700' : ''}" title="The quotation number is automatic and cannot be changed"></label>
     <label class="field"><span>Date</span><input id="date" type="date" value="${esc(q.date)}"></label>
     <label class="field"><span>Client <small id="custno" class="muted"></small></span><input id="client" list="dl-clients" value="${esc(q.client)}" autocomplete="off"></label>
     <label class="field"><span>Mobile</span><input id="mobile" value="${esc(q.mobile)}"></label>
@@ -295,7 +295,7 @@ async function editor(el, id) {
   }
   wireGps(el, 'gps', '#site');
   const collect = () => ({
-    client_vat: $('#client_vat', el).value.trim(), number: $('#number', el).value.trim(), date: $('#date', el).value, client: $('#client', el).value.trim(), mobile: $('#mobile', el).value.trim(), site: $('#site', el).value.trim(),
+    client_vat: $('#client_vat', el).value.trim(), date: $('#date', el).value, client: $('#client', el).value.trim(), mobile: $('#mobile', el).value.trim(), site: $('#site', el).value.trim(),
     gps: parseGps($('#gps', el).value), title: $('#title', el).value.trim(), colour: $('#colour', el).value, status: $('#status', el).value, notes: $('#notes', el).value, prepared_by: $('#prepared_by', el).value.trim(),
     items: q.items.filter((it) => it.kind === 'note' ? it.desc.trim() : (it.desc.trim() || it.price)), discount: q.discount || 0, vat_rate: q.vat_rate ?? 0, vat_waived: q.vat_waived || 0, disc_mode: q.disc_mode || 'before',
     ...(pw ? { password: pw } : {}),

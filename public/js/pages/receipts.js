@@ -28,7 +28,7 @@ async function list(el) {
   }));
 }
 const fields = (orders) => [
-  { key: 'no', label: 'Receipt #', hint: 'Leave blank for the next number: ' + S.next.receipt }, { key: 'date', label: 'Date', type: 'date' },
+  { key: 'no', label: 'Receipt #', auto: true, placeholder: 'Automatic: ' + S.next.receipt }, { key: 'date', label: 'Date', type: 'date' },
   { key: 'order_inv', label: 'Invoice (money in must come from an invoice)', type: 'select', required: true, options: [['', '— choose the invoice —'], ...[...orders].sort((a, b) => (b.balance > 0.0005) - (a.balance > 0.0005) || (b.date || '').localeCompare(a.date || '')).map((o) => [o.inv, `${o.inv} — ${o.client || ''}${o.balance > 0.0005 ? ` (due ${money(o.balance, 2)})` : ' (paid)'}`])] }, { key: 'client', label: 'Client' },
   { key: 'amount', label: 'Amount (BD)', type: 'number', required: true }, { key: 'method', label: 'Paid by', type: 'select', options: ['', 'Cash', 'Benefit', 'Cheque', 'Bank transfer'] }, { key: 'ref', label: 'Reference number' }, { key: 'account', label: 'Paid into', type: 'select', options: [['', 'Automatic (cash → cash box, others → main bank account)'], ...accountChoices(S.bank_accounts)] }, { key: 'note', label: 'Note', full: true },
 ];

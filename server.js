@@ -621,7 +621,7 @@ async function api(req, res, url) {
           body.approval_note = body.status === 'approved' ? `Approved by ${user.name}` : '';
         }
         const a = AUTO[t];
-        if (a && !body[a[0]]) body[a[0]] = nextNumber(a[1], body.date, true);
+        if (a) body[a[0]] = nextNumber(a[1], body.date, true); // document numbers are always automatic: nobody types them
         let created = insertRow(t, body); if (t === 'tasks') onTaskCreated(created, user);
         if (t === 'bank_accounts') { if (!created.key) created = updateRow(t, created.id, { key: `bank-${created.id}` }); if (created.sort == null) created = updateRow(t, created.id, { sort: created.id }); created = linkBankToChart(created); }
         if (t === 'orders') { const earned = issueCredit(created, user); if (earned) created.credit_earned = earned.amount; }
@@ -632,6 +632,7 @@ async function api(req, res, url) {
     if (id && m === 'PUT') {
       const cur = getRow(t, id); if (!cur || !visible(cur)) return send(res, 404, { error: 'Not found' });
       const body = await readJson(req); checkRef(t, body, cur); moneyRules(t, body, cur); accountingRules(t, body, cur); if (['quotes', 'orders', 'surveys', 'kitchens'].includes(t)) linkCustomer(body, cur); if (t === 'customers') { delete body.code; if (Array.isArray(body.locations)) { body.locations = body.locations.filter((l) => String(l.address || '').trim() || l.gps).map((l) => ({ label: String(l.label || '').trim(), address: String(l.address || '').trim(), gps: String(l.gps || '').trim() })); body.address = body.locations[0]?.address || ''; body.gps = body.locations[0]?.gps || ''; } } // the customer number never changes; the main address is the first location if (worker) delete body.unit_cost;
+      if (AUTO[t]) delete body[AUTO[t][0]]; // …and never changed afterwards
       for (const f of LOCKED_REFS[t] || []) if (f in body && String(cur[f] ?? '').trim() && String(body[f] ?? '').trim() !== String(cur[f]).trim()) delete body[f]; // an order / invoice number is set once and never changed
       if (t === 'overtime' && 'status' in body) need(role === 'admin'); // only the admin approves overtime
       if (t === 'tasks' && 'hidden' in body) { need(role === 'admin'); body.hidden = body.hidden ? 1 : 0; } // only an admin hides or shows tasks

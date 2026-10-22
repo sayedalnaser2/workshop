@@ -40,7 +40,7 @@ async function form(el, id, orderInv) {
   el.innerHTML = `<div class="ph"><h1>${id ? 'Credit note ' + esc(cn.no) : 'New credit note'}</h1>${id ? stBadge(cn.status) : ''}<span class="grow"></span><a class="btn" href="#/creditnotes">← Credit notes</a></div>${datalist('dl-inv', ledger.map((o) => o.inv))}
     ${cn.approval_note && cn.status !== 'approved' ? `<div class="card" style="margin-bottom:12px;border-color:var(--${cn.status === 'rejected' ? 'bad' : 'warn'})">${esc(cn.approval_note)}</div>` : ''}
     <div class="card" style="max-width:900px"><div class="form" style="grid-template-columns:repeat(3,1fr)">
-      <label class="field"><span>Credit note #</span><input id="no" value="${esc(cn.no || '')}" placeholder="Auto: ${esc(S.next.credit || '')}"></label>
+      <label class="field"><span>Credit note # 🔒</span><input id="no" value="${esc(cn.no || '')}" readonly placeholder="Automatic: ${esc(S.next.credit || '')}" style="background:var(--soft);cursor:not-allowed"></label>
       <label class="field"><span>Date</span><input id="date" type="date" value="${esc(cn.date)}"></label>
       <label class="field"><span>Against invoice #</span><input id="order_inv" list="dl-inv" value="${esc(cn.order_inv || '')}" autocomplete="off" ${cn.id && cn.order_inv ? 'readonly style="background:var(--soft);cursor:not-allowed" title="Locked — an invoice number can never be changed"' : ''}></label>
       <label class="field"><span>Client</span><input id="client" value="${esc(cn.client || '')}"></label>

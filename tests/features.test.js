@@ -501,3 +501,19 @@ test('customer portal: order number + code, progress only, chosen photos and kit
     await call('POST', `/api/order-portal/${o.id}`, { action: 'off' }); assert.equal((await call('GET', '/api/portal/me', null, cp)).status, 401);
   } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('document numbers are automatic: typed numbers are ignored on create and never changed', async () => {
+  const { spawn } = await import('node:child_process'); const { mkdtempSync, rmSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const path = await import('node:path');
+  const port = 5800 + Math.floor(Math.random() * 300); const base = `http://127.0.0.1:${port}`; const dir = mkdtempSync(path.join(tmpdir(), 'workshop-auto-'));
+  const proc = spawn(process.execPath, ['--no-warnings', 'server.js'], { env: { ...process.env, PORT: String(port), DATA_DIR: dir, WORKSHOP_DEV: '1' }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 60; i++) { try { if ((await fetch(base + '/healthz')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
+    const r0 = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'boss', password: 'secret1' }) }); const ck = r0.headers.get('set-cookie').split(';')[0];
+    const call = async (m, u, b) => (await fetch(base + u, { method: m, headers: { 'Content-Type': 'application/json', Cookie: ck }, body: b ? JSON.stringify(b) : undefined })).json();
+    const q = await call('POST', '/api/t/quotes', { number: 'MY-1', client: 'A', date: '2026-10-10', items: [], vat_rate: 10 }); assert.notEqual(q.number, 'MY-1'); assert.ok(/^\d+$/.test(q.number));
+    const q2 = await call('POST', '/api/t/quotes', { client: 'B', date: '2026-10-10', items: [], vat_rate: 10 }); assert.equal(Number(q2.number), Number(q.number) + 1);
+    const up = await call('PUT', `/api/t/quotes/${q.id}`, { number: '999999', client: 'A2' }); assert.equal(up.number, q.number); assert.equal(up.client, 'A2');
+    const o = await call('POST', '/api/t/orders', { inv: 'X1', client: 'A', date: '2026-10-10', amount: 10 }); assert.notEqual(o.inv, 'X1');
+    const rc = await call('POST', '/api/t/receipts', { no: 'R-X', date: '2026-10-10', order_inv: o.inv, client: 'A', amount: 5, method: 'Cash' }); assert.notEqual(rc.no, 'R-X');
+  } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
+});

@@ -71,8 +71,8 @@ export function formHTML(fields, v = {}) {
     if (f.type === 'select') input = `<select id="${id}" name="${f.key}" ${locked ? 'disabled' : ''}>${(f.options || []).map((o) => { const [ov, ol] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(ov)}" ${String(ov) === String(val) ? 'selected' : ''}>${esc(ol)}</option>`; }).join('')}</select>`;
     else if (f.type === 'textarea') input = `<textarea id="${id}" name="${f.key}" rows="${f.rows || 3}">${esc(val)}</textarea>`;
     else if (f.type === 'check') input = `<input type="checkbox" id="${id}" name="${f.key}" ${val ? 'checked' : ''}>`;
-    else input = `<input id="${id}" name="${f.key}" type="${f.type || 'text'}" value="${esc(val)}" ${locked ? 'readonly style="background:var(--soft);cursor:not-allowed"' : ''} ${f.step ? `step="${f.step}"` : f.type === 'number' ? 'step="any"' : ''} ${f.list ? `list="${f.list}"` : ''} ${f.required ? 'required' : ''} ${f.placeholder ? `placeholder="${esc(f.placeholder)}"` : ''} autocomplete="off">`;
-    return `<label class="field ${f.full ? 'full' : ''} ${f.type === 'check' ? 'check' : ''}"><span>${esc(f.label)}</span>${input}${locked ? '<small>🔒 Locked — this number can never be changed</small>' : f.hint ? `<small>${esc(f.hint)}</small>` : ''}</label>`;
+    else input = `<input id="${id}" name="${f.key}" type="${f.type || 'text'}" value="${esc(val)}" ${locked || f.auto ? 'readonly style="background:var(--soft);cursor:not-allowed"' : ''} ${f.step ? `step="${f.step}"` : f.type === 'number' ? 'step="any"' : ''} ${f.list ? `list="${f.list}"` : ''} ${f.required ? 'required' : ''} ${f.placeholder ? `placeholder="${esc(f.placeholder)}"` : ''} autocomplete="off">`;
+    return `<label class="field ${f.full ? 'full' : ''} ${f.type === 'check' ? 'check' : ''}"><span>${esc(f.label)}</span>${input}${locked ? '<small>🔒 Locked — this number can never be changed</small>' : f.auto ? '<small>🔒 Automatic — it cannot be typed or changed</small>' : f.hint ? `<small>${esc(f.hint)}</small>` : ''}</label>`;
   }).join('')}</div>`;
 }
 export function readForm(root, fields) {
