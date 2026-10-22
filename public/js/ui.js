@@ -193,12 +193,13 @@ export const grabGps = () => new Promise((resolve, reject) => {
   if (!navigator.geolocation) return reject(new Error('This device cannot give its location.'));
   if (window.isSecureContext === false) return reject(new Error(`The browser refuses location on this address because it starts with http:// . Open the site with https:// (a secure address) and try again. Address now: ${location.origin}`));
   const fmt = (p) => `${p.coords.latitude.toFixed(6)}, ${p.coords.longitude.toFixed(6)}`;
+  const TIP = ' — or open Google Maps, right-click the place, click the numbers to copy them, and paste them in the box.';
   const fail = async (e) => { // say what is really wrong
     if (e.code === 1) {
       let st = ''; try { st = (await navigator.permissions.query({ name: 'geolocation' })).state; } catch {}
-      return reject(new Error(st === 'granted' ? 'The browser allows location for this site, but the device itself is blocking it. On Windows: Settings › Privacy & security › Location › turn Location services on, and allow your browser. On a phone: turn Location on in the phone settings.' : st === 'prompt' ? 'Location was dismissed. Press the button again and choose “Allow” in the browser’s question.' : 'Location is blocked for this site — click the lock icon next to the address, set Location to Allow, then reload the page.'));
+      return reject(new Error((st === 'granted' ? 'The browser allows location for this site, but the device itself is blocking it. On Windows: Settings › Privacy & security › Location › turn Location services on, and allow your browser. On a phone: turn Location on in the phone settings.' : st === 'prompt' ? 'Location was dismissed. Press the button again and choose “Allow” in the browser’s question.' : 'Location is blocked for this site — click the lock icon next to the address, set Location to Allow, then reload the page.') + TIP + ` (error ${e.code})`));
     }
-    reject(new Error(e.code === 3 ? 'The location took too long. Move near a window or turn on Wi-Fi / Location, then try again.' : 'The device could not work out its location. Turn on Location (and Wi-Fi) and try again.'));
+    reject(new Error((e.code === 3 ? 'The location took too long. Move near a window or turn on Wi-Fi / Location, then try again.' : 'The device could not work out its location. Turn on Location (and Wi-Fi) and try again.') + TIP + ` (error ${e.code})`));
   };
   navigator.geolocation.getCurrentPosition((p) => resolve(fmt(p)), (e) => { // a laptop has no GPS chip: if the precise try fails for a reason other than a block, try the quick network position
     if (e.code === 1) return fail(e);
