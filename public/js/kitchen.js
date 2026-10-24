@@ -1,7 +1,7 @@
 // Kitchen cabinet and countertop modelling: cabinets → panels, hardware, sheets, countertop slabs, cost and price.
 // Pure functions (shared by the browser and the tests). All sizes are in centimetres.
-import { glazingFix, GLASS_FIX, CLIP_GAP } from './calc.js';
-export { GLASS_FIX, CLIP_GAP };
+import { glazingFix, CLIP_GAP } from './calc.js';
+export { CLIP_GAP };
 
 export const CAB_TYPES = {
   base:    { label: 'Base cabinet',  w: 60, h: 72,  d: 56, doors: 1, drawers: 0, shelves: 1, counter: true },
@@ -392,7 +392,7 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   const glassDoors = s.door_kind === 'glass'; const c0 = glassDoors && !(+cab.glazed >= Math.round(+cab.doors || 0)) ? { ...cab, glazed: Math.max(0, Math.round(+cab.doors || 0)) } : cab;
   const r = cabinetPartsBase(c0, style);
   if (s.door_lining && !glassDoors) { const extra = []; for (const p of r.panels) if (p.mat === 'door') extra.push({ ...p, label: `${p.label} (inside)`, mat: 'white16', edge: 0 }); r.panels.push(...extra); }
-  const fix = cab.glass_fix === 'clip' || (!cab.glass_fix && s.glass_fix === 'clip') ? 'clip' : 'gasket'; for (const g of r.glass) g.fix = fix; const gf = glazingFix(r.glass, fix); r.hw.clips = gf.clips; r.hw.gasket = gf.gasket; // how each glazed door's glass is held
+  const clipN = cab.glass_clip || s.glass_clip || ''; const gasN = cab.glass_gasket || s.glass_gasket || ''; for (const g of r.glass) { g.clip = clipN; g.gasket = gasN; } const gf = glazingFix(r.glass); r.hw.clips = gf.clips; r.hw.gasket = gf.metres; // every glazed door has clips and a gasket, each of its own type
   const ov = cab.sheets || {};
   if (Object.values(ov).some(Boolean)) for (const p of r.panels) { const name = ov[matRole(p.mat)]; if (name) p.mat = `${matRole(p.mat)}@${name}`; }
   return r;
@@ -491,7 +491,9 @@ export function priceKitchen(model, opts) {
   for (const [k, n] of Object.entries(model.accessories || {})) add('Accessories', ACCESSORIES[k]?.[0] || k, n, 'pcs', gen('acc_' + k));
   for (const a of model.appliances || []) if (a.k !== 'hood') { /* appliances are bought by the customer: space only */ } else add('Accessories', 'Cooker hood fitting', 1, 'pcs', gen('acc_hood'));
   add('Hardware', 'Legs', hw.legs, 'pcs', gen('leg')); add('Hardware', 'Wall hangers', hw.hangers, 'pcs', gen('hanger')); add('Hardware', 'Shelf pins', hw.pins, 'pcs', gen('pin'));
-  add('Glass', 'Glazing clips', hw.clips, 'pcs', gen('glass_clip')); add('Glass', 'Glass gasket', hw.gasket, 'm', gen('glass_gasket_m'));
+  { const by = (key) => { const m = new Map(); for (const g of model.glass) { const n = g[key] || ''; const f = glazingFix([g]); m.set(n, (m.get(n) || 0) + (key === 'clip' ? f.clips : f.metres)); } return m; };
+    for (const [n, q] of by('clip')) add('Glass', `Glazing clips${n ? ' — ' + n : ''}`, q, 'pcs', n && o('clip', n) ? o('clip', n).price : gen('glass_clip'));
+    for (const [n, q] of by('gasket')) add('Glass', `Glass gasket${n ? ' — ' + n : ''}`, q, 'm', n && o('gasket', n) ? o('gasket', n).price : gen('glass_gasket_m')); }
   const glassArea = model.glass.reduce((a, g) => a + (g.w * g.h * g.qty) / 10000, 0); const gType = boardTypeByName(style.glass); add('Glass', `Glazed doors — ${style.glass || 'glass'}`, glassArea, 'm²', gType ? (Number(gType.price) || 0) / (Math.max(1, (+gType.sheet_w || 0) * (+gType.sheet_h || 0)) / 10000) : o('glass', style.glass)?.price);
   const top = counter.material ? o('marble', `${counter.material}|${counter.thickness}`) || o('marble', counter.material) : null; const ct = model.tops;
   add('Countertop', `${counter.material || 'Countertop'} ${counter.thickness} cm`, ct.slab_area, 'm² (incl. waste)', top?.price, { kind: 'marble', name: counter.material });

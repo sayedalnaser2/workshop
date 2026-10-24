@@ -1,5 +1,5 @@
 // Stock, leftovers and purchase-order logic shared by the quotation editor, cutting list and PO dialog.
-import { computeModel, nestBars, glazingFix, CLIP_GAP } from './calc.js';
+import { computeModel, nestBars, glazingParts, CLIP_GAP } from './calc.js';
 import { glazingFits, mmOf, GASKETS } from './glazing.js';
 
 const fin = Number.isFinite;
@@ -30,14 +30,18 @@ export function quotePieces(q, models, lib, glassTypes = lib.glassTypes || []) {
     }
     // gaskets for the glass thickness (Balexco chart) replace the model's generic rubber line when the glass is known
     const gt0 = glassTypes.find((x) => x.id === Number(it.glass_id)); const fit0 = m.spec?.glazing?.type && gt0 ? glazingFits(mmOf(gt0.thickness), m.spec.glazing.type)[0] : null;
-    for (const a of r.accessories) if (fin(a.qty) && !(fit0 && a.accessory?.code === 'RUB')) out.push({ kind: 'accessory', item: i, label: a.label, accessory_id: a.accessory_id ? Number(a.accessory_id) : null, qty: a.qty * n, model: m.name });
+    for (const a of r.accessories) if (fin(a.qty) && !((fit0 || it.gasket_id) && a.accessory?.code === 'RUB')) out.push({ kind: 'accessory', item: i, label: a.label, accessory_id: a.accessory_id ? Number(a.accessory_id) : null, qty: a.qty * n, model: m.name });
     // gaskets for the glass thickness (Balexco chart): the chosen outer + inner gasket run round every pane
     const gt = glassTypes.find((x) => x.id === Number(it.glass_id)); const fit = m.spec?.glazing?.type && gt ? glazingFits(mmOf(gt.thickness), m.spec.glazing.type)[0] : null;
-    if (fit) {
+    if (fit && !it.gasket_id) {
       const metres = r.glass.reduce((s2, g) => s2 + (fin(g.w) && fin(g.h) && fin(g.qty) ? (2 * (g.w + g.h) / 100) * g.qty : 0), 0) * n;
-      for (const [letter] of (it.fix === 'clip' ? [[fit.outer]] : [[fit.outer], [fit.inner]])) { const code = GASKETS[letter].code; const acc = (lib.accessories || []).find((x) => x.code === code); if (acc && metres > 0) out.push({ kind: 'accessory', item: i, label: `Gasket ${letter} (${code})`, accessory_id: acc.id, qty: Math.round(metres * 100) / 100, model: m.name }); }
+      for (const [letter] of [[fit.outer], [fit.inner]]) { const code = GASKETS[letter].code; const acc = (lib.accessories || []).find((x) => x.code === code); if (acc && metres > 0) out.push({ kind: 'accessory', item: i, label: `Gasket ${letter} (${code})`, accessory_id: acc.id, qty: Math.round(metres * 100) / 100, model: m.name }); }
     }
-    if (it.fix === 'clip' && gt) { const clip = (lib.accessories || []).find((x) => x.code === 'GCL'); const clips = glazingFix(r.glass, 'clip').clips * n; if (clips > 0) out.push({ kind: 'accessory', item: i, label: `Glazing clips (every ${CLIP_GAP} cm)`, accessory_id: clip ? clip.id : null, qty: clips, model: m.name }); }
+    if (gt) { // clips and the chosen gasket go round every pane: both are always there
+      const gp = glazingParts(r.glass, { clip_id: it.clip_id, gasket_id: it.gasket_id }, lib);
+      if (gp.clips > 0) out.push({ kind: 'accessory', item: i, label: gp.clip ? gp.clip.name : `Glazing clips (every ${CLIP_GAP} cm)`, accessory_id: gp.clip ? gp.clip.id : null, qty: gp.clips * n, model: m.name });
+      if (gp.gasket && gp.metres > 0) out.push({ kind: 'accessory', item: i, label: gp.gasket.name, accessory_id: gp.gasket.id, qty: Math.round(gp.metres * n * 100) / 100, model: m.name });
+    }
   });
   return out;
 }

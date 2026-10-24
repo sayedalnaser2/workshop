@@ -1,6 +1,6 @@
 import { S, refresh } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, toast, guard, confirmBox, dataTable, badge, datalist } from '../ui.js';
-import { quoteTotals, hasVat, priceFor, modelCost, amountInWords, GLASS_FIX } from '../calc.js';
+import { quoteTotals, hasVat, priceFor, modelCost, amountInWords, isClip, isGasket } from '../calc.js';
 import { printView, docHeader, L, wordsBlock, termsBlock, AR } from '../doc.js';
 import { elevationSVG, planSVG } from '../kitchen-draw.js';
 import { kitchenModel } from '../kitchen.js';
@@ -103,8 +103,9 @@ async function editor(el, id) {
   const modelOpts = (it) => { const base = S.models.find((m) => m.id === piOf(it)?.model_id); const list = base ? S.models.filter((m) => m.category === base.category) : S.models; return `<option value="">—</option>` + list.map((m) => `<option value="${m.id}" ${Number(it.model_id) === m.id ? 'selected' : ''}>${esc(m.name)} (${esc(m.series || '')})</option>`).join(''); };
   const handCell = (it) => { const k = modelOf(it)?.kind; return `${HAND_KINDS.includes(k) ? `<select data-k="hand" title="Hinge side, seen from outside"><option value="L" ${it.hand !== 'R' ? 'selected' : ''}>Left hand</option><option value="R" ${it.hand === 'R' ? 'selected' : ''}>Right hand</option></select>` : ''}${SWING_KINDS.includes(k) ? `<select data-k="swing" title="Which way it opens"><option value="out" ${it.swing !== 'in' ? 'selected' : ''}>Opens outside</option><option value="in" ${it.swing === 'in' ? 'selected' : ''}>Opens inside</option></select>` : ''}${!HAND_KINDS.includes(k) && !SWING_KINDS.includes(k) ? '<span class="muted">—</span>' : ''}`; };
   /** Drop what no longer applies to the chosen model (hand, opening direction, glass on a model without glass). */
-  const normalise = (it) => { const m = modelOf(it); const k = m?.kind; if (HAND_KINDS.includes(k)) it.hand ||= 'L'; else delete it.hand; if (SWING_KINDS.includes(k)) it.swing ||= 'out'; else delete it.swing; if (m && !(m.spec?.glass || []).length) { it.glass_id = null; delete it.fix; } };
+  const normalise = (it) => { const m = modelOf(it); const k = m?.kind; if (HAND_KINDS.includes(k)) it.hand ||= 'L'; else delete it.hand; if (SWING_KINDS.includes(k)) it.swing ||= 'out'; else delete it.swing; if (m && !(m.spec?.glass || []).length) { it.glass_id = null; delete it.clip_id; delete it.gasket_id; } };
   for (const it of q.items) if (it.kind !== 'note') { it.pi_id = it.pi_id && S.price_items.some((x) => x.id === it.pi_id) ? it.pi_id : pi(it.desc)?.id || null; normalise(it); }
+  const accOpts = (test, sel, blank) => `<option value="">${blank}</option>` + S.accessories.filter(test).map((a) => `<option value="${a.id}" ${Number(sel) === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('');
   const glassOpts = (sel) => `<option value="">—</option>` + S.glass_types.map((g) => `<option value="${g.id}" ${Number(sel) === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
 
   // ---- step 1: what is it (door, window, partition…); step 2: which type of it, from the price list
@@ -130,7 +131,7 @@ async function editor(el, id) {
         <td class="c-w" data-l="Width cm"><input class="w-s" data-k="w" type="number" step="any" value="${it.w ?? ''}"></td>
         <td class="c-h" data-l="Height cm"><input class="w-s" data-k="h" type="number" step="any" value="${it.h ?? ''}"></td>
         <td class="c-hand" data-l="Hand / opens">${handCell(it)}</td>
-        <td class="c-glass" data-l="Glass"><select data-k="glass_id">${glassOpts(it.glass_id)}</select><select data-k="fix" title="How the glass is held: gaskets on both sides, or clips with one gasket outside" style="margin-top:3px">${Object.entries(GLASS_FIX).map(([k2, l]) => `<option value="${k2}" ${(it.fix || 'gasket') === k2 ? 'selected' : ''}>${l}</option>`).join('')}</select><div class="cost" data-fit style="text-align:left"></div></td>
+        <td class="c-glass" data-l="Glass"><select data-k="glass_id">${glassOpts(it.glass_id)}</select><select data-k="clip_id" title="Clip type (a clip every 30 cm round the glass)" style="margin-top:3px">${accOpts(isClip, it.clip_id, '— clip type —')}</select><select data-k="gasket_id" title="Gasket type (round the glass)" style="margin-top:3px">${accOpts(isGasket, it.gasket_id, 'gasket: automatic')}</select><div class="cost" data-fit style="text-align:left"></div></td>
         <td class="c-col" data-l="Colour"><select data-k="colour">${colourOptions(S.settings.colours, it.colour, '(as quote)')}</select></td>
         <td class="c-qty" data-l="Qty"><input class="w-q" data-k="qty" type="number" step="any" value="${it.qty ?? 1}"></td>
         <td class="c-price" data-l="Unit price"><input class="w-m price" data-k="price" type="number" step="any" value="${it.price ?? 0}" title="${it.manual ? 'Manual price' : 'Calculated from price list'}"></td>
@@ -157,7 +158,7 @@ async function editor(el, id) {
       $('[data-tot]', tr).textContent = money(num(it.qty) * num(it.price));
       const m = S.models.find((x) => x.id === Number(it.model_id));
       let c = 0;
-      if (m && it.w && it.h) c = modelCost(m, it.w, it.h, lib, S.glass_types.find((g) => g.id === Number(it.glass_id)), it.fix).total * num(it.qty);
+      if (m && it.w && it.h) c = modelCost(m, it.w, it.h, lib, S.glass_types.find((g) => g.id === Number(it.glass_id)), { clip_id: it.clip_id, gasket_id: it.gasket_id }).total * num(it.qty);
       costTotal += c; $('[data-cost]', tr).textContent = c ? `cost ≈ ${money(c, 2)}` : '';
       tr.classList.toggle('manual', !!it.manual);
       const fitEl = $('[data-fit]', tr); if (fitEl) { const gn = glazingNote(m, S.glass_types.find((g) => g.id === Number(it.glass_id))); fitEl.textContent = gn?.best ? `bead ${gn.best.codes[0]} · ${gn.best.outerCode}+${gn.best.innerCode}` : gn ? '⚠ glass does not fit' : ''; fitEl.title = gn?.text || ''; fitEl.style.color = gn && !gn.best ? 'var(--bad)' : ''; }
@@ -265,8 +266,8 @@ async function editor(el, id) {
       return;
     }
     if (k === 'model_id') { it.model_id = e.target.value ? Number(e.target.value) : null; delete it.hand; delete it.swing; normalise(it); drawRows(); return; }
-    if (k === 'fix') { it.fix = e.target.value === 'clip' ? 'clip' : 'gasket'; update(); return; }
-    if (k === 'glass_id') { it.glass_id = e.target.value ? Number(e.target.value) : null; update(); } else if (k === 'colour') { it.colour = e.target.value; update(); } else if (k === 'hand' || k === 'swing') { it[k] = e.target.value; update(); }
+    if (k === 'clip_id' || k === 'gasket_id') { it[k] = e.target.value ? Number(e.target.value) : null; update(); return; }
+    if (k === 'glass_id') { it.glass_id = e.target.value ? Number(e.target.value) : null; if (it.glass_id && !it.clip_id) { const c0 = S.accessories.find(isClip); if (c0) { it.clip_id = c0.id; const sl = $('[data-k=clip_id]', e.target.closest('tr')); if (sl) sl.value = c0.id; } } update(); } else if (k === 'colour') { it.colour = e.target.value; update(); } else if (k === 'hand' || k === 'swing') { it[k] = e.target.value; update(); }
   });
   tbody.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-a]'); if (!btn) return;

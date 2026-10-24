@@ -1,6 +1,6 @@
 import { S } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, toast, guard, confirmBox } from '../ui.js';
-import { modelCost, GLASS_FIX } from '../calc.js';
+import { modelCost, isClip, isGasket } from '../calc.js';
 import { leftoverUnits, nestWithLeftovers, leftoverValue, quotePieces, accessoriesFor } from '../stock.js';
 import { packSheets } from '../kitchen.js';
 import { docHeader, docFooter, L, AR } from '../doc.js';
@@ -39,7 +39,7 @@ function glassSheetSVG(sh, sw, shh, colourOf, minOff, width = 460) {
 export async function render(el, [quoteId]) {
   const [quotes, stock0] = await Promise.all([api.get('t/quotes'), api.get('t/stock')]);
   let stock = stock0; let quoteNo = ''; let quoteRow = null;
-  const newLine = () => ({ model_id: S.models[0]?.id || '', w: S.models[0]?.def_w || 100, h: S.models[0]?.def_h || 100, qty: 1, glass_id: S.glass_types[0]?.id || '', label: '', colour: '', hand: '', swing: '', fix: 'gasket' });
+  const newLine = () => ({ model_id: S.models[0]?.id || '', w: S.models[0]?.def_w || 100, h: S.models[0]?.def_h || 100, qty: 1, glass_id: S.glass_types[0]?.id || '', label: '', colour: '', hand: '', swing: '', clip_id: (S.accessories.find(isClip) || {}).id || '', gasket_id: '' });
   let lines = [newLine()]; let title = 'Cutting list'; let useLeft = true; let last = null; let showCost = false;
   const sheet = { w: Number(S.settings.glass_sheet?.w) || 321, h: Number(S.settings.glass_sheet?.h) || 225 };
 
@@ -47,7 +47,7 @@ export async function render(el, [quoteId]) {
     lines = []; quoteNo = q.number; quoteRow = q; let n = 0;
     for (const it of q.items || []) {
       if (it.kind === 'note') continue; n++;
-      if (it.model_id && it.w && it.h) lines.push({ model_id: it.model_id, w: it.w, h: it.h, qty: it.qty || 1, glass_id: it.glass_id || '', label: `#${n}`, colour: it.colour || q.colour || '', hand: it.hand || '', swing: it.swing || '', fix: it.fix || 'gasket' });
+      if (it.model_id && it.w && it.h) lines.push({ model_id: it.model_id, w: it.w, h: it.h, qty: it.qty || 1, glass_id: it.glass_id || '', label: `#${n}`, colour: it.colour || q.colour || '', hand: it.hand || '', swing: it.swing || '', clip_id: it.clip_id || (S.accessories.find(isClip) || {}).id || '', gasket_id: it.gasket_id || '' });
     }
     title = `Cutting list – ${q.number} – ${q.client}`;
     if (!lines.length) toast('None of the items in this quote has a model attached yet — pick a Model on each item first.', 'err');
@@ -65,11 +65,12 @@ export async function render(el, [quoteId]) {
   <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="add">+ Add line</button><span class="grow"></span><button class="btn" id="commit">Take from stock &amp; save offcuts</button><button class="btn primary" id="print">Print cutting list</button></div></div>
   <div id="out" style="margin-top:16px"></div>`;
 
+  const accOpts = (test, sel, blank) => `<option value="">${blank}</option>` + S.accessories.filter(test).map((a) => `<option value="${a.id}" ${Number(sel) === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('');
   const drawLines = () => {
     $('#lines', el).innerHTML = lines.map((l, i) => `<tr data-i="${i}"><td class="n">${i + 1}</td><td><input data-k="label" value="${esc(l.label)}" style="width:80px"></td>
       <td><select data-k="model_id">${S.models.map((m) => `<option value="${m.id}" ${Number(l.model_id) === m.id ? 'selected' : ''}>${esc(m.name)} (${esc(m.series || '')})</option>`).join('')}</select></td>
       <td><input data-k="w" type="number" step="any" class="w-s" value="${l.w ?? ''}"></td><td><input data-k="h" type="number" step="any" class="w-s" value="${l.h ?? ''}"></td><td><input data-k="qty" type="number" step="1" class="w-q" value="${l.qty ?? 1}"></td>
-      <td><select data-k="glass_id"><option value="">—</option>${S.glass_types.map((g) => `<option value="${g.id}" ${Number(l.glass_id) === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}</select><select data-k="fix" title="Gaskets on both sides, or clips with one gasket outside">${Object.entries(GLASS_FIX).map(([k2, lb]) => `<option value="${k2}" ${(l.fix || 'gasket') === k2 ? 'selected' : ''}>${lb}</option>`).join('')}</select></td>
+      <td><select data-k="glass_id"><option value="">—</option>${S.glass_types.map((g) => `<option value="${g.id}" ${Number(l.glass_id) === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}</select><select data-k="clip_id" title="Clip type">${accOpts(isClip, l.clip_id, '— clip type —')}</select><select data-k="gasket_id" title="Gasket type">${accOpts(isGasket, l.gasket_id, 'gasket: automatic')}</select></td>
       <td><input data-k="colour" list="dl-col" value="${esc(l.colour || '')}" style="width:100px"></td><td><button class="btn sm danger" data-rm>×</button></td></tr>`).join('');
   };
 
@@ -77,10 +78,10 @@ export async function render(el, [quoteId]) {
   const calc = () => {
     const kerf = num($('#kerf', el).value); const minOff = S.settings.min_offcut ?? 30;
     const lib = { profiles: S.profiles, accessories: S.accessories, glassTypes: S.glass_types };
-    const fake = { items: lines.map((l) => ({ model_id: Number(l.model_id), w: num(l.w), h: num(l.h), qty: l.qty, glass_id: l.glass_id ? Number(l.glass_id) : null, fix: l.fix, colour: l.colour })), colour: '' };
+    const fake = { items: lines.map((l) => ({ model_id: Number(l.model_id), w: num(l.w), h: num(l.h), qty: l.qty, glass_id: l.glass_id ? Number(l.glass_id) : null, clip_id: Number(l.clip_id) || null, gasket_id: Number(l.gasket_id) || null, colour: l.colour })), colour: '' };
     const pieces = quotePieces(fake, S.models, lib);
     const tagOf = (i) => { const l = lines[i]; const m = S.models.find((x) => x.id === Number(l.model_id)); return `${l.label || m?.name || ''} ${fq(l.w)}×${fq(l.h)}`; };
-    let cost = 0; for (const l of lines) { const m = S.models.find((x) => x.id === Number(l.model_id)); if (m && num(l.w) > 0 && num(l.h) > 0) cost += modelCost(m, l.w, l.h, lib, S.glass_types.find((g) => g.id === Number(l.glass_id)), l.fix).total * Math.max(1, Math.round(num(l.qty))); }
+    let cost = 0; for (const l of lines) { const m = S.models.find((x) => x.id === Number(l.model_id)); if (m && num(l.w) > 0 && num(l.h) > 0) cost += modelCost(m, l.w, l.h, lib, S.glass_types.find((g) => g.id === Number(l.glass_id)), { clip_id: Number(l.clip_id) || null, gasket_id: Number(l.gasket_id) || null }).total * Math.max(1, Math.round(num(l.qty))); }
     // aluminium: group by profile + colour, nest on leftovers then new bars
     const groups = {};
     for (const p of pieces.filter((x) => x.kind === 'profile')) { const key = `${p.profile_id}|${(p.colour || '').toLowerCase()}`; const e = (groups[key] ||= { profile: S.profiles.find((x) => x.id === p.profile_id), profile_id: p.profile_id, colour: p.colour || '', pieces: [] }); e.pieces.push({ length: r1(p.length), tag: tagOf(p.item) }); }

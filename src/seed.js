@@ -381,6 +381,7 @@ export function seedAluKitchen() {
   if (!has('general', 'frame_corner')) insertRow('kitchen_options', { kind: 'general', name: 'frame_corner', price: 0, unit: '', meta: null, note: 'Aluminium door frame: assembly, per corner', sort: next() });
   if (!has('general', 'glass_clip')) insertRow('kitchen_options', { kind: 'general', name: 'glass_clip', price: 0, unit: '', meta: null, note: 'Glazed door: glazing clip, each', sort: next() });
   if (!has('general', 'glass_gasket_m')) insertRow('kitchen_options', { kind: 'general', name: 'glass_gasket_m', price: 0, unit: '', meta: null, note: 'Glazed door: glass gasket, per metre', sort: next() });
+  for (const [kind, name, unit] of [['clip', 'Standard glazing clip', 'pcs'], ['gasket', 'Standard glass gasket', 'm']]) if (!db.prepare('SELECT 1 FROM kitchen_options WHERE kind=?').get(kind)) insertRow('kitchen_options', { kind, name, price: 0, unit, meta: null, note: '', sort: next() });
   if (!db.prepare("SELECT 1 FROM kitchen_options WHERE kind='profile'").get()) for (const x of ['Slim door frame 20 mm', 'Glass door frame 25 mm', 'Handle-less frame (G-profile)']) insertRow('kitchen_options', { kind: 'profile', name: x, price: 0, unit: 'bar', meta: null, note: '', sort: next() });
 }
 
