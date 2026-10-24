@@ -580,13 +580,13 @@ test('glass: windows and doors have both clips and a gasket, kitchens only a gas
   assert.ok(modelCost(model, 100, 100, lib, { price_m2: 0 }, { clip_id: 2, gasket_id: 3 }).accessories > base); assert.equal(glazingParts([{ w: 92, h: 92, qty: 1 }], { clip_id: 2, gasket_id: 3 }, lib).gasket.id, 3);
 });
 
-test('door side: 22422 on that side becomes 22421, with a hinge column, a side door and no side sheet', async () => {
+test('door side: 22422 on that side becomes 22421, a full-size side door and no side sheet', async () => {
   const { cabinetParts, ALU } = await import('../public/js/kitchen.js');
   const st = { kind: 'aluminium' }; const sum = (r, code) => r.bars.filter((b) => b.code === code).reduce((a, b) => a + b.qty, 0);
   for (const type of ['base', 'wall']) {
     const cab = { type, w: 80, h: type === 'wall' ? 70 : 72, d: type === 'wall' ? 32 : 56, doors: 2 }; const a = cabinetParts(cab, st); const b = cabinetParts({ ...cab, door_side: 'right' }, st);
     assert.equal(sum(b, ALU.deep), sum(a, ALU.deep) / 2); assert.equal(sum(b, ALU.edge), sum(a, ALU.edge) + sum(a, ALU.deep) / 2);
-    assert.equal(sum(b, ALU.col), sum(a, ALU.col) + 1); assert.ok(b.frames.some((f) => /Side door \(right\)/.test(f.label)));
+    assert.equal(sum(b, ALU.col), sum(a, ALU.col)); const sd = b.frames.find((f) => /Side door \(right\)/.test(f.label)); assert.ok(sd && sd.w === cab.d && sd.h === cab.h); // no extra column; the door covers the whole side
     const sides = (r) => r.panels.filter((p) => /Side$/.test(p.label)).reduce((x, p) => x + p.qty, 0); assert.equal(sides(b), sides(a) - 1);
     assert.equal(b.hw.hinges, a.hw.hinges + (type === 'wall' ? 2 : 2));
   }
