@@ -204,10 +204,10 @@ function withLocation(c, site, gps) {
   }
   return locs;
 }
-function ensureCustomer({ client, mobile, site, gps }) {
+function ensureCustomer({ client, mobile, site, gps }, forceNew = false) {
   const name = String(client || '').trim(); if (!name) return null; const pk = phoneKey(mobile);
   const all = db.prepare('SELECT * FROM customers').all();
-  let c = (pk && all.find((x) => phoneKey(x.mobile) === pk || phoneKey(x.mobile2) === pk)) || all.find((x) => normName(x.name) === normName(name));
+  let c = forceNew ? null : (pk && all.find((x) => phoneKey(x.mobile) === pk || phoneKey(x.mobile2) === pk)) || all.find((x) => normName(x.name) === normName(name));
   if (!c) { const locs = String(site || '').trim() || gps ? [{ label: '', address: String(site || '').trim(), gps: gps || '' }] : []; return insertRow('customers', { code: nextCustomerCode(), name, mobile: mobile || '', mobile2: '', email: '', address: site || '', gps: gps || '', locations: locs, vat_no: '', note: '', active: 1 }).id; }
   const fill = {}; if (!c.mobile && mobile) fill.mobile = mobile; if (!c.address && site) fill.address = site; if (!c.gps && gps) fill.gps = gps;
   const locs = withLocation(c, site, gps);
@@ -218,6 +218,9 @@ function ensureCustomer({ client, mobile, site, gps }) {
 /** Put the customer number on a quotation / invoice / survey / kitchen that is being saved (body = what is being written, cur = the stored row). */
 function linkCustomer(body, cur = {}) {
   const m = { ...cur, ...body }; if (!String(m.client || '').trim()) return;
+  const forceNew = !!body._new_customer; delete body._new_customer; // the person at the keyboard said: not the customer with that number / name
+  if (body.customer_id && db.prepare('SELECT 1 FROM customers WHERE id=?').get(body.customer_id)) return; // picked by hand
+  if (forceNew && !(cur.customer_id && normName(body.client ?? cur.client) === normName(cur.client))) { const id = ensureCustomer(m, true); if (id) body.customer_id = id; return; }
   if (cur.customer_id && !('client' in body) && !('mobile' in body)) return;
   if (cur.customer_id && normName(body.client ?? cur.client) === normName(cur.client) && !('mobile' in body && !cur.mobile)) return; // same customer, keep the link
   const id = ensureCustomer(m); if (id) body.customer_id = id;

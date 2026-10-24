@@ -147,7 +147,7 @@ export function scene(spec, open = {}) {
       const fronts = frontsOf(c); const slots = layoutSlots(c);
       const op = Math.max(cabOp, ...fronts.map((f) => fOpen(f.key)), 0);
       const dir = c.dir && DIRS[c.dir] ? c.dir : 'auto';
-      const doors = t.corner ? 2 : Math.round(+c.doors || 0); const drawers = Math.round(+c.drawers || 0); const glazed = Math.min(doors, Math.round(+c.glazed || 0));
+      const doors = t.corner ? 2 : Math.round(+c.doors || 0); const drawers = Math.round(+c.drawers || 0); const glazed = spec.style?.door_kind === 'glass' ? doors : Math.min(doors, Math.round(+c.glazed || 0));
       const openSet = t.corner ? new Set() : openDoorsOf(c); const hid = !slots && hasHiddenHandle(c, style);
       const hollow = op > 0 || slots || (!doors && !drawers) || openSet.size > 0;
       curFront = null;

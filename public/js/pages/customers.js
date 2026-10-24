@@ -1,5 +1,5 @@
 import { S, refresh } from '../app.js';
-import { api, $, $$, esc, money, dmy, dataTable, confirmBox, toast, guard, badge, modal, formHTML, readForm, mapLink, tip, parseGps } from '../ui.js';
+import { api, $, $$, esc, money, dmy, dataTable, confirmBox, toast, guard, badge, modal, formHTML, readForm, mapLink, tip, parseGps, resolveCustomer } from '../ui.js';
 import { levelOf } from '../perm.js';
 
 const FIELDS = [{ key: 'name', label: 'Customer name', required: true, full: true }, { key: 'mobile', label: 'Mobile' }, { key: 'mobile2', label: 'Second mobile' }, { key: 'email', label: 'Email' }, { key: 'vat_no', label: 'VAT No.' }, { key: 'address', label: 'Address / site', full: true }, { key: 'gps', label: '📍 Location pin (GPS)', hint: 'Like 26.2235, 50.5876 — or a Google Maps link' }, { key: 'note', label: 'Notes', type: 'textarea', full: true }];
@@ -32,6 +32,7 @@ function editForm(c, done) {
   const FS = c ? FIELDS_EDIT : FIELDS; const w = document.createElement('div'); w.innerHTML = formHTML(FS, c || {});
   modal({ title: c ? `Edit ${c.code}` : 'New customer', body: w, buttons: [{ label: 'Cancel' }, { label: 'Save', kind: 'primary', onClick: async () => {
     const d = readForm(w, FS); if (!d.name?.trim()) { toast('Enter the name', 'err'); return false; }
+    if (!c) { const rc = await resolveCustomer(d); if (rc === null) return false; if (rc.customer_id) { toast('That customer is already saved — opening him'); location.hash = `#/customers/${rc.customer_id}`; return; } }
     const r = c ? await api.put(`t/customers/${c.id}`, d) : await api.post('t/customers', d); await refresh(); toast(c ? 'Saved' : `Customer ${r.code} created`); done?.(r);
   } }] });
 }

@@ -29,7 +29,7 @@ export function elevationSVG(spec, { maxW = 760 } = {}) {
       if (t.gap && c.appliance && APPLIANCES[c.appliance]) { out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="#dfe3e8" stroke="${INK}" stroke-width="1.2"/><text x="${x + w / 2}" y="${yTop + h / 2}" font-size="10" text-anchor="middle" fill="${INK}">${esc(APPLIANCES[c.appliance][0])}</text><text x="${x + w / 2}" y="${base + 14}" font-size="10" text-anchor="middle" fill="currentColor">${+c.w || 0}</text>`; if (hasSkirt(c)) out += `<rect x="${x}" y="${yTop + h}" width="${w}" height="${style.plinth * k}" fill="#8b95a3"/>`; x += w; continue; }
       if (t.gap) { out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="none" stroke="${INK}" stroke-dasharray="4 3" stroke-width="1"/><text x="${x + w / 2}" y="${yTop + h / 2}" font-size="10" text-anchor="middle" fill="currentColor">appliance</text>`; x += w; continue; }
       out += `<rect x="${x}" y="${yTop}" width="${w}" height="${h}" fill="${FILL}" stroke="${INK}" stroke-width="1.2"/>`;
-      const doors = t.corner ? 1 : Math.max(0, Math.round(+c.doors || 0)); const drawers = Math.max(0, Math.round(+c.drawers || 0)); const glazed = Math.min(doors, Math.round(+c.glazed || 0));
+      const doors = t.corner ? 1 : Math.max(0, Math.round(+c.doors || 0)); const drawers = Math.max(0, Math.round(+c.drawers || 0)); const glazed = spec.style?.door_kind === 'glass' ? doors : Math.min(doors, Math.round(+c.glazed || 0));
       const zn = zonesOf(c); const f = h / (+c.h || 1); const dir = c.dir && DIRS[c.dir] ? c.dir : 'auto'; const slots = layoutSlots(c);
       // the dashed opening symbol: its point is on the handle side; sliding doors get an arrow
       const sym = (gx, zy, dw, zh, dr, left) => {

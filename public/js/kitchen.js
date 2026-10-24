@@ -106,7 +106,7 @@ export function zonesOf(cab) {
 }
 
 /** Panels, hardware and glass for one cabinet. mat: carcass | back | door. edge = banded edge length per piece (cm). */
-export function cabinetParts(cab, style = DEFAULT_STYLE) {
+function cabinetPartsBase(cab, style = DEFAULT_STYLE) {
   const s = { ...DEFAULT_STYLE, ...style }; const t = s.t; const b = s.back_t; const g = s.gap;
   const W = +cab.w || 0, H = +cab.h || 0, D = +cab.d || 0;
   const doors = Math.max(0, Math.round(+cab.doors || 0)); const drawers = Math.max(0, Math.round(+cab.drawers || 0));
@@ -223,16 +223,19 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
 }
 
 /** Kitchen defaults from Settings: the door frame profile and the handle every kitchen uses unless it picks its own. */
-let KDEF = { profile: null, handle: '' };
+let KDEF = { profile: null, handle: '', inner_t: 22, door_lining: false, inner_options: [22, 4, 5] };
 export function setKitchenDefaults(d, profiles) {
   const p = d && d.profile_id ? (profiles || []).find((x) => x.id === Number(d.profile_id)) : null;
-  KDEF = { profile: p || null, handle: (d && d.handle) || '' };
+  const opts = ((d && d.inner_options) || []).map(Number).filter((n) => n > 0); KDEF = { profile: p || null, handle: (d && d.handle) || '', inner_t: Number(d && d.inner_t) > 0 ? Number(d.inner_t) : 22, door_lining: !!(d && d.door_lining), inner_options: opts.length ? opts : [22, 4, 5] };
 }
+export const innerOptions = () => KDEF.inner_options;
 /** A kitchen's style with the Settings defaults filled in where the kitchen chose nothing. */
 export function withDefaults(style) {
   const out = { ...style }; const p = KDEF.profile;
   if (!out.profile && p) { out.profile = [p.code, p.name].filter(Boolean).join(' '); out.frame_profile_id = p.id; if (p.face_w && (out.frame_w === undefined || out.frame_w === '')) out.frame_w = Math.round(+p.face_w) / 10 || undefined; if ((out.bar_len === undefined || out.bar_len === '') && p.bar_length) out.bar_len = p.bar_length; if (!(+out.profile_price > 0)) out.profile_price = Number(p.price_bar) || 0; }
   if (!out.handle && KDEF.handle) out.handle = KDEF.handle;
+  if (!(+out.inner_t > 0)) out.inner_t = KDEF.inner_t;
+  if (out.door_lining === undefined) out.door_lining = KDEF.door_lining;
   return out;
 }
 /** The sheet types and the stock the shop has (set from the data the app loads): used pieces are always cut first. */
@@ -356,6 +359,41 @@ export function packBars(frames, barLen = 600, fw = 4.5, kerf = 0.5) {
   return { bars: bars.map((b) => ({ ...b, free: Math.round((barLen - b.used) * 10) / 10 })), unfit, metres, pieces: pieces.length, corners: pieces.length / 2 };
 }
 
+/** What the doors are made of decides which sheet types the outside of a door can be cut from. */
+export const DOOR_KINDS = { wood: 'Wood', aluminium: 'Aluminium', fiber: 'Fibre', glass: 'Glass' };
+const KIND_MATERIALS = { wood: ['Solid wood', 'Veneered', 'MDF', 'Melamine', 'Chipboard', 'Plywood', 'HPL', 'Acrylic'], aluminium: ['Aluminium'], fiber: ['Fibre board'], glass: ['Glass'] };
+/** 22 → "2.2 cm", 4 → "4 mm": the thickness options are stored in millimetres. */
+export const fmtThick = (mm) => { const n = Number(mm); return !(n > 0) ? '' : n >= 10 ? `${Math.round(n) / 10} cm` : `${n} mm`; };
+export const DEFAULT_INNER = [22, 4, 5];
+/** Sheet types for a purpose: by thickness (mm) and/or material. Types with no thickness set are always offered. */
+export function sheetTypesFor({ thick, kind, materials } = {}) {
+  const mats = materials || (kind ? KIND_MATERIALS[kind] : null);
+  return BOARDS.types.filter((t) => (!(thick > 0) || !(+t.thickness > 0) || Math.abs(+t.thickness - thick) < 0.05) && (!mats || mats.includes(t.material)));
+}
+/** The mat key of a part cut from a sheet picked for one cabinet only: "role@sheet name". */
+export const matRole = (mat) => String(mat).split('@')[0];
+export const matCustom = (mat) => (String(mat).includes('@') ? String(mat).slice(String(mat).indexOf('@') + 1) : '');
+const ROLE_LABEL = { carcass: 'Carcass boards', door: 'Doors & drawer fronts', back: 'Back panels', end: 'Visible sides (ends)', design: 'Design sheet', white16: 'Door inside 1.6 cm', white22: 'Interior sheet' };
+/** Heading for a sheet group, e.g. "Interior sheet 2.2 cm — Melamine white". */
+export function matLabel(mat, style = {}) {
+  const role = matRole(mat); const custom = matCustom(mat); let l = ROLE_LABEL[role] || role;
+  if (role === 'white22') l = `Interior sheet (sides, shelves, back) ${fmtThick(style.inner_t || 22)}`;
+  if (role === 'white16') l = 'Door inside sheet 1.6 cm';
+  if (role === 'door' && style.kind === 'aluminium') l = 'Infill panels in the aluminium frames';
+  if (role === 'door' && style.door_kind && style.door_kind !== 'wood') l = `Door outside sheet — ${DOOR_KINDS[style.door_kind]}`;
+  return custom ? `${l} · custom: ${custom}` : l;
+}
+const ROLES = ['carcass', 'back', 'door', 'white22', 'white16', 'design', 'end'];
+/** Panels, hardware and glass for one cabinet, with the doors' kind (glass: no inside sheet), the lining behind each door and sheets picked for this cabinet only (cab.sheets). */
+export function cabinetParts(cab, style = DEFAULT_STYLE) {
+  const s = { ...DEFAULT_STYLE, ...style };
+  const glassDoors = s.door_kind === 'glass'; const c0 = glassDoors && !(+cab.glazed >= Math.round(+cab.doors || 0)) ? { ...cab, glazed: Math.max(0, Math.round(+cab.doors || 0)) } : cab;
+  const r = cabinetPartsBase(c0, style);
+  if (s.door_lining && !glassDoors) { const extra = []; for (const p of r.panels) if (p.mat === 'door') extra.push({ ...p, label: `${p.label} (inside)`, mat: 'white16', edge: 0 }); r.panels.push(...extra); }
+  const ov = cab.sheets || {};
+  if (Object.values(ov).some(Boolean)) for (const p of r.panels) { const name = ov[matRole(p.mat)]; if (name) p.mat = `${matRole(p.mat)}@${name}`; }
+  return r;
+}
 /** The key a part keeps its chosen cutting direction under: material, part name (without the cabinet) and size. */
 export const cutKey = (mat, p) => `${mat}|${String(p.label).replace(/^.* · /, '')}|${p.w}|${p.h}`;
 /** Everything about a kitchen: panels by material, sheets, hardware, countertop slabs. */
@@ -370,16 +408,16 @@ export function kitchenModel(spec) {
     if (ri !== curRun) { curRun = ri; runX = 0; }
     const type = CAB_TYPES[cab.type] || CAB_TYPES.base; const cabs = run.cabinets || []; const ends = style.end_sheet && !type.gap && !type.corner ? (cab.end_left ?? ci === 0 ? 1 : 0) + (cab.end_right ?? ci === cabs.length - 1 ? 1 : 0) : 0; // sides the customer sees: the ends of a run, unless set by hand
     const p = cabinetParts({ ...cab, label: cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}`, _ends: ends }, style); // an unnamed cabinet is called by its run and place: A1, A2…
-    for (const x of p.panels) { panels[x.mat].push(x); edge += x.edge * x.qty; } // (skirting cut from a profile is listed apart)
+    for (const x of p.panels) { (panels[x.mat] ||= []).push(x); edge += x.edge * x.qty; } // (skirting cut from a profile is listed apart)
     for (const k of Object.keys(hw)) hw[k] += p.hw[k]; glass.push(...p.glass); frames.push(...p.frames); for (const b of p.bars) { if (b.seg) { const name = cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}`; const last = joins.at(-1); const a = runX + b.seg[0]; const z = runX + b.seg[1]; if (last && last.ri === ri && Math.abs(last.z - a) < 0.05) { last.z = z; if (!last.cabs.includes(name)) last.cabs.push(name); } else joins.push({ ri, a, z, cabs: [name], code: b.code }); } else aluBars.push(b); } appliances.push(...p.appliances); for (const [k, n] of Object.entries(p.acc)) accessories[k] = (accessories[k] || 0) + n;
     runX += +cab.w || 0;
     const w = (+cab.w || 0) / 100; if (type.gap) continue;
     meters.units++; if (type.wall) { meters.wall += w; meters.wall_n++; } else if (type.tall) { meters.tall += w; meters.tall_n++; } else { meters.base += w; meters.base_n++; }
   }
   const sheets = {}; const claimed = new Set(); // a used piece can only be cut for one material
-  const typeOf = (mat) => boardTypeByName({ carcass: style.carcass, door: style.door || style.carcass, back: style.back || style.carcass, white22: style.white22, white16: style.white16, design: style.design, end: style.end_sheet || style.carcass }[mat]);
-  for (const mat of ['carcass', 'back', 'door', 'white22', 'white16', 'design', 'end']) {
-    const white = mat === 'white22' || mat === 'white16'; const ty = typeOf(mat);
+  const typeOf = (mat) => boardTypeByName(matCustom(mat) || { carcass: style.carcass, door: style.door || style.carcass, back: style.back || style.carcass, white22: style.white22, white16: style.white16, design: style.design, end: style.end_sheet || style.carcass }[matRole(mat)]);
+  for (const mat of Object.keys(panels).filter((m) => m !== 'skirt').sort((a, b) => (ROLES.indexOf(matRole(a)) - ROLES.indexOf(matRole(b))) || a.localeCompare(b))) {
+    const white = matRole(mat) === 'white22' || matRole(mat) === 'white16'; const ty = typeOf(mat);
     const sw = ty && +ty.sheet_w > 0 ? Math.max(+ty.sheet_w, +ty.sheet_h) : white ? (+style.white_w || 280) : style.sheet_w; const sh = ty && +ty.sheet_h > 0 ? Math.min(+ty.sheet_w, +ty.sheet_h) : white ? (+style.white_h || 130) : style.sheet_h;
     const dirs = spec.cut_dir || {}; const pk = planSheets(panels[mat].map((x) => ({ ...x, dir: dirs[cutKey(mat, x)] || '' })), sw, sh, style.kerf, { mode: style.cut_mode, used: ty ? usedPiecesOf(ty.id).filter((u) => !claimed.has(u.uid)) : [] }); for (const sh2 of pk.sheets) if (sh2.source === 'used') claimed.add(sh2.uid);
     sheets[mat] = { ...pk, sw, sh, type: ty ? ty.name : '', area: panels[mat].reduce((a, p) => a + p.w * p.h * p.qty, 0) / 10000 };
@@ -430,10 +468,11 @@ export function priceKitchen(model, opts) {
   const add = (group, label, qty, unit, price, extra = {}) => { if (qty > 0) lines.push({ group, label, qty: Math.round(qty * 100) / 100, unit, price: Number(price) || 0, total: (Number(price) || 0) * qty, ...extra }); };
   const unitPrice = (name) => { const t = boardTypeByName(name); return t ? Number(t.price) || 0 : o('panel', name)?.price; };
   const sizeOf = (m) => `sheet ${sheets[m].sw}×${sheets[m].sh}`;
-  const MATS = [['carcass', 'Carcass boards', style.carcass], ['door', 'Door & drawer fronts', style.door || style.carcass], ['back', 'Back panels', style.back || style.carcass], ['white22', ALU_MATS.white22, style.white22], ['white16', ALU_MATS.white16, style.white16], ['design', ALU_MATS.design, style.design], ['end', 'Visible sides (ends)', style.end_sheet || style.carcass]];
+  const roleName = { carcass: style.carcass, door: style.door || style.carcass, back: style.back || style.carcass, white22: style.white22, white16: style.white16, design: style.design, end: style.end_sheet || style.carcass };
+  const MATS = Object.keys(sheets).map((m) => [m, matLabel(m, style), matCustom(m) || roleName[matRole(m)]]);
   for (const [m, label, name] of MATS) {
     if (!sheets[m] || !sheets[m].newCount) continue;
-    const back = m === 'back' ? o('panel', name) : null; const price = back ? (back.meta?.back_price ?? back.price) : unitPrice(name);
+    const back = matRole(m) === 'back' ? o('panel', name) : null; const price = back ? (back.meta?.back_price ?? back.price) : unitPrice(name);
     add('Boards', `${label}${name ? ' — ' + name : m === 'carcass' ? ' — not chosen' : ''}`, sheets[m].newCount, sizeOf(m), boardTypeByName(name) ? Number(boardTypeByName(name).price) || 0 : price, { kind: 'panel', name });
   }
   { const used = MATS.flatMap(([m]) => (sheets[m] ? sheets[m].sheets.filter((x) => x.source === 'used') : [])); if (used.length) add('Boards', 'Used sheets from stock (cut first)', used.length, 'pieces', used.reduce((a, x) => a + (x.cost || 0), 0) / used.length); }
@@ -449,7 +488,7 @@ export function priceKitchen(model, opts) {
   for (const [k, n] of Object.entries(model.accessories || {})) add('Accessories', ACCESSORIES[k]?.[0] || k, n, 'pcs', gen('acc_' + k));
   for (const a of model.appliances || []) if (a.k !== 'hood') { /* appliances are bought by the customer: space only */ } else add('Accessories', 'Cooker hood fitting', 1, 'pcs', gen('acc_hood'));
   add('Hardware', 'Legs', hw.legs, 'pcs', gen('leg')); add('Hardware', 'Wall hangers', hw.hangers, 'pcs', gen('hanger')); add('Hardware', 'Shelf pins', hw.pins, 'pcs', gen('pin'));
-  const glassArea = model.glass.reduce((a, g) => a + (g.w * g.h * g.qty) / 10000, 0); add('Glass', `Glazed doors — ${style.glass || 'glass'}`, glassArea, 'm²', o('glass', style.glass)?.price);
+  const glassArea = model.glass.reduce((a, g) => a + (g.w * g.h * g.qty) / 10000, 0); const gType = boardTypeByName(style.glass); add('Glass', `Glazed doors — ${style.glass || 'glass'}`, glassArea, 'm²', gType ? (Number(gType.price) || 0) / (Math.max(1, (+gType.sheet_w || 0) * (+gType.sheet_h || 0)) / 10000) : o('glass', style.glass)?.price);
   const top = counter.material ? o('marble', `${counter.material}|${counter.thickness}`) || o('marble', counter.material) : null; const ct = model.tops;
   add('Countertop', `${counter.material || 'Countertop'} ${counter.thickness} cm`, ct.slab_area, 'm² (incl. waste)', top?.price, { kind: 'marble', name: counter.material });
   add('Countertop', 'Edge polishing', ct.polish_m, 'm', gen('polish_m')); add('Countertop', 'Sink cut-outs', ct.sinks, 'pcs', gen('cutout_sink')); add('Countertop', 'Hob cut-outs', ct.hobs, 'pcs', gen('cutout_hob'));

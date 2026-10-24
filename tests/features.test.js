@@ -517,3 +517,48 @@ test('document numbers are automatic: typed numbers are ignored on create and ne
     const rc = await call('POST', '/api/t/receipts', { no: 'R-X', date: '2026-10-10', order_inv: o.inv, client: 'A', amount: 5, method: 'Cash' }); assert.notEqual(rc.no, 'R-X');
   } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('sheets by purpose: thickness, door kind, glass without inside sheet, lining, per-cabinet sheets', async () => {
+  const K = await import('../public/js/kitchen.js');
+  K.setBoards({ types: [
+    { id: 1, name: 'White 22', material: 'Fibre board', thickness: 22, sheet_w: 280, sheet_h: 130, price: 20 },
+    { id: 2, name: 'White 4', material: 'Fibre board', thickness: 4, sheet_w: 244, sheet_h: 122, price: 5 },
+    { id: 3, name: 'White 16', material: 'Fibre board', thickness: 16, sheet_w: 280, sheet_h: 130, price: 12 },
+    { id: 4, name: 'Oak', material: 'Veneered', thickness: 18, sheet_w: 244, sheet_h: 122, price: 30 },
+    { id: 5, name: 'Alu sheet', material: 'Aluminium', thickness: 3, sheet_w: 300, sheet_h: 150, price: 40 },
+    { id: 6, name: 'Clear glass', material: 'Glass', thickness: 6, sheet_w: 300, sheet_h: 200, price: 60 }], stock: [] });
+  assert.deepEqual(K.sheetTypesFor({ thick: 22 }).map((t) => t.name), ['White 22']);
+  assert.deepEqual(K.sheetTypesFor({ kind: 'wood' }).map((t) => t.name), ['Oak']);
+  assert.deepEqual(K.sheetTypesFor({ kind: 'aluminium' }).map((t) => t.name), ['Alu sheet']);
+  assert.deepEqual(K.sheetTypesFor({ kind: 'fiber' }).map((t) => t.name), ['White 22', 'White 4', 'White 16']);
+  assert.deepEqual(K.sheetTypesFor({ kind: 'glass' }).map((t) => t.name), ['Clear glass']);
+  assert.equal(K.fmtThick(22), '2.2 cm'); assert.equal(K.fmtThick(4), '4 mm');
+  const cab = { type: 'wall', w: 60, h: 70, d: 32, doors: 1, drawers: 0, shelves: 1 };
+  const base = { kind: 'wood', carcass: 'White 22', door: 'Oak', white16: 'White 16' };
+  const lined = K.cabinetParts(cab, { ...base, door_lining: true });
+  assert.ok(lined.panels.some((p) => p.mat === 'white16' && /inside/.test(p.label)));
+  assert.ok(!K.cabinetParts(cab, { ...base, door_lining: false }).panels.some((p) => p.mat === 'white16'));
+  const glass = K.cabinetParts(cab, { ...base, door_lining: true, door_kind: 'glass' });
+  assert.ok(!glass.panels.some((p) => p.mat === 'white16')); assert.equal(glass.glass.length, 1);
+  const custom = K.cabinetParts({ ...cab, sheets: { door: 'Alu sheet' } }, base);
+  assert.ok(custom.panels.some((p) => p.mat === 'door@Alu sheet')); assert.ok(!custom.panels.some((p) => p.mat === 'door'));
+  const spec = { style: base, counter: {}, runs: [{ cabinets: [cab, { ...cab, sheets: { door: 'Alu sheet' } }] }] };
+  const m = K.kitchenModel(spec); assert.equal(m.sheets['door@Alu sheet'].type, 'Alu sheet'); assert.equal(m.sheets.door.type, 'Oak');
+  assert.ok(K.priceKitchen(m, {}).lines.some((l) => /Alu sheet/.test(l.label)));
+  assert.match(K.matLabel('door@Alu sheet', m.style), /custom: Alu sheet/);
+});
+
+test('same number or same name: the app asks, and the server honours the answer', async () => {
+  const { spawn } = await import('node:child_process'); const { mkdtempSync, rmSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const path = await import('node:path');
+  const port = 5800 + Math.floor(Math.random() * 300); const base = `http://127.0.0.1:${port}`; const dir = mkdtempSync(path.join(tmpdir(), 'workshop-cust-'));
+  const proc = spawn(process.execPath, ['--no-warnings', 'server.js'], { env: { ...process.env, PORT: String(port), DATA_DIR: dir, WORKSHOP_DEV: '1' }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 60; i++) { try { if ((await fetch(base + '/healthz')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
+    const r0 = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'boss', password: 'secret1' }) }); const ck = r0.headers.get('set-cookie').split(';')[0];
+    const call = async (m, u, b) => (await fetch(base + u, { method: m, headers: { 'Content-Type': 'application/json', Cookie: ck }, body: b ? JSON.stringify(b) : undefined })).json();
+    const a = await call('POST', '/api/t/quotes', { client: 'Ali', mobile: '33112233', date: '2026-10-10', items: [], vat_rate: 10 });
+    const b = await call('POST', '/api/t/quotes', { client: 'Ali Two', mobile: '33112233', date: '2026-10-10', items: [], vat_rate: 10 }); assert.equal(b.customer_id, a.customer_id); // unasked: the number links
+    const c = await call('POST', '/api/t/quotes', { client: 'Ali Two', mobile: '33112233', date: '2026-10-10', items: [], vat_rate: 10, _new_customer: 1 }); assert.notEqual(c.customer_id, a.customer_id); // "no, a different person"
+    const d = await call('POST', '/api/t/quotes', { client: 'Someone', mobile: '39998888', date: '2026-10-10', items: [], vat_rate: 10, customer_id: a.customer_id }); assert.equal(d.customer_id, a.customer_id); // "yes, it is him"
+  } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
+});

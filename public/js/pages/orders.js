@@ -4,7 +4,7 @@ import { openTaskForm, addStandardTasks } from '../task-form.js';
 import { fmtMin, variance } from '../time.js';
 import { levelOf } from '../perm.js';
 import { creditLeft, creditState, creditBalance, useCredit } from './credits.js';
-import { api, $, $$, esc, money, qty as fq, num, dmy, today, dataTable, editRow, confirmBox, toast, guard, badge, modal, mapLink, orderBar } from '../ui.js';
+import { api, $, $$, esc, money, qty as fq, num, dmy, today, dataTable, editRow, confirmBox, toast, guard, badge, modal, mapLink, orderBar, resolveCustomer } from '../ui.js';
 import { quoteTotals, hasVat } from '../calc.js';
 import { orderVat } from '../vat.js';
 import { printView, docHeader, L, AR, wordsBlock, termsBlock } from '../doc.js';
@@ -14,7 +14,9 @@ import { openEventDialog } from './calendar.js';
 export async function render(el, [id, sub]) {
   if (id && sub === 'invoice') return invoicePrint(el, Number(id));
   if (id) return detail(el, Number(id));
-  const rows = await api.get('ledger');
+  const [rows, kitchens] = await Promise.all([api.get('ledger'), api.get('t/kitchens').catch(() => [])]);
+  const kInv = new Set(kitchens.map((k) => String(k.order_inv || '').trim()).filter(Boolean)); const kQuote = new Set(kitchens.map((k) => String(k.quote_no || '').trim()).filter(Boolean));
+  const isKitchen = (r) => kInv.has(String(r.inv || '').trim()) || (r.quote_no && kQuote.has(String(r.quote_no).trim()));
   const sum = (k, l = rows) => l.reduce((s, r) => s + (r[k] || 0), 0);
   el.innerHTML = `<div class="ph"><h1>Orders &amp; Invoices</h1><span class="sub">Customer ledger — what was sold, collected and what is still due</span><span class="grow"></span><button class="btn primary" id="new" ${levelOf(S.me, 'orders') === 'edit' ? '' : 'hidden'}>+ New order</button></div>
     <div class="cards"><div class="card stat"><div class="k">Invoiced</div><div class="v">${money(sum('amount'), 2)}</div></div><div class="card stat"><div class="k">Collected</div><div class="v">${money(sum('paid'), 2)}</div></div><div class="card stat"><div class="k">Outstanding</div><div class="v ${sum('balance') > 0 ? 'neg' : ''}">${money(sum('balance'), 2)}</div></div><div class="card stat"><div class="k">Profit (invoiced − linked purchases)</div><div class="v">${money(sum('profit'), 2)}</div></div></div><div id="t"></div>`;
@@ -23,13 +25,13 @@ export async function render(el, [id, sub]) {
     { key: 'client', label: 'Client', required: true }, { key: 'mobile', label: 'Mobile' }, { key: 'site', label: 'Site' }, { key: 'gps', label: '📍 Location pin (GPS)', hint: 'Like 26.2235, 50.5876 — or paste a Google Maps link' },
     { key: 'amount', label: 'Gross amount (BD)', type: 'number' }, { key: 'vat', label: 'VAT included in the amount (BD)', type: 'number', hint: 'Leave empty to work it out from the quotation / VAT rate' }, { key: 'client_vat', label: 'Customer VAT No.' }, { key: 'done', label: 'Work completed', type: 'check' }, { key: 'note', label: 'Note', full: true },
   ];
-  const open = (row) => editRow({ table: 'orders', title: row ? `Edit ${row.inv}` : 'New order', fields, row, defaults: { date: today() }, onSaved: async () => { await refresh(); render(el, []); } });
+  const open = (row) => editRow({ table: 'orders', title: row ? `Edit ${row.inv}` : 'New order', fields, row, defaults: { date: today() }, before: async (d) => { const rc = await resolveCustomer(d, row || {}); if (rc === null) return false; if (rc.use_name) d.client = rc.use_name; delete rc.use_name; return { ...d, ...rc }; }, onSaved: async () => { await refresh(); render(el, []); } });
   $('#new', el).onclick = () => open(null);
   const t = $('#t', el);
   dataTable(t, {
     rows, search: ['inv', 'client', 'site', 'mobile'], page: 60, filterKey: 'orders',
     cols: [
-      { key: 'inv', label: 'Inv', render: (r) => `<b>${esc(r.inv)}</b>` }, { key: 'date', label: 'Date', render: (r) => dmy(r.date) },
+      { key: 'inv', label: 'Inv', render: (r) => `<b>${esc(r.inv)}</b>${isKitchen(r) ? ' <span title="Kitchen">🍳</span>' : ''}` }, { key: 'date', label: 'Date', render: (r) => dmy(r.date) },
       { key: 'client', label: 'Client' }, { key: 'site', label: 'Site', render: (r) => `${esc(r.site || '')} ${mapLink(r.gps, r.site)}` }, { key: 'mobile', label: 'Mobile' },
       { key: 'amount', label: 'G.Amount', num: true, render: (r) => money(r.amount, 2) }, { key: 'paid', label: 'Paid', num: true, render: (r) => money(r.paid, 2) },
       { key: 'balance', label: 'Balance', num: true, render: (r) => `<span class="${r.balance > 0.0005 ? 'neg' : ''}">${money(r.balance, 2)}</span>` },
@@ -37,7 +39,7 @@ export async function render(el, [id, sub]) {
       { key: 'done', label: 'Status', render: (r) => (r.done ? badge('Done', 'ok') : badge('Open', 'warn')) },
       { key: 'progress', label: 'Work progress', sort: (r) => r.progress || 0, render: (r) => orderBar(r) },
     ],
-    filters: [{ label: 'All' }, { label: 'Open', fn: (r) => !r.done }, { label: 'Unpaid', fn: (r) => r.balance > 0.0005 }],
+    filters: [{ label: 'All' }, { label: 'Open', fn: (r) => !r.done }, { label: 'Unpaid', fn: (r) => r.balance > 0.0005 }, { label: 'Kitchens only', fn: isKitchen }],
     onRow: (r) => (location.hash = `#/orders/${r.id}`),
     actions: levelOf(S.me, 'orders') === 'edit' ? () => '<button class="btn sm" data-act="edit">Edit</button>' : undefined,
     foot: (l) => `<tr><td colspan="5">Total (${l.length})</td><td class="num">${money(sum('amount', l), 2)}</td><td class="num">${money(sum('paid', l), 2)}</td><td class="num">${money(sum('balance', l), 2)}</td><td class="num">${money(sum('profit', l), 2)}</td><td colspan="3"></td></tr>`,

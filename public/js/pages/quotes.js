@@ -8,7 +8,7 @@ import { quotePieces, allocateLeftovers, accessoriesFor } from '../stock.js';
 import { openPoDialog } from '../po-dialog.js';
 import { dot } from './stock.js';
 import { drawModel, HAND_KINDS, SWING_KINDS } from '../drawings.js';
-import { modal, formHTML, readForm, gpsRow, wireGps, mapLink, parseGps, colourOptions } from '../ui.js';
+import { modal, formHTML, readForm, gpsRow, wireGps, mapLink, parseGps, colourOptions, resolveCustomer } from '../ui.js';
 import { glazingNote } from '../glazing.js';
 
 const STATUS = { draft: ['Draft', ''], sent: ['Sent', 'blue'], accepted: ['Accepted', 'ok'], rejected: ['Rejected', 'bad'] };
@@ -299,8 +299,9 @@ async function editor(el, id) {
   const save = async () => {
     const data = collect();
     if (!data.client) { toast('Enter the client name', 'err'); return null; }
+    const rc = await resolveCustomer(data, q); if (rc === null) return null; if (rc.use_name) { data.client = rc.use_name; $('#client', el).value = rc.use_name; } delete rc.use_name; Object.assign(data, rc);
     const saved = id ? await api.put(`t/quotes/${id}`, data) : await api.post('t/quotes', data);
-    pw = ''; await refresh();
+    pw = ''; q.customer_id = saved.customer_id; await refresh();
     if (saved.approval === 'pending') { toast(`Saved ${saved.number} — the discount is waiting for the admin`, 'err'); $('#status', el).value = saved.status; }
     else toast(`Saved ${saved.number}`);
     aprBanner(saved); $('#toOrder', el)?.toggleAttribute('disabled', !!q.order_inv || saved.approval === 'pending' || saved.approval === 'rejected'); q.approval = saved.approval; q.approval_note = saved.approval_note; return saved;

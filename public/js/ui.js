@@ -58,6 +58,34 @@ export const confirmBox = (msg, label = 'Delete', kind = 'danger') => new Promis
   modal({ title: 'Please confirm', body: `<p>${esc(msg)}</p>`, onClose: () => resolve(false), buttons: [{ label: 'Cancel', onClick: () => { resolve(false); } }, { label, kind, onClick: () => { resolve(true); } }] });
 });
 
+/**
+ * When a name and a number are typed: if the number already belongs to a customer, or another customer has the same name, ask whether it is him.
+ * Resolves to {} (nothing to ask), { customer_id } (it is him), { _new_customer: 1 } (a different person) or null (cancelled).
+ * `cur` is the saved row, so a quotation that already points at the matching customer is not asked again.
+ */
+const phoneKey = (x) => { const d = String(x || '').replace(/\D/g, ''); return d.length >= 7 ? d.slice(-8) : ''; };
+const nameKey = (x) => String(x || '').trim().toLowerCase().replace(/\s+/g, ' ');
+export async function resolveCustomer({ client, mobile }, cur = {}) {
+  const name = nameKey(client); const pk = phoneKey(mobile); if (!name) return {};
+  let list = []; try { list = await api.get('t/customers'); } catch { return {}; }
+  const mine = cur.customer_id ? list.find((c) => c.id === cur.customer_id) : null;
+  if (mine && nameKey(mine.name) === name && (!pk || phoneKey(mine.mobile) === pk || phoneKey(mine.mobile2) === pk || !phoneKey(mine.mobile))) return { customer_id: mine.id };
+  const ask = (title, html, yes, no) => new Promise((resolve) => modal({ title, body: html, onClose: () => resolve(null), buttons: [{ label: 'Cancel', onClick: () => resolve(null) }, { label: no, onClick: () => resolve('no') }, { label: yes, kind: 'primary', onClick: () => resolve('yes') }] }));
+  const card = (c) => `<b>${esc(c.name)}</b> · ${esc(c.code || '')}${c.mobile ? ` · ${esc(c.mobile)}` : ''}${c.address ? `<div class="muted">${esc(c.address)}</div>` : ''}`;
+  const byPhone = pk ? list.find((c) => phoneKey(c.mobile) === pk || phoneKey(c.mobile2) === pk) : null;
+  if (byPhone && nameKey(byPhone.name) !== name) {
+    const a = await ask('This number is already saved', `<p style="margin-top:0">The number <b>${esc(mobile)}</b> already belongs to:</p><p>${card(byPhone)}</p><p>You typed <b>${esc(client)}</b>. Do you mean him?</p>`, 'Yes, it is him', 'No, a different customer');
+    if (a === null) return null; if (a === 'yes') return { customer_id: byPhone.id, use_name: byPhone.name };
+  } else if (byPhone) return { customer_id: byPhone.id };
+  const sameName = list.filter((c) => nameKey(c.name) === name && c.id !== byPhone?.id);
+  for (const c of sameName) {
+    if (pk && (phoneKey(c.mobile) === pk || phoneKey(c.mobile2) === pk)) return { customer_id: c.id };
+    const a = await ask('A customer with this name exists', `<p style="margin-top:0">There is already a customer called <b>${esc(client)}</b>${c.mobile ? ` with the number <b>${esc(c.mobile)}</b>` : ' (no number saved)'}:</p><p>${card(c)}</p><p>Do you mean him?</p>`, 'Yes, it is him', 'No, a new customer');
+    if (a === null) return null; if (a === 'yes') return { customer_id: c.id };
+  }
+  return byPhone || sameName.length ? { _new_customer: 1 } : {};
+}
+
 // ------------------------------------------------------------------ forms
 /** fields: [{key,label,type:text|number|date|select|textarea|check,options,list,step,required,full,hint}] */
 /** Order / invoice numbers are fixed once a record has one. */
@@ -97,7 +125,7 @@ export function editRow({ table, title, fields, row = null, extra = '', defaults
         label: row ? 'Save changes' : 'Create', kind: 'primary', onClick: async () => {
           for (const f of fields) if (f.required && !wrap.querySelector(`[name="${f.key}"]`).value.trim()) { toast(`${f.label} is required`, 'err'); return false; }
           let data = readForm(wrap, fields);
-          if (before) data = before(data, wrap) || data;
+          if (before) { const r = await before(data, wrap); if (r === false) return false; data = r || data; }
           const base = table === 'users' ? 'users' : `t/${table}`;
           const saved = row ? await api.put(`${base}/${row.id}`, data) : await api.post(base, data);
           toast(row ? 'Saved' : 'Created');
