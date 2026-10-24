@@ -1,5 +1,5 @@
 // Stock, leftovers and purchase-order logic shared by the quotation editor, cutting list and PO dialog.
-import { computeModel, nestBars } from './calc.js';
+import { computeModel, nestBars, glazingFix, CLIP_GAP } from './calc.js';
 import { glazingFits, mmOf, GASKETS } from './glazing.js';
 
 const fin = Number.isFinite;
@@ -35,8 +35,9 @@ export function quotePieces(q, models, lib, glassTypes = lib.glassTypes || []) {
     const gt = glassTypes.find((x) => x.id === Number(it.glass_id)); const fit = m.spec?.glazing?.type && gt ? glazingFits(mmOf(gt.thickness), m.spec.glazing.type)[0] : null;
     if (fit) {
       const metres = r.glass.reduce((s2, g) => s2 + (fin(g.w) && fin(g.h) && fin(g.qty) ? (2 * (g.w + g.h) / 100) * g.qty : 0), 0) * n;
-      for (const [letter] of [[fit.outer], [fit.inner]]) { const code = GASKETS[letter].code; const acc = (lib.accessories || []).find((x) => x.code === code); if (acc && metres > 0) out.push({ kind: 'accessory', item: i, label: `Gasket ${letter} (${code})`, accessory_id: acc.id, qty: Math.round(metres * 100) / 100, model: m.name }); }
+      for (const [letter] of (it.fix === 'clip' ? [[fit.outer]] : [[fit.outer], [fit.inner]])) { const code = GASKETS[letter].code; const acc = (lib.accessories || []).find((x) => x.code === code); if (acc && metres > 0) out.push({ kind: 'accessory', item: i, label: `Gasket ${letter} (${code})`, accessory_id: acc.id, qty: Math.round(metres * 100) / 100, model: m.name }); }
     }
+    if (it.fix === 'clip' && gt) { const clip = (lib.accessories || []).find((x) => x.code === 'GCL'); const clips = glazingFix(r.glass, 'clip').clips * n; if (clips > 0) out.push({ kind: 'accessory', item: i, label: `Glazing clips (every ${CLIP_GAP} cm)`, accessory_id: clip ? clip.id : null, qty: clips, model: m.name }); }
   });
   return out;
 }

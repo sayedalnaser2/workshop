@@ -562,3 +562,18 @@ test('same number or same name: the app asks, and the server honours the answer'
     const d = await call('POST', '/api/t/quotes', { client: 'Someone', mobile: '39998888', date: '2026-10-10', items: [], vat_rate: 10, customer_id: a.customer_id }); assert.equal(d.customer_id, a.customer_id); // "yes, it is him"
   } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('glass fixing: gasket both sides or clips + outer gasket, for kitchen doors and for windows', async () => {
+  const { glazingFix, modelCost } = await import('../public/js/calc.js'); const K = await import('../public/js/kitchen.js');
+  assert.deepEqual(glazingFix([{ w: 50, h: 100, qty: 2 }], 'gasket'), { clips: 0, gasket: 12 }); // 2 × (2×(50+100)) cm × 2 panes
+  assert.deepEqual(glazingFix([{ w: 50, h: 100, qty: 2 }], 'clip'), { clips: 20, gasket: 6 }); // 300 cm / 30 = 10 clips a pane
+  assert.equal(glazingFix([{ w: 5, h: 5, qty: 1 }], 'clip').clips, 4); // never fewer than four
+  const cab = { type: 'wall', w: 60, h: 70, d: 32, doors: 2, glazed: 2 };
+  const g = K.cabinetParts(cab, { kind: 'wood', glass_fix: 'gasket' }); const c = K.cabinetParts({ ...cab, glass_fix: 'clip' }, { kind: 'wood', glass_fix: 'gasket' });
+  assert.equal(g.hw.clips, 0); assert.ok(g.hw.gasket > c.hw.gasket); assert.ok(c.hw.clips >= 8); assert.equal(c.glass[0].fix, 'clip');
+  const m = K.kitchenModel({ style: { kind: 'wood', glass_fix: 'clip' }, counter: {}, runs: [{ cabinets: [cab, cab] }] }); assert.equal(m.hw.clips, c.hw.clips * 2);
+  assert.ok(K.priceKitchen(m, { general: { glass_clip: 0.5 } }).lines.some((l) => l.label === 'Glazing clips' && l.total === 0.5 * m.hw.clips));
+  const model = { spec: { glass: [{ label: 'Pane', w: 'W-8', h: 'H-8', qty: '1' }], profiles: [], accessories: [] } };
+  const lib = { profiles: [], accessories: [{ id: 1, code: 'GCL', price: 0.4 }], glassTypes: [] };
+  assert.ok(modelCost(model, 100, 100, lib, { price_m2: 0 }, 'clip').accessories > 0); assert.equal(modelCost(model, 100, 100, lib, { price_m2: 0 }, 'gasket').accessories, 0);
+});

@@ -11,7 +11,7 @@ import { needsSetup, syncEmployees, authenticate, createUser, updateUser, delete
 import { tableAccess, hasAny, hasEditAny, seesMoney } from './public/js/perm.js';
 import { importWorkbook } from './src/importer.js';
 import { DEFAULT_CHART, buildEntries, trialBalance, statements, accountLedger, DEBIT_TYPES } from './public/js/accounting.js';
-import { seedBankAccounts, linkBankToChart, seedChart, seedLibrary, seedKitchenOptions, seedExtraModels, seedKitchenPresets, seedBalexco, seedKitchenProfiles, seedAluKitchen, ensureLoyaltyAccount } from './src/seed.js';
+import { seedBankAccounts, linkBankToChart, seedChart, seedLibrary, seedKitchenOptions, seedExtraModels, seedGlazingClips, seedKitchenPresets, seedBalexco, seedKitchenProfiles, seedAluKitchen, ensureLoyaltyAccount } from './src/seed.js';
 import { isOnTask, taskViews, taskView, myTasks, taskAction, logsFor, sessionsFor, activity, onTaskCreated, onTaskUpdated, markPresent, shiftStatus, overtimeAction, dayReport } from './src/tasks.js';
 import { targetProgress, METRICS } from './src/targets.js';
 import { exportWorkbook } from './src/exporter.js';
@@ -23,7 +23,7 @@ import { audit, diff, labelOf, listAudit, notable, withUpd } from './src/audit.j
 import { portalApi, newPortalCode, showCode, portalOf } from './src/portal.js';
 import { respond, staticServer, throttleCheck, throttleFail, throttleOk, runBackup, listBackups, backupDir } from './src/web.js';
 
-syncEmployees(); seedChart(DEFAULT_CHART); ensureLoyaltyAccount(); seedBankAccounts(); freezeAllVat(); seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedKitchenPresets(); seedBalexco(); seedKitchenProfiles(); seedAluKitchen();
+syncEmployees(); seedChart(DEFAULT_CHART); ensureLoyaltyAccount(); seedBankAccounts(); freezeAllVat(); seedLibrary(); seedKitchenOptions(); seedExtraModels(); seedGlazingClips(); seedKitchenPresets(); seedBalexco(); seedKitchenProfiles(); seedAluKitchen();
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DEV = process.env.WORKSHOP_DEV === '1';

@@ -137,12 +137,26 @@ export function computeModel(model, w, h, lib = {}) {
 }
 
 /** Material cost estimate for one unit of a model at W×H (cm). */
-export function modelCost(model, w, h, lib = {}, glassType = null) {
+/** How the glass is held: two gaskets (outer + inner), or clips every CLIP_GAP cm with one gasket on the outside. */
+export const GLASS_FIX = { gasket: 'Gasket (both sides)', clip: 'Clips + outer gasket' };
+export const CLIP_GAP = 30;
+/** Clips and gasket metres for panes [{w,h,qty}] (cm) fixed the given way. */
+export function glazingFix(panes, fix = 'gasket') {
+  let clips = 0; let gasket = 0;
+  for (const g of panes || []) {
+    const w = +g.w, h = +g.h, q = +g.qty || 1; if (!(w > 0 && h > 0)) continue;
+    const per = 2 * (w + h);
+    if (fix === 'clip') { clips += Math.max(4, Math.ceil(per / CLIP_GAP)) * q; gasket += (per / 100) * q; } else gasket += (2 * per / 100) * q;
+  }
+  return { clips, gasket: Math.round(gasket * 100) / 100 };
+}
+export function modelCost(model, w, h, lib = {}, glassType = null, fix = 'gasket') {
   const m = computeModel(model, w, h, lib);
   let prof = 0, glassCost = 0, acc = 0;
   for (const p of m.profiles) if (p.profile && p.profile.bar_length > 0) prof += ((p.length * p.qty) / p.profile.bar_length) * (p.profile.price_bar || 0);
   if (glassType) for (const g of m.glass) glassCost += ((g.w * g.h * g.qty) / 10000) * (glassType.price_m2 || 0);
   for (const a of m.accessories) if (a.accessory) acc += a.qty * (a.accessory.price || 0);
+  if (fix === 'clip' && glassType) { const clip = (lib.accessories || []).find((a) => a.code === 'GCL'); acc += glazingFix(m.glass, 'clip').clips * (clip?.price || 0); }
   return { profiles: prof, glass: glassCost, accessories: acc, total: prof + glassCost + acc };
 }
 

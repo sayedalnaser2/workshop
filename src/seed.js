@@ -110,6 +110,10 @@ export function seedKitchenOptions() {
   for (const [k, label] of gen) add('general', k, '', null, label);
 }
 
+/** The glazing clip accessory, added to databases that already exist (glass held by clips instead of two gaskets). */
+export function seedGlazingClips() {
+  if (!listRows('accessories').some((a) => a.code === 'GCL')) insertRow('accessories', { code: 'GCL', name: 'Glazing clip', unit: 'ea', price: 0 });
+}
 // ---------------------------------------------------------------------------- more models (added to databases that already exist, by name)
 const byCode = (rows, code) => rows.find((r) => r.code === code)?.id;
 export function seedExtraModels() {
@@ -375,6 +379,8 @@ export function seedAluKitchen() {
   const has = (kind, name) => db.prepare('SELECT 1 FROM kitchen_options WHERE kind=? AND name=?').get(kind, name);
   const next = () => (db.prepare('SELECT IFNULL(MAX(sort),0)+1 n FROM kitchen_options').get().n);
   if (!has('general', 'frame_corner')) insertRow('kitchen_options', { kind: 'general', name: 'frame_corner', price: 0, unit: '', meta: null, note: 'Aluminium door frame: assembly, per corner', sort: next() });
+  if (!has('general', 'glass_clip')) insertRow('kitchen_options', { kind: 'general', name: 'glass_clip', price: 0, unit: '', meta: null, note: 'Glazed door: glazing clip, each', sort: next() });
+  if (!has('general', 'glass_gasket_m')) insertRow('kitchen_options', { kind: 'general', name: 'glass_gasket_m', price: 0, unit: '', meta: null, note: 'Glazed door: glass gasket, per metre', sort: next() });
   if (!db.prepare("SELECT 1 FROM kitchen_options WHERE kind='profile'").get()) for (const x of ['Slim door frame 20 mm', 'Glass door frame 25 mm', 'Handle-less frame (G-profile)']) insertRow('kitchen_options', { kind: 'profile', name: x, price: 0, unit: 'bar', meta: null, note: '', sort: next() });
 }
 
