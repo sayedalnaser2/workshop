@@ -563,17 +563,16 @@ test('same number or same name: the app asks, and the server honours the answer'
   } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('glass: every glazed door and window has both clips and a gasket, each of its own type', async () => {
+test('glass: windows and doors have both clips and a gasket, kitchens only a gasket, each of its own type', async () => {
   const { glazingFix, glazingParts, modelCost, isClip, isGasket } = await import('../public/js/calc.js'); const K = await import('../public/js/kitchen.js');
   assert.deepEqual(glazingFix([{ w: 50, h: 100, qty: 2 }]), { clips: 20, metres: 6 }); // 300 cm round a pane: a clip every 30 cm, 3 m of gasket
   assert.equal(glazingFix([{ w: 5, h: 5, qty: 1 }]).clips, 4); // never fewer than four
   const cab = { type: 'wall', w: 60, h: 70, d: 32, doors: 2, glazed: 2 };
-  const a = K.cabinetParts(cab, { kind: 'wood', glass_clip: 'Snap', glass_gasket: 'Black rubber' }); const b = K.cabinetParts({ ...cab, glass_clip: 'Screw', glass_gasket: 'Grey rubber' }, { kind: 'wood', glass_clip: 'Snap', glass_gasket: 'Black rubber' });
-  assert.ok(a.hw.clips >= 8 && a.hw.gasket > 0); assert.equal(a.glass[0].clip, 'Snap'); assert.equal(b.glass[0].clip, 'Screw'); assert.equal(b.glass[0].gasket, 'Grey rubber');
-  const m = K.kitchenModel({ style: { kind: 'wood', glass_clip: 'Snap', glass_gasket: 'Black rubber' }, counter: {}, runs: [{ cabinets: [cab, { ...cab, glass_clip: 'Screw' }] }] });
-  const lines = K.priceKitchen(m, { clip: { Snap: { price: 0.5 }, Screw: { price: 1 } }, gasket: { 'Black rubber': { price: 2 } } }).lines;
-  const snap = lines.find((l) => l.label === 'Glazing clips — Snap'); const screw = lines.find((l) => l.label === 'Glazing clips — Screw'); assert.ok(snap && screw); assert.equal(snap.total, 0.5 * a.hw.clips); assert.equal(screw.total, 1 * a.hw.clips);
-  assert.ok(lines.some((l) => l.label === 'Glass gasket — Black rubber'));
+  const a = K.cabinetParts(cab, { kind: 'wood', glass_gasket: 'Black rubber' }); const b = K.cabinetParts({ ...cab, glass_gasket: 'Grey rubber' }, { kind: 'wood', glass_gasket: 'Black rubber' });
+  assert.equal(a.hw.clips, undefined); assert.ok(a.hw.gasket > 0); assert.equal(a.glass[0].gasket, 'Black rubber'); assert.equal(b.glass[0].gasket, 'Grey rubber'); // kitchens have a gasket, no clips
+  const m = K.kitchenModel({ style: { kind: 'wood', glass_gasket: 'Black rubber' }, counter: {}, runs: [{ cabinets: [cab, { ...cab, glass_gasket: 'Grey rubber' }] }] });
+  const lines = K.priceKitchen(m, { gasket: { 'Black rubber': { price: 2 }, 'Grey rubber': { price: 3 } } }).lines;
+  assert.ok(Math.abs(lines.find((l) => l.label === 'Glass gasket — Black rubber').total - 2 * a.hw.gasket) < 0.1); assert.ok(Math.abs(lines.find((l) => l.label === 'Glass gasket — Grey rubber').total - 3 * a.hw.gasket) < 0.1); assert.ok(!lines.some((l) => /clip/i.test(l.label)));
   const acc = [{ id: 1, code: 'GCL', name: 'Glazing clip', price: 0.4 }, { id: 2, code: 'GCL2', name: 'Wide clip', price: 0.9 }, { id: 3, code: 'E2113', name: 'Gasket EPDM', price: 1.5 }, { id: 4, code: 'MCL', name: 'Mirror clip', price: 5 }];
   assert.deepEqual(acc.filter(isClip).map((x) => x.id), [1, 2]); assert.deepEqual(acc.filter(isGasket).map((x) => x.id), [3]);
   const model = { spec: { glass: [{ label: 'Pane', w: 'W-8', h: 'H-8', qty: '1' }], profiles: [], accessories: [] } }; const lib = { profiles: [], accessories: acc, glassTypes: [] };
