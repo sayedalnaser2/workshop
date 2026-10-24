@@ -154,7 +154,13 @@ function cabinetPartsBase(cab, style = DEFAULT_STYLE) {
       } else bar(ALU.col, 'Square profile front/top', W - 5, 1); }
       bar(ALU.col, 'Column for hinged doors', H - 5, colQty);
       bar(ALU.edge, 'Shelf (width)', W - 1.4, 2 * nShelf); bar(ALU.edge, 'Shelf (depth)', D - 3.2, 2 * nShelf);
-      if (type.wall || topSheet) sheet(`${tag}Top`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Bottom`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Side`, H - 5.2, D - 5.2, 2 - Math.min(2, +cab._ends || 0), 'white22'); sheet(`${tag}End side`, H - 5.2, D - 5.2, Math.min(2, +cab._ends || 0), 'end'); sheet(`${tag}Back`, W - 5.2, H - 5.2, 1, 'white22');
+      if (type.wall || topSheet) sheet(`${tag}Top`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Bottom`, W - 5.2, D - 5.2, 1, 'white22'); { const sideN = (cab.door_side === 'left' || cab.door_side === 'right') ? 1 : 0; const eN = Math.min(2, +cab._ends || 0); const wN = 2 - eN; const dropW = sideN && wN > 0 ? 1 : 0; sheet(`${tag}Side`, H - 5.2, D - 5.2, wN - dropW, 'white22'); sheet(`${tag}End side`, H - 5.2, D - 5.2, eN - (sideN && !dropW ? 1 : 0), 'end'); } sheet(`${tag}Back`, W - 5.2, H - 5.2, 1, 'white22');
+    }
+    const doorSide = !type.tall && !type.corner && (cab.door_side === 'left' || cab.door_side === 'right') ? cab.door_side : '';
+    if (doorSide) { // a door on this side: its half of the 22422 profile becomes 22421, a hinge column and a side door are added (the side sheet goes)
+      const swapped = []; for (const b of bars) { const half = b.code === ALU.deep && b.qty >= 2 && b.qty % 2 === 0 ? b.qty / 2 : 0; if (half) swapped.push({ ...b, qty: half }, { ...b, code: ALU.edge, qty: half, label: `${b.label} (door side)` }); else swapped.push(b); } bars.length = 0; bars.push(...swapped);
+      bar(ALU.col, `Door-side column (${doorSide})`, H - 5, 1);
+      const sdh = type.wall ? H + (hidden ? 1.5 : -0.5) : H - (hidden ? 3.5 : 1); front(`${tag}Side door (${doorSide})`, D - 1, sdh, 1); hw.hinges += hingesFor(sdh); hw.handles += 1; hw.handleLen += sdh;
     }
   } else {
     const ends = Math.min(2, +cab._ends || 0); // sides the customer sees are cut from the end sheet

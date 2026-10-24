@@ -226,6 +226,11 @@ export function scene(spec, open = {}) {
         }
         void gap; void depthB;
       } else if (t.counter) put(u, u + w, 0, d + over, ytop, ytop + ct, top, 'top');
+      if (alu && (c.door_side === 'left' || c.door_side === 'right') && !t.tall && !t.corner && !t.gap && !t.shelf && !t.hood) { // a door on the side of the cabinet: frame with its infill
+        const x0 = c.door_side === 'left' ? u - 1.2 : u + w; put(x0, x0 + 1.2, 0, d, y0, y0 + h, frame, 'frame');
+        const xi = c.door_side === 'left' ? x0 - .3 : x0 + 1.2; put(xi, xi + .3, 4.5, d - 4.5, y0 + 4.5, y0 + h - 4.5, door, 'infill');
+        put(c.door_side === 'left' ? x0 - .8 : x0 + 1.2, c.door_side === 'left' ? x0 : x0 + 2, d - 3, d - 2, y0 + h * .35, y0 + h * .65, STEEL, 'handle');
+      }
       // accessories
       const accs = c.acc || [];
       if (t.sink || (accs.includes('tap') && t.counter)) { const tx = u + w * .5; put(tx - 1.5, tx + 1.5, 3, 6, ytop + ct, ytop + ct + 22, '#d7dbe0', 'acc'); put(tx - 1.2, tx + 1.2, 3, 20, ytop + ct + 20, ytop + ct + 23, '#d7dbe0', 'acc'); }
