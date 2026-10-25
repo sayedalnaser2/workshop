@@ -625,3 +625,13 @@ test('base cabinet with a side door: bars lose the door thickness, one edge fron
   const sd = b.frames.find((f) => /Side door/.test(f.label)); assert.deepEqual([sd.w, sd.h], [56, 72]);
 });
 
+
+test('profiles in 3D: every bar of an aluminium cabinet becomes a box with its part, size and quantity', async () => {
+  const { profileScene } = await import('../public/js/kitchen-profiles.js'); const { cabinetParts } = await import('../public/js/kitchen.js');
+  for (const cab of [{ type: 'base', w: 80, h: 72, d: 56, doors: 2, shelves: 1 }, { type: 'base', w: 60, h: 72, d: 56, doors: 1, door_side: 'right' }, { type: 'wall', w: 100, h: 70, d: 32, doors: 2, shelves: 1 }, { type: 'tall', w: 60, h: 210, d: 56, doors: 2, shelves: 2 }]) {
+    const r = cabinetParts(cab, { kind: 'aluminium' }); const sc = profileScene(cab, { kind: 'aluminium' });
+    const bars = r.bars.reduce((a, b) => a + b.qty, 0) + 4 * r.frames.reduce((a, f) => a + f.qty, 0);
+    assert.equal(sc.boxes.length, bars); assert.equal(sc.parts.reduce((a, p) => a + p.qty, 0), bars - 2 * r.frames.reduce((a, f) => a + f.qty, 0) + 0 * 1 + 2 * r.frames.reduce((a, f) => a + f.qty, 0) - 0, 'legend counts every bar');
+    assert.ok(sc.boxes.every((b) => b.corners.flat().every(Number.isFinite) && b.ref.tip.len > 0 && b.ref.tip.qty > 0 && b.ref.tip.part));
+  }
+});
