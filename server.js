@@ -331,7 +331,7 @@ async function api(req, res, url) {
       needAny('orders');
       const taskIds = db.prepare('SELECT id FROM tasks WHERE order_inv=?').all(o.inv).map((t) => String(t.id));
       const att = db.prepare("SELECT id, ref_type, ref_key, file_name, note, tag, created_at FROM attachments WHERE mime LIKE 'image/%' AND ((ref_type='order' AND ref_key=?)" + (taskIds.length ? ` OR (ref_type='task' AND ref_key IN (${taskIds.map(() => '?').join(',')}))` : '') + ') ORDER BY id DESC').all(o.inv, ...taskIds);
-      const kit = db.prepare('SELECT id, name FROM kitchens WHERE order_inv=? ORDER BY id').all(o.inv);
+      const kit = db.prepare('SELECT id, name FROM kitchens WHERE order_inv=? OR (customer_id IS NOT NULL AND customer_id=?) ORDER BY id').all(o.inv, o.customer_id ?? -1); // kitchens are models: the customer's kitchens can be shown
       return send(res, 200, { code: showCode(o.portal_code), enabled: !!o.portal_code, portal: portalOf(o), photos: att, kitchens: kit });
     }
     if (m === 'POST') {

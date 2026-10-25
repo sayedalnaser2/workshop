@@ -171,7 +171,7 @@ function cabinetPartsBase(cab, style = DEFAULT_STYLE) {
     else if (type.tall) { add(`${tag}Top`, W - 2 * t, dd, 1, 'carcass', W - 2 * t); }
     else if (topSheet) add(`${tag}Top`, W - 2 * t, dd, 1, 'carcass', W - 2 * t);
     else add(`${tag}Top rail`, W - 2 * t, 8, 2, 'carcass', 0);
-    add(`${tag}Back`, W - 0.4, H - 0.4, 1, 'back', 0);
+    add(`${tag}Back`, W - 0.4, H - 0.4, 1, 'carcass', 0); // the back is cut from the same sheet as the inside of the cabinet
     add(`${tag}Shelf`, W - 2 * t - 0.2, dd - 2, nShelf, 'carcass', W - 2 * t - 0.2);
   }
   // drawers share the height with doors only on mixed cabinets; here a cabinet is either doors or drawers (or a stack above doors)
@@ -203,7 +203,7 @@ function cabinetPartsBase(cab, style = DEFAULT_STYLE) {
     const dw = Math.max(0, W - D - g); const dl = Math.max(0, D - g); const dh = H - g;
     front(`${tag}Corner door (front)`, dw, dh, 1); front(`${tag}Corner door (side)`, Math.max(0, W - D - g), dh, 1);
     doorHw(2, dw, dh, ['slide', 'shutter'].includes(dir) ? 'auto' : dir);
-    add(`${tag}Side (return)`, W - D, H, 1, 'carcass', H); add(`${tag}Inner back`, D, H, 1, 'back', 0); add(`${tag}Bottom (return leg)`, D - t, W - D, 1, 'carcass', 0);
+    add(`${tag}Side (return)`, W - D, H, 1, 'carcass', H); add(`${tag}Inner back`, D, H, 1, 'carcass', 0); add(`${tag}Bottom (return leg)`, D - t, W - D, 1, 'carcass', 0);
     if (type.wall) add(`${tag}Top (return leg)`, D - t, W - D, 1, 'carcass', 0);
     hw.pins += 0; void dl;
   } else {
@@ -230,10 +230,10 @@ function cabinetPartsBase(cab, style = DEFAULT_STYLE) {
 }
 
 /** Kitchen defaults from Settings: the door frame profile and the handle every kitchen uses unless it picks its own. */
-let KDEF = { profile: null, handle: '', inner_t: 22, door_lining: false, inner_options: [22, 4, 5] };
+let KDEF = { profile: null, handle: '', inner_t: 22, inner_options: [22, 4, 5] };
 export function setKitchenDefaults(d, profiles) {
   const p = d && d.profile_id ? (profiles || []).find((x) => x.id === Number(d.profile_id)) : null;
-  const opts = ((d && d.inner_options) || []).map(Number).filter((n) => n > 0); KDEF = { profile: p || null, handle: (d && d.handle) || '', inner_t: Number(d && d.inner_t) > 0 ? Number(d.inner_t) : 22, door_lining: !!(d && d.door_lining), inner_options: opts.length ? opts : [22, 4, 5] };
+  const opts = ((d && d.inner_options) || []).map(Number).filter((n) => n > 0); KDEF = { profile: p || null, handle: (d && d.handle) || '', inner_t: Number(d && d.inner_t) > 0 ? Number(d.inner_t) : 22, inner_options: opts.length ? opts : [22, 4, 5] };
 }
 export const innerOptions = () => KDEF.inner_options;
 /** A kitchen's style with the Settings defaults filled in where the kitchen chose nothing. */
@@ -242,7 +242,6 @@ export function withDefaults(style) {
   if (!out.profile && p) { out.profile = [p.code, p.name].filter(Boolean).join(' '); out.frame_profile_id = p.id; if (p.face_w && (out.frame_w === undefined || out.frame_w === '')) out.frame_w = Math.round(+p.face_w) / 10 || undefined; if ((out.bar_len === undefined || out.bar_len === '') && p.bar_length) out.bar_len = p.bar_length; if (!(+out.profile_price > 0)) out.profile_price = Number(p.price_bar) || 0; }
   if (!out.handle && KDEF.handle) out.handle = KDEF.handle;
   if (!(+out.inner_t > 0)) out.inner_t = KDEF.inner_t;
-  if (out.door_lining === undefined) out.door_lining = KDEF.door_lining;
   return out;
 }
 /** The sheet types and the stock the shop has (set from the data the app loads): used pieces are always cut first. */
@@ -409,7 +408,6 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   const s = { ...DEFAULT_STYLE, ...style };
   const glassDoors = s.door_kind === 'glass'; const c0 = glassDoors && !(+cab.glazed >= Math.round(+cab.doors || 0)) ? { ...cab, glazed: Math.max(0, Math.round(+cab.doors || 0)) } : cab;
   const r = cabinetPartsBase(c0, style);
-  if (s.door_lining && !glassDoors) { const extra = []; for (const p of r.panels) if (p.mat === 'door') extra.push({ ...p, label: `${p.label} (inside)`, mat: 'white16', edge: 0 }); r.panels.push(...extra); }
   const gasN = cab.glass_gasket || s.glass_gasket || ''; for (const g of r.glass) g.gasket = gasN; r.hw.gasket = glazingFix(r.glass).metres; // a glazed kitchen door has a gasket of its own type (no clips)
   r.joints = s.kind === 'aluminium' ? jointsOf(cab, r) : [];
   const ov = cab.sheets || {};

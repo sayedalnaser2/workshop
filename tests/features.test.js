@@ -535,11 +535,11 @@ test('sheets by purpose: thickness, door kind, glass without inside sheet, linin
   assert.equal(K.fmtThick(22), '2.2 cm'); assert.equal(K.fmtThick(4), '4 mm');
   const cab = { type: 'wall', w: 60, h: 70, d: 32, doors: 1, drawers: 0, shelves: 1 };
   const base = { kind: 'wood', carcass: 'White 22', door: 'Oak', white16: 'White 16' };
-  const lined = K.cabinetParts(cab, { ...base, door_lining: true });
-  assert.ok(lined.panels.some((p) => p.mat === 'white16' && /inside/.test(p.label)));
-  assert.ok(!K.cabinetParts(cab, { ...base, door_lining: false }).panels.some((p) => p.mat === 'white16'));
-  const glass = K.cabinetParts(cab, { ...base, door_lining: true, door_kind: 'glass' });
-  assert.ok(!glass.panels.some((p) => p.mat === 'white16')); assert.equal(glass.glass.length, 1);
+  assert.ok(!K.cabinetParts(cab, { ...base, door_lining: true }).panels.some((p) => p.mat === 'white16')); // no lining behind wooden doors
+  const glass = K.cabinetParts(cab, { ...base, door_kind: 'glass' });
+  assert.equal(glass.glass.length, 1);
+  const plain = K.cabinetParts({ type: 'base', w: 60, h: 72, d: 56, doors: 1 }, { kind: 'wood', carcass: 'White 22' }); // the back is cut from the inside (carcass) sheet
+  assert.ok(plain.panels.some((p) => /Back$/.test(p.label) && p.mat === 'carcass')); assert.ok(!plain.panels.some((p) => p.mat === 'back'));
   const custom = K.cabinetParts({ ...cab, sheets: { door: 'Alu sheet' } }, base);
   assert.ok(custom.panels.some((p) => p.mat === 'door@Alu sheet')); assert.ok(!custom.panels.some((p) => p.mat === 'door'));
   const spec = { style: base, counter: {}, runs: [{ cabinets: [cab, { ...cab, sheets: { door: 'Alu sheet' } }] }] };
