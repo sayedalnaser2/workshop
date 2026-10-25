@@ -154,6 +154,7 @@ function cabinetPartsBase(cab, style = DEFAULT_STYLE) {
         const segs = hiddenSegments(cab); for (const [a, b2] of segs) bars.push({ code: ALU.hidden, label: tag + 'Hidden handle profile', len: r1(b2 - a), qty: 1, seg: [a, b2] });
         const covered = segs.reduce((acc, [a, b2]) => acc + b2 - a, 0); if (W - covered > 5.5) bar(ALU.col, 'Square profile front/top (open part)', W - covered - 5, 1);
       } else bar(ALU.col, 'Square profile front/top', W - (baseDoorSide ? 2.5 : 5), 1); }
+      if (baseDoorSide) bar(ALU.col, 'Edge top side (door side)', D, 1); // the door side keeps a top bar from the back to the front, in 23564
       bar(ALU.col, 'Column for hinged doors', H - 5, colQty);
       bar(ALU.edge, 'Shelf (width)', W - 1.4 + (wallDoorSide ? 0.7 : 0) - (baseDoorSide ? 1.3 : 0), 2 * nShelf); bar(ALU.edge, 'Shelf (depth)', D - 3.2, 2 * nShelf);
       if (type.wall || topSheet) sheet(`${tag}Top`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Bottom`, W - 5.2, D - 5.2, 1, 'white22'); { const sideN = (cab.door_side === 'left' || cab.door_side === 'right') ? 1 : 0; const eN = Math.min(2, +cab._ends || 0); const wN = 2 - eN; const dropW = sideN && wN > 0 ? 1 : 0; sheet(`${tag}Side`, H - 5.2, D - 5.2, wN - dropW, 'white22'); sheet(`${tag}End side`, H - 5.2, D - 5.2, eN - (sideN && !dropW ? 1 : 0), 'end'); } sheet(`${tag}Back`, W - 5.2, H - 5.2, 1, 'white22');

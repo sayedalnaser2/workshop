@@ -259,6 +259,16 @@ export function scene(spec, open = {}) {
 const FACES = [ // [normal, corner indexes] — corners are numbered by bits: x=1, y=2, z=4
   [[0, 0, 1], [4, 5, 7, 6]], [[0, 0, -1], [0, 2, 3, 1]], [[1, 0, 0], [1, 3, 7, 5]], [[-1, 0, 0], [0, 4, 6, 2]], [[0, 1, 0], [2, 6, 7, 3]], [[0, -1, 0], [0, 1, 5, 4]],
 ];
+/** A polygon in camera space cut to the part in front of the near plane z = n (Sutherland–Hodgman). */
+function clipNear(poly, n) {
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]; const b = poly[(i + 1) % poly.length]; const ina = a[2] >= n; const inb = b[2] >= n;
+    if (ina) out.push(a);
+    if (ina !== inb) { const t = (n - a[2]) / (b[2] - a[2]); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, n]); }
+  }
+  return out;
+}
 /** Draw the boxes on a canvas. view = { yaw, pitch, zoom }. Returns nothing. */
 export function draw3D(canvas, boxes, view = {}) {
   const sel = view.selected; const hov = view.hover; const same = (a, b) => a && b && a.ri === b.ri && a.ci === b.ci; canvas._hit = [];
@@ -300,7 +310,7 @@ export function draw3D(canvas, boxes, view = {}) {
     }
   }
   faces.sort((a, b) => b.depth - a.depth);
-  for (const fc of faces) { if (fc.pts.some((p) => p[2] < 5)) continue; const p = fc.pts.map(proj); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fillStyle = fc.fill; ctx.fill();
+  for (const fc of faces) { let cp3 = fc.pts; if (cp3.some((p) => p[2] < 5)) { cp3 = clipNear(cp3, 5); if (cp3.length < 3) continue; fc.tex = null; } /* a face that reaches past the camera is cut at the near plane instead of vanishing */ const p = cp3.map(proj); ctx.beginPath(); p.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fillStyle = fc.fill; ctx.fill();
     if (fc.tex && p.length === 4 && Math.min(Math.hypot(...[0, 1, 2].map((i) => fc.wq[1][i] - fc.wq[0][i])), Math.hypot(...[0, 1, 2].map((i) => fc.wq[3][i] - fc.wq[0][i]))) > 4) { // a picture on the face: the image is laid on the face's own corners, grain running up the face, then shaded like the plain colour
       const q = fc.wq; const e1 = [q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]]; const e3 = [q[3][0] - q[0][0], q[3][1] - q[0][1], q[3][2] - q[0][2]];
       const swap = Math.abs(e1[1]) > Math.abs(e3[1]); // grain runs up the face

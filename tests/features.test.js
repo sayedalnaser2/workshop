@@ -586,7 +586,7 @@ test('door side: 22422 on that side becomes 22421, a full-size side door and no 
   for (const type of ['base', 'wall']) {
     const cab = { type, w: 80, h: type === 'wall' ? 70 : 72, d: type === 'wall' ? 32 : 56, doors: 2 }; const a = cabinetParts(cab, st); const b = cabinetParts({ ...cab, door_side: 'right' }, st);
     assert.equal(sum(b, ALU.deep), sum(a, ALU.deep) / 2); assert.equal(sum(b, ALU.edge), sum(a, ALU.edge) + sum(a, ALU.deep) / 2 - (type === 'wall' ? 1 : 2)); // a wall cabinet drops one front side bar, a base cabinet one edge front side and one edge top side
-    assert.equal(sum(b, ALU.col), sum(a, ALU.col)); const sd = b.frames.find((f) => /Side door \(right\)/.test(f.label)); assert.ok(sd && sd.w === cab.d && sd.h === cab.h); // no extra column; the door covers the whole side
+    assert.equal(sum(b, ALU.col), sum(a, ALU.col) + (type === 'base' ? 1 : 0)); const sd = b.frames.find((f) => /Side door \(right\)/.test(f.label)); assert.ok(sd && sd.w === cab.d && sd.h === cab.h); // no extra column; the door covers the whole side
     const sides = (r) => r.panels.filter((p) => /Side$/.test(p.label)).reduce((x, p) => x + p.qty, 0); assert.equal(sides(b), sides(a) - 1);
     assert.equal(b.hw.hinges, a.hw.hinges + (type === 'wall' ? 2 : 2));
   }
@@ -621,6 +621,7 @@ test('base cabinet with a side door: bars lose the door thickness, one edge fron
   assert.deepEqual([get(a, 'Edge front side').qty, get(b, 'Edge front side').qty], [2, 1]); assert.deepEqual([get(a, 'Edge top side').qty, get(b, 'Edge top side').qty], [2, 1]);
   assert.deepEqual([get(a, 'Shelf (width)').len, get(b, 'Shelf (width)').len], [58.6, 57.3]);
   assert.deepEqual([get(a, 'Back bottom').len, get(b, 'Back bottom').len], [60, 58]); assert.deepEqual([get(a, 'Square profile front/top').len, get(b, 'Square profile front/top').len], [55, 57.5]);
+  assert.deepEqual([get(b, 'Edge top side (door side)').code, get(b, 'Edge top side (door side)').len, get(b, 'Edge top side (door side)').qty], [ALU.col, 56, 1]); assert.equal(get(a, 'Edge top side (door side)'), undefined); // the door side keeps its top bar, in 23564
   assert.equal(get(b, 'Bottom deep (door side)').code, ALU.edge); assert.equal(get(b, 'Back height (door side)').code, ALU.edge);
   const sd = b.frames.find((f) => /Side door/.test(f.label)); assert.deepEqual([sd.w, sd.h], [56, 72]);
 });
