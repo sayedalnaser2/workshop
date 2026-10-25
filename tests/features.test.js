@@ -585,9 +585,19 @@ test('door side: 22422 on that side becomes 22421, a full-size side door and no 
   const st = { kind: 'aluminium' }; const sum = (r, code) => r.bars.filter((b) => b.code === code).reduce((a, b) => a + b.qty, 0);
   for (const type of ['base', 'wall']) {
     const cab = { type, w: 80, h: type === 'wall' ? 70 : 72, d: type === 'wall' ? 32 : 56, doors: 2 }; const a = cabinetParts(cab, st); const b = cabinetParts({ ...cab, door_side: 'right' }, st);
-    assert.equal(sum(b, ALU.deep), sum(a, ALU.deep) / 2); assert.equal(sum(b, ALU.edge), sum(a, ALU.edge) + sum(a, ALU.deep) / 2);
+    assert.equal(sum(b, ALU.deep), sum(a, ALU.deep) / 2); assert.equal(sum(b, ALU.edge), sum(a, ALU.edge) + sum(a, ALU.deep) / 2 - (type === 'wall' ? 1 : 0)); // a wall cabinet also drops one front side bar
     assert.equal(sum(b, ALU.col), sum(a, ALU.col)); const sd = b.frames.find((f) => /Side door \(right\)/.test(f.label)); assert.ok(sd && sd.w === cab.d && sd.h === cab.h); // no extra column; the door covers the whole side
     const sides = (r) => r.panels.filter((p) => /Side$/.test(p.label)).reduce((x, p) => x + p.qty, 0); assert.equal(sides(b), sides(a) - 1);
     assert.equal(b.hw.hinges, a.hw.hinges + (type === 'wall' ? 2 : 2));
   }
 });
+
+test('wall cabinet with a side door: one front side bar and shelves 0.7 cm wider', async () => {
+  const { cabinetParts, ALU } = await import('../public/js/kitchen.js'); const st = { kind: 'aluminium' };
+  const cab = { type: 'wall', w: 60, h: 70, d: 32, doors: 1, shelves: 1 }; const get = (r, label) => r.bars.find((b) => b.label.endsWith(label));
+  const a = cabinetParts(cab, st); const b = cabinetParts({ ...cab, door_side: 'right' }, st);
+  assert.equal(get(a, 'Front side').qty, 2); assert.equal(get(b, 'Front side').qty, 1);
+  assert.equal(get(a, 'Shelf (width)').len, 58.6); assert.equal(get(b, 'Shelf (width)').len, 59.3);
+  const sd = b.frames.find((f) => /Side door/.test(f.label)); assert.equal(sd.w, 32); assert.equal(sd.h, 70);
+});
+
