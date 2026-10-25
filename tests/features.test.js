@@ -601,3 +601,14 @@ test('wall cabinet with a side door: one front side bar and shelves 0.7 cm wider
   const sd = b.frames.find((f) => /Side door/.test(f.label)); assert.equal(sd.w, 32); assert.equal(sd.h, 70);
 });
 
+
+test('aluminium connectors: 3-way at the cabinet frame corners, elbows on shelf, door and side-door frames', async () => {
+  const { kitchenModel, priceKitchen } = await import('../public/js/kitchen.js');
+  const m = kitchenModel({ style: { kind: 'aluminium' }, counter: {}, runs: [{ cabinets: [{ type: 'wall', w: 100, h: 70, d: 32, doors: 2, shelves: 1 }, { type: 'wall', w: 60, h: 70, d: 32, doors: 1, shelves: 0, door_side: 'right' }] }] });
+  assert.equal(m.jointTotals.way3, 16); // 8 per cabinet
+  assert.equal(m.jointTotals.elbow, 4 * 1 /* shelf */ + 4 * 2 /* two doors */ + 4 * 1 /* door */ + 4 * 1 /* side door */);
+  assert.ok(m.joints.some((j) => j.cab === 'A2' && /Side door/.test(j.label)));
+  const lines = priceKitchen(m, { general: { elbow: 0.5, conn3: 1 } }).lines;
+  assert.equal(lines.find((l) => l.label === '3-way connector').total, 16); assert.equal(lines.find((l) => l.label === 'Elbow (2-way)').total, 0.5 * m.jointTotals.elbow);
+  assert.equal(kitchenModel({ style: { kind: 'wood' }, counter: {}, runs: [{ cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }] }] }).jointTotals.way3, 0); // wood kitchens have none
+});

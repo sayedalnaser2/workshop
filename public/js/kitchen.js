@@ -366,6 +366,19 @@ export function packBars(frames, barLen = 600, fw = 4.5, kerf = 0.5) {
   return { bars: bars.map((b) => ({ ...b, free: Math.round((barLen - b.used) * 10) / 10 })), unfit, metres, pieces: pieces.length, corners: pieces.length / 2 };
 }
 
+/**
+ * The connectors of an aluminium cabinet, by the type of joint:
+ *  - 3-way connector: where three profiles meet, the 8 corners of the cabinet frame (front, back and depth bars);
+ *  - elbow (2-way): where two profiles meet in a flat frame: every corner of a shelf frame and of each door, drawer front or side door frame.
+ */
+export const JOINTS = { elbow: 'Elbow (2-way)', way3: '3-way connector' };
+function jointsOf(cab, r) {
+  const type = CAB_TYPES[cab.type] || CAB_TYPES.base; const out = []; const tag = cab.label ? `${cab.label} · ` : '';
+  if (!type.gap && !type.corner && !type.shelf && !type.hood && (+cab.w || 0) > 0 && (+cab.h || 0) > 0 && (+cab.d || 0) > 0 && r.bars.length) out.push({ kind: 'way3', label: 'Cabinet frame corners', qty: 8 });
+  const sh = r.bars.filter((b) => /Shelf \(width\)$/.test(b.label)).reduce((a, b) => a + b.qty, 0) / 2; if (sh > 0) out.push({ kind: 'elbow', label: 'Shelf frame corners', qty: 4 * sh });
+  for (const f of r.frames) out.push({ kind: 'elbow', label: `${f.label.replace(/^.* · /, '')} frame corners`, qty: 4 * f.qty });
+  void tag; return out;
+}
 /** What the doors are made of decides which sheet types the outside of a door can be cut from. */
 export const DOOR_KINDS = { wood: 'Wood', aluminium: 'Aluminium', fiber: 'Fibre', glass: 'Glass' };
 const KIND_MATERIALS = { wood: ['Solid wood', 'Veneered', 'MDF', 'Melamine', 'Chipboard', 'Plywood', 'HPL', 'Acrylic'], aluminium: ['Aluminium'], fiber: ['Fibre board'], glass: ['Glass'] };
@@ -398,6 +411,7 @@ export function cabinetParts(cab, style = DEFAULT_STYLE) {
   const r = cabinetPartsBase(c0, style);
   if (s.door_lining && !glassDoors) { const extra = []; for (const p of r.panels) if (p.mat === 'door') extra.push({ ...p, label: `${p.label} (inside)`, mat: 'white16', edge: 0 }); r.panels.push(...extra); }
   const gasN = cab.glass_gasket || s.glass_gasket || ''; for (const g of r.glass) g.gasket = gasN; r.hw.gasket = glazingFix(r.glass).metres; // a glazed kitchen door has a gasket of its own type (no clips)
+  r.joints = s.kind === 'aluminium' ? jointsOf(cab, r) : [];
   const ov = cab.sheets || {};
   if (Object.values(ov).some(Boolean)) for (const p of r.panels) { const name = ov[matRole(p.mat)]; if (name) p.mat = `${matRole(p.mat)}@${name}`; }
   return r;
@@ -408,7 +422,7 @@ export const cutKey = (mat, p) => `${mat}|${String(p.label).replace(/^.* · /, '
 export function kitchenModel(spec) {
   const style = { ...DEFAULT_STYLE, ...withDefaults(spec.style || {}) }; const counter = { ...DEFAULT_COUNTER, ...(spec.counter || {}) };
   const runs = spec.runs || [];
-  const panels = { carcass: [], back: [], door: [], skirt: [], white22: [], white16: [], design: [], end: [] }; const aluBars = []; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0, shutters: 0, gasket: 0 }; const glass = []; const frames = []; const appliances = []; const accessories = {};
+  const panels = { carcass: [], back: [], door: [], skirt: [], white22: [], white16: [], design: [], end: [] }; const aluBars = []; const hw = { hinges: 0, handles: 0, slides: 0, legs: 0, hangers: 0, pins: 0, handleLen: 0, tracks: 0, lifts: 0, shutters: 0, gasket: 0 }; const glass = []; const frames = []; const appliances = []; const accessories = {}; const joints = [];
   const meters = { base: 0, wall: 0, tall: 0, units: 0, base_n: 0, wall_n: 0, tall_n: 0 };
   let edge = 0;
   const joins = []; let runX = 0; let curRun = -1; // hidden-handle stretches, joined where cabinets touch
@@ -417,7 +431,7 @@ export function kitchenModel(spec) {
     const type = CAB_TYPES[cab.type] || CAB_TYPES.base; const cabs = run.cabinets || []; const ends = style.end_sheet && !type.gap && !type.corner ? (cab.end_left ?? ci === 0 ? 1 : 0) + (cab.end_right ?? ci === cabs.length - 1 ? 1 : 0) : 0; // sides the customer sees: the ends of a run, unless set by hand
     const p = cabinetParts({ ...cab, label: cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}`, _ends: ends }, style); // an unnamed cabinet is called by its run and place: A1, A2…
     for (const x of p.panels) { (panels[x.mat] ||= []).push(x); edge += x.edge * x.qty; } // (skirting cut from a profile is listed apart)
-    for (const k of Object.keys(hw)) hw[k] += p.hw[k]; glass.push(...p.glass); frames.push(...p.frames); for (const b of p.bars) { if (b.seg) { const name = cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}`; const last = joins.at(-1); const a = runX + b.seg[0]; const z = runX + b.seg[1]; if (last && last.ri === ri && Math.abs(last.z - a) < 0.05) { last.z = z; if (!last.cabs.includes(name)) last.cabs.push(name); } else joins.push({ ri, a, z, cabs: [name], code: b.code }); } else aluBars.push(b); } appliances.push(...p.appliances); for (const [k, n] of Object.entries(p.acc)) accessories[k] = (accessories[k] || 0) + n;
+    for (const k of Object.keys(hw)) hw[k] += p.hw[k]; glass.push(...p.glass); frames.push(...p.frames); for (const j of p.joints || []) joints.push({ ...j, cab: cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}` }); for (const b of p.bars) { if (b.seg) { const name = cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}`; const last = joins.at(-1); const a = runX + b.seg[0]; const z = runX + b.seg[1]; if (last && last.ri === ri && Math.abs(last.z - a) < 0.05) { last.z = z; if (!last.cabs.includes(name)) last.cabs.push(name); } else joins.push({ ri, a, z, cabs: [name], code: b.code }); } else aluBars.push(b); } appliances.push(...p.appliances); for (const [k, n] of Object.entries(p.acc)) accessories[k] = (accessories[k] || 0) + n;
     runX += +cab.w || 0;
     const w = (+cab.w || 0) / 100; if (type.gap) continue;
     meters.units++; if (type.wall) { meters.wall += w; meters.wall_n++; } else if (type.tall) { meters.tall += w; meters.tall_n++; } else { meters.base += w; meters.base_n++; }
@@ -436,7 +450,8 @@ export function kitchenModel(spec) {
   const carcassBars = [...byCode.entries()].sort((p, q) => String(p[0]).localeCompare(String(q[0]), undefined, { numeric: true })).map(([code, list]) => ({ code, ...packLengths(list.map((x) => ({ len: x.len, qty: x.qty, label: x.label })), barLen), parts: list }));
   const skirtBars = panels.skirt.length ? packLengths(panels.skirt.map((x) => ({ len: x.w, qty: x.qty, label: x.label })), +style.plinth_bar_len || 600) : null;
   const profile = style.kind === 'aluminium' ? packBars(frames, +style.bar_len || 600, +style.frame_w || 4.5) : null;
-  return { style, counter, panels, hw, glass, frames, appliances, accessories, profile, skirtBars, carcassBars, sheets, meters, edge_m: edge / 100, tops: counterTops(runs, counter, style) };
+  const jointTotals = { elbow: joints.filter((j) => j.kind === 'elbow').reduce((a, j) => a + j.qty, 0), way3: joints.filter((j) => j.kind === 'way3').reduce((a, j) => a + j.qty, 0) };
+  return { style, counter, panels, hw, glass, frames, appliances, accessories, joints, jointTotals, profile, skirtBars, carcassBars, sheets, meters, edge_m: edge / 100, tops: counterTops(runs, counter, style) };
 }
 
 /** Countertop pieces: one per unbroken stretch of base cabinets in each run. */
@@ -486,6 +501,7 @@ export function priceKitchen(model, opts) {
   { const used = MATS.flatMap(([m]) => (sheets[m] ? sheets[m].sheets.filter((x) => x.source === 'used') : [])); if (used.length) add('Boards', 'Used sheets from stock (cut first)', used.length, 'pieces', used.reduce((a, x) => a + (x.cost || 0), 0) / used.length); }
   if (model.profile) { const pr = o('profile', style.profile) || ((opts.alu || {})[String(style.profile || '').split(' ')[0] || ALU.door]); add('Door frames', `Door frame profile — ${style.profile || ALU.door} (height and width)`, model.profile.bars.length, `bar ${style.bar_len || 600} cm`, Number(style.profile_price) > 0 ? Number(style.profile_price) : pr?.price, { kind: 'profile', name: style.profile }); add('Door frames', 'Frame corner joints / assembly', model.profile.corners, 'corners', gen('frame_corner')); }
   add('Boards', 'Edge banding', model.edge_m, 'm', gen('edge_band_m'));
+  add('Aluminium profiles', JOINTS.elbow, model.jointTotals.elbow, 'pcs', gen('elbow')); add('Aluminium profiles', JOINTS.way3, model.jointTotals.way3, 'pcs', gen('conn3'));
   if (model.skirtBars) add('Skirting', `Skirting profile — ${style.plinth_profile}`, model.skirtBars.bars.length, `bar ${style.plinth_bar_len || 600} cm`, Number(style.plinth_price) || 0, { kind: 'plinth', name: style.plinth_profile });
   for (const g of model.carcassBars || []) { const cat = (opts.alu || {})[g.code] || {}; add('Aluminium profiles', `Profile ${g.code}${cat.name ? ' — ' + cat.name : ''} (cabinet frames)`, g.bars.length, `bar ${style.bar_len || 600} cm`, cat.price, { kind: 'alu', name: g.code }); }
   const hinge = o('hinge', style.hinge); add('Hardware', `Hinges — ${style.hinge || 'not chosen'}`, hw.hinges, 'pcs', hinge?.price);
