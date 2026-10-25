@@ -585,7 +585,7 @@ test('door side: 22422 on that side becomes 22421, a full-size side door and no 
   const st = { kind: 'aluminium' }; const sum = (r, code) => r.bars.filter((b) => b.code === code).reduce((a, b) => a + b.qty, 0);
   for (const type of ['base', 'wall']) {
     const cab = { type, w: 80, h: type === 'wall' ? 70 : 72, d: type === 'wall' ? 32 : 56, doors: 2 }; const a = cabinetParts(cab, st); const b = cabinetParts({ ...cab, door_side: 'right' }, st);
-    assert.equal(sum(b, ALU.deep), sum(a, ALU.deep) / 2); assert.equal(sum(b, ALU.edge), sum(a, ALU.edge) + sum(a, ALU.deep) / 2 - (type === 'wall' ? 1 : 0)); // a wall cabinet also drops one front side bar
+    assert.equal(sum(b, ALU.deep), sum(a, ALU.deep) / 2); assert.equal(sum(b, ALU.edge), sum(a, ALU.edge) + sum(a, ALU.deep) / 2 - (type === 'wall' ? 1 : 2)); // a wall cabinet drops one front side bar, a base cabinet one edge front side and one edge top side
     assert.equal(sum(b, ALU.col), sum(a, ALU.col)); const sd = b.frames.find((f) => /Side door \(right\)/.test(f.label)); assert.ok(sd && sd.w === cab.d && sd.h === cab.h); // no extra column; the door covers the whole side
     const sides = (r) => r.panels.filter((p) => /Side$/.test(p.label)).reduce((x, p) => x + p.qty, 0); assert.equal(sides(b), sides(a) - 1);
     assert.equal(b.hw.hinges, a.hw.hinges + (type === 'wall' ? 2 : 2));
@@ -612,3 +612,16 @@ test('aluminium connectors: 3-way at the cabinet frame corners, elbows on shelf,
   assert.equal(lines.find((l) => l.label === '3-way connector').total, 16); assert.equal(lines.find((l) => l.label === 'Elbow (2-way)').total, 0.5 * m.jointTotals.elbow);
   assert.equal(kitchenModel({ style: { kind: 'wood' }, counter: {}, runs: [{ cabinets: [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }] }] }).jointTotals.way3, 0); // wood kitchens have none
 });
+
+test('base cabinet with a side door: bars lose the door thickness, one edge front side and one edge top side', async () => {
+  const { cabinetParts, ALU } = await import('../public/js/kitchen.js'); const st = { kind: 'aluminium' };
+  const cab = { type: 'base', w: 60, h: 72, d: 56, doors: 1, shelves: 1 }; const a = cabinetParts(cab, st); const b = cabinetParts({ ...cab, door_side: 'right' }, st);
+  const get = (r, label, code) => r.bars.find((x) => x.label.endsWith(label) && (!code || x.code === code));
+  assert.deepEqual([get(a, 'Edge back top & front bottom').len, get(b, 'Edge back top & front bottom').len], [60, 58]);
+  assert.deepEqual([get(a, 'Edge front side').qty, get(b, 'Edge front side').qty], [2, 1]); assert.deepEqual([get(a, 'Edge top side').qty, get(b, 'Edge top side').qty], [2, 1]);
+  assert.deepEqual([get(a, 'Shelf (width)').len, get(b, 'Shelf (width)').len], [58.6, 57.3]);
+  assert.deepEqual([get(a, 'Back bottom').len, get(b, 'Back bottom').len], [60, 58]); assert.deepEqual([get(a, 'Square profile front/top').len, get(b, 'Square profile front/top').len], [55, 57.5]);
+  assert.equal(get(b, 'Bottom deep (door side)').code, ALU.edge); assert.equal(get(b, 'Back height (door side)').code, ALU.edge);
+  const sd = b.frames.find((f) => /Side door/.test(f.label)); assert.deepEqual([sd.w, sd.h], [56, 72]);
+});
+

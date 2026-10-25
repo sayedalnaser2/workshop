@@ -140,7 +140,8 @@ function cabinetPartsBase(cab, style = DEFAULT_STYLE) {
   if (aluBox) { // the workshop's method: profile frame + fibre sheets, see ALU
     const bar = (code, label, len, qty) => { if (qty > 0 && len > 0) bars.push({ code, label: tag + label, len: r1(len), qty }); };
     const sheet = (label, w, h, qty, mat) => add(label, w, h, qty, mat, 0);
-    const wallDoorSide = !!type.wall && (cab.door_side === 'left' || cab.door_side === 'right'); // a wall cabinet with a side door: one front side bar, shelves 0.7 cm wider
+    const sideDoorOn = cab.door_side === 'left' || cab.door_side === 'right'; const baseDoorSide = !type.wall && !type.tall && sideDoorOn; // a base cabinet with a side door: its bars lose the door's thickness on that side
+    const wallDoorSide = !!type.wall && sideDoorOn; // a wall cabinet with a side door: one front side bar, shelves 0.7 cm wider
     if (type.tall) {
       bar(ALU.door, 'Side height', H, 4); bar(ALU.door, 'Side deep', D, 4); bar(ALU.edge, 'Front edge top & bottom', W - 4, 2); bar(ALU.back, 'Back top & bottom', W - 4, 2); bar(ALU.edge, 'Side deep', D, 4); bar(ALU.edge, 'Back side', H, 2);
       bar(ALU.edge, 'Shelf (depth)', W - 4, 2 * nShelf); bar(ALU.edge, 'Shelf (width)', D - 2.5, 2 * nShelf);
@@ -149,12 +150,12 @@ function cabinetPartsBase(cab, style = DEFAULT_STYLE) {
     } else {
       const colQty = doors > 2 ? Math.floor((doors - 1) / 2) : 0; // a hinge column between door pairs: (H − 5) × Int((QOD − 1) / 2), none for 1 or 2 doors
       if (type.wall) { bar(ALU.edge, 'Front top', W, 1); bar(ALU.edge, 'Front bottom', W, 1); bar(ALU.edge, 'Front side', H, wallDoorSide ? 1 : 2); bar(ALU.deep, 'Deep side', D, 4); bar(ALU.deep, 'Height side', H, 2); bar(ALU.back, 'Back top & bottom', W, 2); }
-      else { bar(ALU.edge, 'Edge back top & front bottom', W, 2); bar(ALU.edge, 'Edge front side', H, 2); bar(ALU.edge, 'Edge top side', D, 2); bar(ALU.deep, 'Bottom deep', D, 2); bar(ALU.deep, 'Back height', H, 2); bar(ALU.back, 'Back bottom', W, 1); if (hidden) { // the L-shape runs only over the doors; open places get the square profile; next units' pieces are joined in kitchenModel
+      else { bar(ALU.edge, 'Edge back top & front bottom', W - (baseDoorSide ? 2 : 0), 2); bar(ALU.edge, 'Edge front side', H, baseDoorSide ? 1 : 2); bar(ALU.edge, 'Edge top side', D, baseDoorSide ? 1 : 2); bar(ALU.deep, 'Bottom deep', D, 2); bar(ALU.deep, 'Back height', H, 2); bar(ALU.back, 'Back bottom', W - (baseDoorSide ? 2 : 0), 1); if (hidden) { // the L-shape runs only over the doors; open places get the square profile; next units' pieces are joined in kitchenModel
         const segs = hiddenSegments(cab); for (const [a, b2] of segs) bars.push({ code: ALU.hidden, label: tag + 'Hidden handle profile', len: r1(b2 - a), qty: 1, seg: [a, b2] });
         const covered = segs.reduce((acc, [a, b2]) => acc + b2 - a, 0); if (W - covered > 5.5) bar(ALU.col, 'Square profile front/top (open part)', W - covered - 5, 1);
-      } else bar(ALU.col, 'Square profile front/top', W - 5, 1); }
+      } else bar(ALU.col, 'Square profile front/top', W - (baseDoorSide ? 2.5 : 5), 1); }
       bar(ALU.col, 'Column for hinged doors', H - 5, colQty);
-      bar(ALU.edge, 'Shelf (width)', W - 1.4 + (wallDoorSide ? 0.7 : 0), 2 * nShelf); bar(ALU.edge, 'Shelf (depth)', D - 3.2, 2 * nShelf);
+      bar(ALU.edge, 'Shelf (width)', W - 1.4 + (wallDoorSide ? 0.7 : 0) - (baseDoorSide ? 1.3 : 0), 2 * nShelf); bar(ALU.edge, 'Shelf (depth)', D - 3.2, 2 * nShelf);
       if (type.wall || topSheet) sheet(`${tag}Top`, W - 5.2, D - 5.2, 1, 'white22'); sheet(`${tag}Bottom`, W - 5.2, D - 5.2, 1, 'white22'); { const sideN = (cab.door_side === 'left' || cab.door_side === 'right') ? 1 : 0; const eN = Math.min(2, +cab._ends || 0); const wN = 2 - eN; const dropW = sideN && wN > 0 ? 1 : 0; sheet(`${tag}Side`, H - 5.2, D - 5.2, wN - dropW, 'white22'); sheet(`${tag}End side`, H - 5.2, D - 5.2, eN - (sideN && !dropW ? 1 : 0), 'end'); } sheet(`${tag}Back`, W - 5.2, H - 5.2, 1, 'white22');
     }
     const doorSide = !type.tall && !type.corner && (cab.door_side === 'left' || cab.door_side === 'right') ? cab.door_side : '';
