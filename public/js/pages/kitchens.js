@@ -92,13 +92,14 @@ const cabinetOf = (type) => { const t = CAB_TYPES[type]; return { type, label: '
 async function newKitchen() {
   const w = document.createElement('div');
   const fields = [{ key: 'name', label: 'Kitchen name', required: true, placeholder: 'e.g. Villa 12 kitchen' }, { key: 'client', label: 'Client' },
+    { key: 'kind', label: 'Kitchen type', type: 'select', options: [['aluminium', 'Aluminium kitchen (framed doors)'], ['wood', 'Wood / board kitchen']] },
     { key: 'tpl', label: 'Start from', type: 'select', options: Object.entries(TEMPLATES).map(([k, v]) => [k, v.label]) }, { key: 'len', label: 'Main wall length (cm)', type: 'number', default: 360 }];
-  w.innerHTML = formHTML(fields, { tpl: 'straight', len: 360 });
+  w.innerHTML = formHTML(fields, { kind: 'aluminium', tpl: 'straight', len: 360 });
   modal({ title: 'New kitchen', body: w, buttons: [{ label: 'Cancel' }, { label: 'Create', kind: 'primary', onClick: async () => {
     const d = readForm(w, fields); if (!d.name) { toast('Give the kitchen a name', 'err'); return false; }
     const rc = d.client ? await resolveCustomer({ client: d.client, mobile: '' }) : {}; if (rc === null) return false; if (rc.use_name) d.client = rc.use_name; delete rc.use_name; const opt = await api.get('t/kitchen_options');
     const first = (kind) => opt.find((x) => x.kind === kind)?.name || '';
-    const style = { ...DEFAULT_STYLE, carcass: first('panel'), door: first('panel'), back: first('panel'), handle: (S.settings.kitchen_defaults && S.settings.kitchen_defaults.handle) || first('handle'), hinge: first('hinge'), drawer: first('drawer'), glass: first('glass'), profile_in: first('profile_colour'), profile_out: first('profile_colour') };
+    const style = { ...DEFAULT_STYLE, kind: d.kind === 'wood' ? 'wood' : 'aluminium', carcass: first('panel'), door: first('panel'), back: first('panel'), handle: (S.settings.kitchen_defaults && S.settings.kitchen_defaults.handle) || first('handle'), hinge: first('hinge'), drawer: first('drawer'), glass: first('glass'), profile_in: first('profile_colour'), profile_out: first('profile_colour') };
     const k = await api.post('t/kitchens', { ...rc, name: d.name, client: d.client || '', status: 'draft', spec: { style, counter: { ...DEFAULT_COUNTER, material: first('marble') }, runs: TEMPLATES[d.tpl].runs(d.len || 360) } });
     location.hash = `#/kitchens/${k.id}`;
   } }] });
