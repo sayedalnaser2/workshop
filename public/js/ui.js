@@ -58,6 +58,8 @@ export const confirmBox = (msg, label = 'Delete', kind = 'danger') => new Promis
   modal({ title: 'Please confirm', body: `<p>${esc(msg)}</p>`, onClose: () => resolve(false), buttons: [{ label: 'Cancel', onClick: () => { resolve(false); } }, { label, kind, onClick: () => { resolve(true); } }] });
 });
 
+/** A white engineering helmet (hard hat), the creator's mark. */
+export const HELMET = '<svg class="helmet" viewBox="0 0 32 24" width="22" height="17" role="img" aria-label="Creator" style="vertical-align:-3px"><title>Creator</title><path d="M3 19.5c0-1.2.9-2 2-2h22c1.1 0 2 .8 2 2v1H3z" fill="#fff" stroke="#5b6773" stroke-width="1.4" stroke-linejoin="round"/><path d="M6.5 17.5C6.5 9.6 10.6 4 16 4s9.5 5.6 9.5 13.5z" fill="#fff" stroke="#5b6773" stroke-width="1.4" stroke-linejoin="round"/><path d="M13.6 4.4V17.5M18.4 4.4V17.5" fill="none" stroke="#c9d1d9" stroke-width="1.6"/><path d="M13.2 3.6h5.6" stroke="#5b6773" stroke-width="1.6" stroke-linecap="round"/><path d="M9 14c.6-3.2 2-5.4 4-6.6" fill="none" stroke="#dfe5ea" stroke-width="1.4" stroke-linecap="round"/></svg>';
 /**
  * When a name and a number are typed: if the number already belongs to a customer, or another customer has the same name, ask whether it is him.
  * Resolves to {} (nothing to ask), { customer_id } (it is him), { _new_customer: 1 } (a different person) or null (cancelled).
