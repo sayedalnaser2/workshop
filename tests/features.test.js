@@ -639,6 +639,6 @@ test('profiles in 3D: every bar of an aluminium cabinet becomes a box with its p
 
 test('every profile piece has two cuts, named in Settings', async () => {
   const K = await import('../public/js/kitchen.js');
-  assert.equal(K.cutTypeName(1), 'Cut 1'); assert.equal(K.cutTypeName(2), 'Cut 2'); assert.deepEqual(K.CUT_KINDS, ['straight', '45°']);
+  assert.equal(K.cutTypeName(1), 'Cut 1'); assert.equal(K.cutTypeName(2), 'Cut 2'); assert.deepEqual(K.CUT_KINDS, ['straight', '45°', 'double 45°']);
   K.setKitchenDefaults({ cut_names: ['Left end', ' '] }, []); assert.equal(K.cutTypeName(1), 'Left end'); assert.equal(K.cutTypeName(2), 'Cut 2'); K.setKitchenDefaults({}, []);
 });
