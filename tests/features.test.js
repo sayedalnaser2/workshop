@@ -285,7 +285,7 @@ test('kitchens: skirting cut from a profile bar instead of a board', async () =>
   const cabs = [{ type: 'base', w: 60, h: 72, d: 56, doors: 1 }, { type: 'base', w: 60, h: 72, d: 56, doors: 1 }, { type: 'base', w: 90, h: 72, d: 56, doors: 2 }];
   const board = kitchenModel({ runs: [{ cabinets: cabs }] }); assert.equal(board.skirtBars, null); assert.ok(board.panels.carcass.some((p) => p.label.endsWith('Skirting')));
   const bar = kitchenModel({ style: { plinth_profile: '206439 Plinth', plinth_price: 4, plinth_bar_len: 300 }, runs: [{ cabinets: cabs }] });
-  assert.ok(!bar.panels.carcass.some((p) => p.label.endsWith('Skirting'))); assert.equal(bar.skirtBars.pieces, 3); assert.equal(bar.skirtBars.bars.length, 1); // 58 + 58 + 88 = 204 cm fits one 300 cm bar
+  assert.ok(!bar.panels.carcass.some((p) => p.label.endsWith('Skirting'))); assert.equal(bar.skirtBars.pieces, 1); assert.equal(bar.skirtBars.bars.length, 1); assert.equal(bar.panels.skirt[0].w, 208); // one piece along the whole run: 60 + 60 + 90 − 2 = 208 cm, in one 300 cm bar
   const price = priceKitchen(bar, { general: {} }); assert.equal(price.lines.find((l) => l.group === 'Skirting').total, 4);
 });
 
@@ -642,3 +642,14 @@ test('every profile piece has two cuts, named in Settings', async () => {
   assert.equal(K.cutTypeName(1), 'Cut 1'); assert.equal(K.cutTypeName(2), 'Cut 2'); assert.deepEqual(K.CUT_KINDS, ['straight', '45°', 'double 45°']);
   K.setKitchenDefaults({ cut_names: ['Left end', ' '] }, []); assert.equal(K.cutTypeName(1), 'Left end'); assert.equal(K.cutTypeName(2), 'Cut 2'); K.setKitchenDefaults({}, []);
 });
+
+test('skirting: one piece along an unbroken stretch of a run, a break starts a new piece, long runs are cut into bar lengths', async () => {
+  const { kitchenModel } = await import('../public/js/kitchen.js');
+  const base = (w) => ({ type: 'base', w, h: 72, d: 56, doors: 1 }); const skirts = (m, code) => (m.carcassBars || []).filter((g) => g.code === code).flatMap((g) => g.parts);
+  const m = kitchenModel({ style: { kind: 'aluminium' }, counter: {}, runs: [{ cabinets: [base(100), base(60), { type: 'wall', w: 60, h: 70, d: 32, doors: 1 }, base(80)] }, { cabinets: [base(70)] }] });
+  const front = skirts(m, '20277').filter((p) => /Skirting front/.test(p.label)); assert.deepEqual(front.map((p) => p.len), [160, 80, 70]); // A1+A2 together, the wall unit breaks it, then A4, and run B on its own
+  assert.deepEqual(skirts(m, '20277').filter((p) => /Skirting side/.test(p.label)).map((p) => [p.len, p.qty]), [[56, 2], [56, 2], [56, 2]]); // two ends only
+  const long = kitchenModel({ style: { kind: 'aluminium', bar_len: 300 }, counter: {}, runs: [{ cabinets: [base(100), base(100), base(100), base(100)] }] });
+  assert.deepEqual(skirts(long, '20277').filter((p) => /Skirting front/.test(p.label)).map((p) => p.len), [300, 100]); // 400 cm: one bar and the rest
+});
+

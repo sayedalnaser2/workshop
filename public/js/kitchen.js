@@ -432,16 +432,30 @@ export function kitchenModel(spec) {
   const meters = { base: 0, wall: 0, tall: 0, units: 0, base_n: 0, wall_n: 0, tall_n: 0 };
   let edge = 0;
   const joins = []; let runX = 0; let curRun = -1; // hidden-handle stretches, joined where cabinets touch
+  // the skirting is one piece along every unbroken stretch of a run (not one per cabinet); its two end pieces go at the ends of the stretch
+  let sk = null;
+  const flushSkirt = () => {
+    if (!sk) return; const names = sk.names.length > 3 ? `${sk.names[0]}–${sk.names.at(-1)}` : sk.names.join('+'); const maxLen = (sk.kind === 'bar' ? +style.bar_len : +style.plinth_bar_len) || 600;
+    const chunk = (len) => { const out = []; while (len > maxLen + 1e-9) { out.push(maxLen); len -= maxLen; } out.push(len); return out; }; // a bar is only so long
+    if (sk.kind === 'bar') { for (const l of chunk(sk.len)) aluBars.push({ code: sk.code, label: `${names} · Skirting front`, len: r1(l), qty: 1 }); aluBars.push({ code: sk.code, label: `${names} · Skirting side`, len: r1(sk.d), qty: 2 }); }
+    else if (sk.kind === 'profile') for (const l of chunk(sk.len - 2)) panels.skirt.push({ label: `${names} · Skirting`, w: r1(l), h: style.plinth, qty: 1, mat: 'skirt', edge: 0 });
+    else { panels.carcass.push({ label: `${names} · Skirting`, w: r1(sk.len - 2), h: style.plinth, qty: 1, mat: 'carcass', edge: r1(sk.len - 2) }); edge += sk.len - 2; }
+    sk = null;
+  };
   for (const [ri, run] of runs.entries()) for (const [ci, cab] of (run.cabinets || []).entries()) {
-    if (ri !== curRun) { curRun = ri; runX = 0; }
+    if (ri !== curRun) { flushSkirt(); curRun = ri; runX = 0; }
     const type = CAB_TYPES[cab.type] || CAB_TYPES.base; const cabs = run.cabinets || []; const ends = style.end_sheet && !type.gap && !type.corner ? (cab.end_left ?? ci === 0 ? 1 : 0) + (cab.end_right ?? ci === cabs.length - 1 ? 1 : 0) : 0; // sides the customer sees: the ends of a run, unless set by hand
-    const p = cabinetParts({ ...cab, label: cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}`, _ends: ends }, style); // an unnamed cabinet is called by its run and place: A1, A2…
+    const p0 = cabinetParts({ ...cab, label: cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}`, _ends: ends }, style); // an unnamed cabinet is called by its run and place: A1, A2…
+    const isSkBar = (b) => /(^| · )Skirting (front|side)$/.test(b.label); const isSkPanel = (x) => /(^| · )Skirting$/.test(x.label); const skBars = p0.bars.filter(isSkBar); const skPanels = p0.panels.filter(isSkPanel);
+    const p = skBars.length || skPanels.length ? { ...p0, bars: p0.bars.filter((b) => !isSkBar(b)), panels: p0.panels.filter((x) => !isSkPanel(x)) } : p0;
+    if (skBars.length || skPanels.length) { const kind = skBars.length ? 'bar' : skPanels[0].mat === 'skirt' ? 'profile' : 'board'; const code = skBars[0]?.code; if (sk && (sk.kind !== kind || sk.code !== code)) flushSkirt(); sk ||= { kind, code, names: [], len: 0, d: 0 }; sk.names.push(cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}`); sk.len += +cab.w || 0; sk.d = Math.max(sk.d, +cab.d || 0); } else flushSkirt();
     for (const x of p.panels) { (panels[x.mat] ||= []).push(x); edge += x.edge * x.qty; } // (skirting cut from a profile is listed apart)
     for (const k of Object.keys(hw)) hw[k] += p.hw[k]; glass.push(...p.glass); frames.push(...p.frames); for (const j of p.joints || []) joints.push({ ...j, cab: cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}` }); for (const b of p.bars) { if (b.seg) { const name = cab.label || `${String.fromCharCode(65 + (ri % 26))}${ci + 1}`; const last = joins.at(-1); const a = runX + b.seg[0]; const z = runX + b.seg[1]; if (last && last.ri === ri && Math.abs(last.z - a) < 0.05) { last.z = z; if (!last.cabs.includes(name)) last.cabs.push(name); } else joins.push({ ri, a, z, cabs: [name], code: b.code }); } else aluBars.push(b); } appliances.push(...p.appliances); for (const [k, n] of Object.entries(p.acc)) accessories[k] = (accessories[k] || 0) + n;
     runX += +cab.w || 0;
     const w = (+cab.w || 0) / 100; if (type.gap) continue;
     meters.units++; if (type.wall) { meters.wall += w; meters.wall_n++; } else if (type.tall) { meters.tall += w; meters.tall_n++; } else { meters.base += w; meters.base_n++; }
   }
+  flushSkirt();
   const sheets = {}; const claimed = new Set(); // a used piece can only be cut for one material
   const typeOf = (mat) => boardTypeByName(matCustom(mat) || { carcass: style.carcass, door: style.door || style.carcass, back: style.back || style.carcass, white22: style.white22, white16: style.white16, design: style.design, end: style.end_sheet || style.carcass }[matRole(mat)]);
   for (const mat of Object.keys(panels).filter((m) => m !== 'skirt').sort((a, b) => (ROLES.indexOf(matRole(a)) - ROLES.indexOf(matRole(b))) || a.localeCompare(b))) {
