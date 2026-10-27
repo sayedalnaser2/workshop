@@ -258,8 +258,9 @@ export function usedPiecesOf(typeId) {
 }
 
 /** The ways a sheet can be cut: strips along the sheet's length, strips across its width, or the best of several plans. */
-/** The two kinds of cut a kitchen can be made with. How each one is cut is set later; for now the choice is kept with the kitchen and shown on its cut list. */
-export const CUT_TYPES = { 1: 'Cut type 1', 2: 'Cut type 2' };
+/** Every profile piece has two cuts (one at each end), each straight or 45°. How the two are used is set later; for now they are listed and can be set per piece. */
+export const CUT_TYPES = { 1: 'Cut 1', 2: 'Cut 2' };
+export const CUT_KINDS = ['straight', '45°'];
 let CUTNAMES = { 1: CUT_TYPES[1], 2: CUT_TYPES[2] };
 export const cutTypeName = (n) => CUTNAMES[n === 2 || n === '2' ? 2 : 1];
 export const CUT_MODES = { optimal: 'Optimal (fewest sheets)', length: 'By length (strips along the sheet)', width: 'By width (strips across the sheet)' };

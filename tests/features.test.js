@@ -637,10 +637,8 @@ test('profiles in 3D: every bar of an aluminium cabinet becomes a box with its p
   }
 });
 
-test('two types of cut: named in Settings, kept in the kitchen style', async () => {
+test('every profile piece has two cuts, named in Settings', async () => {
   const K = await import('../public/js/kitchen.js');
-  assert.equal(K.cutTypeName(1), 'Cut type 1'); assert.equal(K.cutTypeName(2), 'Cut type 2');
-  K.setKitchenDefaults({ cut_names: ['Panel saw', ' '] }, []); assert.equal(K.cutTypeName(1), 'Panel saw'); assert.equal(K.cutTypeName(2), 'Cut type 2');
-  assert.equal(K.kitchenModel({ style: { cut_type: 2 }, counter: {}, runs: [] }).style.cut_type, 2);
-  K.setKitchenDefaults({}, []);
+  assert.equal(K.cutTypeName(1), 'Cut 1'); assert.equal(K.cutTypeName(2), 'Cut 2'); assert.deepEqual(K.CUT_KINDS, ['straight', '45°']);
+  K.setKitchenDefaults({ cut_names: ['Left end', ' '] }, []); assert.equal(K.cutTypeName(1), 'Left end'); assert.equal(K.cutTypeName(2), 'Cut 2'); K.setKitchenDefaults({}, []);
 });
