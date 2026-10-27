@@ -636,3 +636,11 @@ test('profiles in 3D: every bar of an aluminium cabinet becomes a box with its p
     assert.ok(sc.boxes.every((b) => b.corners.flat().every(Number.isFinite) && b.ref.tip.len > 0 && b.ref.tip.qty > 0 && b.ref.tip.part));
   }
 });
+
+test('two types of cut: named in Settings, kept in the kitchen style', async () => {
+  const K = await import('../public/js/kitchen.js');
+  assert.equal(K.cutTypeName(1), 'Cut type 1'); assert.equal(K.cutTypeName(2), 'Cut type 2');
+  K.setKitchenDefaults({ cut_names: ['Panel saw', ' '] }, []); assert.equal(K.cutTypeName(1), 'Panel saw'); assert.equal(K.cutTypeName(2), 'Cut type 2');
+  assert.equal(K.kitchenModel({ style: { cut_type: 2 }, counter: {}, runs: [] }).style.cut_type, 2);
+  K.setKitchenDefaults({}, []);
+});

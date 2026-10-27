@@ -232,10 +232,11 @@ function cabinetPartsBase(cab, style = DEFAULT_STYLE) {
 }
 
 /** Kitchen defaults from Settings: the door frame profile and the handle every kitchen uses unless it picks its own. */
-let KDEF = { profile: null, handle: '', inner_t: 22, inner_options: [22, 4, 5] };
+let KDEF = { cut_names: null, profile: null, handle: '', inner_t: 22, inner_options: [22, 4, 5] };
 export function setKitchenDefaults(d, profiles) {
   const p = d && d.profile_id ? (profiles || []).find((x) => x.id === Number(d.profile_id)) : null;
-  const opts = ((d && d.inner_options) || []).map(Number).filter((n) => n > 0); KDEF = { profile: p || null, handle: (d && d.handle) || '', inner_t: Number(d && d.inner_t) > 0 ? Number(d.inner_t) : 22, inner_options: opts.length ? opts : [22, 4, 5] };
+  const opts = ((d && d.inner_options) || []).map(Number).filter((n) => n > 0); CUTNAMES = { 1: String(d && d.cut_names && d.cut_names[0] || '').trim() || CUT_TYPES[1], 2: String(d && d.cut_names && d.cut_names[1] || '').trim() || CUT_TYPES[2] };
+  KDEF = { profile: p || null, handle: (d && d.handle) || '', inner_t: Number(d && d.inner_t) > 0 ? Number(d.inner_t) : 22, inner_options: opts.length ? opts : [22, 4, 5] };
 }
 export const innerOptions = () => KDEF.inner_options;
 /** A kitchen's style with the Settings defaults filled in where the kitchen chose nothing. */
@@ -257,6 +258,10 @@ export function usedPiecesOf(typeId) {
 }
 
 /** The ways a sheet can be cut: strips along the sheet's length, strips across its width, or the best of several plans. */
+/** The two kinds of cut a kitchen can be made with. How each one is cut is set later; for now the choice is kept with the kitchen and shown on its cut list. */
+export const CUT_TYPES = { 1: 'Cut type 1', 2: 'Cut type 2' };
+let CUTNAMES = { 1: CUT_TYPES[1], 2: CUT_TYPES[2] };
+export const cutTypeName = (n) => CUTNAMES[n === 2 || n === '2' ? 2 : 1];
 export const CUT_MODES = { optimal: 'Optimal (fewest sheets)', length: 'By length (strips along the sheet)', width: 'By width (strips across the sheet)' };
 
 /**
