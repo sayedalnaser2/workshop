@@ -653,3 +653,13 @@ test('skirting: one piece along an unbroken stretch of a run, a break starts a n
   assert.deepEqual(skirts(long, '20277').filter((p) => /Skirting front/.test(p.label)).map((p) => p.len), [300, 100]); // 400 cm: one bar and the rest
 });
 
+
+test('sheet cutting: the leftover is kept as the biggest possible single piece', async () => {
+  const { emptyRects, packSheets } = await import('../public/js/kitchen.js');
+  const e = emptyRects([{ x: 0, y: 0, w: 40, h: 50 }], 100, 50, 0.3, 2); assert.equal(e[0].w, 59.7); assert.equal(e[0].h, 50); assert.equal(e.length, 1);
+  const L = emptyRects([{ x: 0, y: 0, w: 60, h: 20 }], 100, 50, 0, 3); assert.equal(L[0].w * L[0].h, 100 * 30); assert.ok(L[1].w * L[1].h <= L[0].w * L[0].h); // the full-width strip below first
+  const pieces = [{ w: 60, h: 40, qty: 3, label: 'a' }, { w: 30, h: 30, qty: 2, label: 'b' }, { w: 80, h: 20, qty: 2, label: 'c' }];
+  const r = packSheets(pieces, 244, 122, 0.3, {}); const area = (f) => f.w * f.h;
+  for (const sh of r.sheets) { assert.ok(sh.free.length >= 1); for (let i = 1; i < sh.free.length; i++) assert.ok(area(sh.free[i - 1]) >= area(sh.free[i]) - 1e-6); }
+  const last = r.sheets.at(-1); assert.ok(area(last.free[0]) > 0.5 * (244 * 122 - last.items.reduce((a, i) => a + i.w * i.h, 0))); // more than half of what is left on the last sheet is one board
+});

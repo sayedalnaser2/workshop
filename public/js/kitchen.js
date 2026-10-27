@@ -270,6 +270,35 @@ export const CUT_MODES = { optimal: 'Optimal (fewest sheets)', length: 'By lengt
  * pieces: [{ w, h, qty, label, dir }] — dir 'h' keeps w along the sheet's length (sheetW), 'v' turns it across, anything else lets the planner choose.
  * opts.mode: 'length' | 'width' | 'optimal' (default). Items come back as placed: rot = true when the piece was turned.
  */
+/**
+ * The biggest empty rectangles of a sheet (area first), found among the cuts: `count` of them, each blocked out before the next is looked for.
+ * items: [{ x, y, w, h }] placed pieces; the saw kerf counts as part of a piece.
+ */
+export function emptyRects(items, W, H, kerf = 0, count = 1) {
+  const q = (n) => Math.round(n * 1000) / 1000; const occ = items.map((i) => ({ x0: q(i.x), y0: q(i.y), x1: q(Math.min(W, i.x + i.w + kerf)), y1: q(Math.min(H, i.y + i.h + kerf)) }));
+  const uniq = (a) => [...new Set(a)].sort((m, n) => m - n); const X = uniq([0, W, ...occ.flatMap((o) => [o.x0, o.x1])].map(q)); const Y = uniq([0, H, ...occ.flatMap((o) => [o.y0, o.y1])].map(q));
+  const xi = new Map(X.map((v, i) => [v, i])); const yi = new Map(Y.map((v, i) => [v, i])); const nx = X.length - 1; const ny = Y.length - 1;
+  const blocked = Array.from({ length: ny }, () => new Uint8Array(nx));
+  for (const o of occ) for (let j = yi.get(o.y0); j < yi.get(o.y1); j++) for (let i = xi.get(o.x0); i < xi.get(o.x1); i++) blocked[j][i] = 1;
+  const out = [];
+  for (let k = 0; k < count; k++) {
+    let best = null;
+    for (let i0 = 0; i0 < nx; i0++) {
+      const free = new Uint8Array(ny).fill(1);
+      for (let i1 = i0; i1 < nx; i1++) {
+        for (let j = 0; j < ny; j++) if (blocked[j][i1]) free[j] = 0;
+        let j0 = -1;
+        for (let j = 0; j <= ny; j++) {
+          if (j < ny && free[j]) { if (j0 < 0) j0 = j; continue; }
+          if (j0 >= 0) { const w = X[i1 + 1] - X[i0]; const h = Y[j] - Y[j0]; if (!best || w * h > best.area + 1e-9) best = { area: w * h, x: X[i0], y: Y[j0], w, h, i0, i1, j0, j1: j - 1 }; j0 = -1; }
+        }
+      }
+    }
+    if (!best || best.area <= 0) break; out.push({ x: best.x, y: best.y, w: Math.round(best.w * 10) / 10, h: Math.round(best.h * 10) / 10, area: best.area });
+    for (let j = best.j0; j <= best.j1; j++) for (let i = best.i0; i <= best.i1; i++) blocked[j][i] = 1;
+  }
+  return out;
+}
 export function packSheets(pieces, sheetW, sheetH, kerf = 0.3, opts = {}) {
   const mode = CUT_MODES[opts.mode] ? opts.mode : 'optimal';
   const list = []; for (const p of pieces) for (let i = 0; i < p.qty; i++) list.push({ w: p.w, h: p.h, label: p.label, id: p.id, dir: p.dir === 'h' || p.dir === 'v' ? p.dir : '' });
@@ -300,7 +329,7 @@ export function packSheets(pieces, sheetW, sheetH, kerf = 0.3, opts = {}) {
       if (!best) return false;
       const { f, w, h } = best; sh.free.splice(best.fi, 1); sh.items.push({ x: f.x, y: f.y, w, h, rot: best.rot, label: p.label, id: p.id });
       const rw = f.w - w - kerf; const bh = f.h - h - kerf;
-      const across = splitRule === 'short' ? f.w - w < f.h - h : rw * f.h < f.w * bh; // which leftover gets the full side
+      const across = splitRule === 'short' ? f.w - w < f.h - h : splitRule === 'long' ? f.w - w >= f.h - h : rw * f.h < f.w * bh; // which leftover gets the full side
       const right = { x: f.x + w + kerf, y: f.y, w: rw, h: across ? h : f.h }; const below = { x: f.x, y: f.y + h + kerf, w: across ? f.w : w, h: bh };
       for (const r of [right, below]) if (r.w > 0.5 && r.h > 0.5) sh.free.push(r);
       return true;
@@ -318,19 +347,23 @@ export function packSheets(pieces, sheetW, sheetH, kerf = 0.3, opts = {}) {
     const flip = (i) => ({ ...i, x: i.y, y: i.x, w: i.h, h: i.w, rot: !i.rot });
     return { sheets: t.sheets.map((sh) => ({ items: sh.items.map(flip), free: sh.free.map((f) => ({ x: f.y, y: f.x, w: f.h, h: f.w })) })), unfit: t.unfit };
   };
-  const sorts = [(a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h) || b.w * b.h - a.w * a.h, (a, b) => b.w * b.h - a.w * a.h, (a, b) => Math.min(b.w, b.h) - Math.min(a.w, a.h) || Math.max(b.w, b.h) - Math.max(a.w, a.h)];
+  const sorts = [(a, b) => Math.max(b.w, b.h) - Math.max(a.w, a.h) || b.w * b.h - a.w * a.h, (a, b) => b.w * b.h - a.w * a.h, (a, b) => Math.min(b.w, b.h) - Math.min(a.w, a.h) || Math.max(b.w, b.h) - Math.max(a.w, a.h), (a, b) => b.h - a.h || b.w - a.w, (a, b) => b.w - a.w || b.h - a.h];
   const byLength = (items) => strips(items, sheetW, sheetH); const byWidth = turned((items) => strips(items, sheetH, sheetW));
   const plans = [];
   for (const so of sorts) {
     const items = [...list].sort(so);
     if (mode === 'length' || mode === 'optimal') plans.push(byLength(items));
     if (mode === 'width' || mode === 'optimal') plans.push(byWidth(items));
-    if (mode === 'optimal') for (const rule of ['short', 'area']) { plans.push(guillotine(items, sheetW, sheetH, rule)); plans.push(turned((it) => guillotine(it, sheetH, sheetW, rule))(items)); }
+    if (mode === 'optimal') for (const rule of ['short', 'area', 'long']) { plans.push(guillotine(items, sheetW, sheetH, rule)); plans.push(turned((it) => guillotine(it, sheetH, sheetW, rule))(items)); }
   }
   const usedOf = (sh) => sh.items.reduce((a, i) => a + i.w * i.h, 0) / total;
-  // fewest sheets; then the plan whose last sheet is emptiest (the biggest single offcut)
-  const best = plans.sort((p, q) => p.unfit.length - q.unfit.length || p.sheets.length - q.sheets.length || (p.sheets.length ? usedOf(p.sheets.at(-1)) - usedOf(q.sheets.at(-1)) : 0))[0];
-  return { mode, sheets: best.sheets.map((sh) => ({ items: sh.items, used: usedOf(sh), free: sh.free })), unfit: best.unfit };
+  // fewest sheets; then the plan that leaves the biggest single offcut in one piece (so the leftover is a usable board, not strips); then the one whose last sheet is emptiest
+  const fewest = plans.filter((p) => p.unfit.length === Math.min(...plans.map((x) => x.unfit.length)));
+  const nSheets = Math.min(...fewest.map((p) => p.sheets.length)); const pool = fewest.filter((p) => p.sheets.length === nSheets);
+  for (const p of pool) p.big = Math.max(0, ...p.sheets.map((sh) => emptyRects(sh.items, sheetW, sheetH, kerf, 1)[0]?.area || 0));
+  const best = pool.sort((p, q) => q.big - p.big || (p.sheets.length ? usedOf(p.sheets.at(-1)) - usedOf(q.sheets.at(-1)) : 0))[0];
+  // the leftover of every sheet as a few big rectangles, the biggest first (these are the offcuts kept in the stock)
+  return { mode, sheets: best.sheets.map((sh) => ({ items: sh.items, used: usedOf(sh), free: emptyRects(sh.items, sheetW, sheetH, kerf, 4).filter((f) => Math.min(f.w, f.h) >= 1) })), unfit: best.unfit };
 }
 
 /**
