@@ -208,7 +208,10 @@ export function scene(spec, open = {}) {
           }
           curFront = null;
         }
-        if (doors) { const z = zn.doors; const top = y0 + z.y + z.h - (hid && !drawers ? 3.5 : 0); putDoors(u + z.x, u + z.x + z.w, y0 + z.y, top, doors, dir, glazed, (i) => 'f' + i, (i) => fOpen('f' + i), d, t, openSet, hid); }
+        if (doors) { const z = zn.doors; const top = y0 + z.y + z.h - (hid && !drawers ? 3.5 : 0); let ua = u + z.x; let ub = u + z.x + z.w; let ya = y0 + z.y; let yt = top;
+          if (+c.door_w > 0) { const tot = +c.door_w * doors; const mid = (ua + ub) / 2; ua = mid - tot / 2; ub = mid + tot / 2; } if (+c.door_h > 0) yt = ya + +c.door_h; // the door size set by hand
+          const ox = +c.door_dx || 0; const oy = +c.door_dy || 0; ua += ox; ub += ox; ya += oy; yt += oy; // and its offset: across (+ right) and up
+          putDoors(ua, ub, ya, yt, doors, dir, glazed, (i) => 'f' + i, (i) => fOpen('f' + i), d, t, openSet, hid); }
         if (hid) for (const [a, b] of hiddenSegments(c)) { put(u + a, u + b, d - 3, d - .4, y0 + h - 3.3, y0 + h - .2, '#2f343b', 'handle'); put(u + a, u + b, d - .4, d + .3, y0 + h - 3.3, y0 + h - 2.6, STEEL, 'handle'); } // the hidden-handle groove: dark channel with a light lip, only over the doors
       }
       curFront = null;
@@ -236,7 +239,7 @@ export function scene(spec, open = {}) {
       if (t.sink || (accs.includes('tap') && t.counter)) { const tx = u + w * .5; put(tx - 1.5, tx + 1.5, 3, 6, ytop + ct, ytop + ct + 22, '#d7dbe0', 'acc'); put(tx - 1.2, tx + 1.2, 3, 20, ytop + ct + 20, ytop + ct + 23, '#d7dbe0', 'acc'); }
       const hobAcc = t.counter && !t.hob ? ['hob_gas', 'hob_elec', 'hob_ind'].find((k) => accs.includes(k)) : null; // a built-in hob added as an accessory
       if (hobAcc) {
-        const hw0 = Math.min(w * .84, 60); const hx = u + (w - hw0) / 2; const hd = Math.min(d * .7, 52); const hz = (d - hd) / 2 + 2; const yy = ytop + ct;
+        const hw0 = Math.max(20, Math.min(+c.hob_w > 0 ? +c.hob_w : 60, w - 2)); const hx = u + (w - hw0) / 2; const hd = Math.max(20, Math.min(+c.hob_d > 0 ? +c.hob_d : 52, d - 4)); const hz = (d - hd) / 2 + 2; const yy = ytop + ct; // the hob's own size (cm) is set on the cabinet
         if (hobAcc === 'hob_gas') { put(hx, hx + hw0, hz, hz + hd, yy, yy + .5, '#c9ced6', 'acc'); for (const [dx, dz] of [[.27, .3], [.73, .3], [.27, .7], [.73, .7]]) { const r = Math.min(hw0, hd) * .13; put(hx + hw0 * dx - r, hx + hw0 * dx + r, hz + hd * dz - r, hz + hd * dz + r, yy + .5, yy + 1.4, '#23272e', 'acc'); } for (let q = 0; q < 4; q++) put(hx + hw0 * (.14 + q * .24), hx + hw0 * (.14 + q * .24) + 2.4, hz + hd - 0.2, hz + hd + 1.4, yy + .5, yy + 2.6, '#23272e', 'acc'); }
         else if (hobAcc === 'hob_elec') { put(hx, hx + hw0, hz, hz + hd, yy, yy + .6, '#1d2026', 'acc'); for (const [dx, dz] of [[.27, .3], [.73, .3], [.27, .7], [.73, .7]]) { const r = Math.min(hw0, hd) * .14; put(hx + hw0 * dx - r, hx + hw0 * dx + r, hz + hd * dz - r, hz + hd * dz + r, yy + .6, yy + 1, '#8a2f2f', 'acc'); } }
         else { put(hx, hx + hw0, hz, hz + hd, yy, yy + .6, '#14171c', 'acc'); for (const [dx, dz] of [[.27, .3], [.73, .3], [.27, .7], [.73, .7]]) { const r = Math.min(hw0, hd) * .16; put(hx + hw0 * dx - r, hx + hw0 * dx + r, hz + hd * dz - r, hz + hd * dz + r, yy + .6, yy + .75, '#3b82c4', 'acc'); } }

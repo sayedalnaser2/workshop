@@ -672,3 +672,19 @@ test('hobs as accessories: priced per type and each one adds a hob cut-out in th
   const lines = priceKitchen(m, { general: { acc_hob_gas: 120, cutout_hob: 5 } }).lines;
   assert.equal(lines.find((l) => l.label === 'Gas hob (built-in)').total, 120); assert.equal(lines.find((l) => l.label === 'Hob cut-outs').qty, 2);
 });
+
+test('door size and offset set by hand on a cabinet change the cut size; the hob size is kept on the cabinet', async () => {
+  const { cabinetParts, kitchenModel } = await import('../public/js/kitchen.js');
+  const cab = { type: 'base', w: 80, h: 72, d: 56, doors: 2 }; const door = (r) => r.panels.find((p) => /Door$/.test(p.label));
+  const a = door(cabinetParts(cab, { kind: 'wood' })); const b = door(cabinetParts({ ...cab, door_w: 38, door_h: 60, door_dx: 2, door_dy: -3 }, { kind: 'wood' }));
+  assert.deepEqual([b.w, b.h, b.qty], [38, 60, 2]); assert.notEqual(a.h, 60);
+  const alu = cabinetParts({ ...cab, door_w: 39, door_h: 70 }, { kind: 'aluminium' }); assert.ok(alu.frames.some((f) => f.w === 39 && f.h === 70 && f.qty === 2));
+  assert.equal(kitchenModel({ style: { kind: 'wood' }, counter: {}, runs: [{ cabinets: [{ ...cab, hob_w: 45, hob_d: 40, acc: ['hob_gas'] }] }] }).runs, undefined); // (kept as data: nothing breaks)
+});
+
+test('the 3D scene builds with hobs, hob sizes, door sizes and offsets on a cabinet', async () => {
+  const { scene } = await import('../public/js/kitchen-3d.js'); const { elevationSVG } = await import('../public/js/kitchen-draw.js');
+  const spec = { style: { kind: 'aluminium' }, counter: { material: '', thickness: 2 }, runs: [{ name: 'A', cabinets: [{ type: 'base', w: 80, h: 72, d: 56, doors: 2, acc: ['hob_gas'], hob_w: 45, hob_d: 40, door_w: 30, door_h: 50, door_dx: 2, door_dy: 5 }, { type: 'base', w: 60, h: 72, d: 56, doors: 1, acc: ['hob_elec'] }, { type: 'base', w: 60, h: 72, d: 56, doors: 1, acc: ['hob_ind'] }] }] };
+  const boxes = scene(spec, {}); assert.ok(boxes.length > 30); assert.ok(boxes.every((b) => b.corners.flat().every(Number.isFinite)));
+  assert.ok(elevationSVG(spec, {}).includes('<svg'));
+});

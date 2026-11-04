@@ -222,6 +222,7 @@ function cabinetPartsBase(cab, style = DEFAULT_STYLE) {
         dh = type.wall ? H + (hidden ? 1.5 : -0.5) : H - (hidden ? 3.5 : 1);
         dw = doors === 1 ? W - 1 : doors === 2 ? (W - 2.2) / 2 : (W - 2 - (doors - 1) * 0.2) / doors;
       }
+      if (+cab.door_w > 0) dw = +cab.door_w; if (+cab.door_h > 0) dh = +cab.door_h; // door sizes set by hand on this cabinet
       const gz = Math.min(glazed, closedN); // open places (no door) take no frame, hinges or handle
       if (dir !== 'shutter') front(`${tag}Door`, dw, dh, closedN, gz); doorHw(closedN, dw, dh, dir);
       if (hidden) hw.handles -= closedN, hw.handleLen -= closedN * (['up', 'down'].includes(dir) ? dw : dh); // the hidden handle replaces them
