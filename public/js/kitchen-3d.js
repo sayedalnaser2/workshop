@@ -234,6 +234,13 @@ export function scene(spec, open = {}) {
       // accessories
       const accs = c.acc || [];
       if (t.sink || (accs.includes('tap') && t.counter)) { const tx = u + w * .5; put(tx - 1.5, tx + 1.5, 3, 6, ytop + ct, ytop + ct + 22, '#d7dbe0', 'acc'); put(tx - 1.2, tx + 1.2, 3, 20, ytop + ct + 20, ytop + ct + 23, '#d7dbe0', 'acc'); }
+      const hobAcc = t.counter && !t.hob ? ['hob_gas', 'hob_elec', 'hob_ind'].find((k) => accs.includes(k)) : null; // a built-in hob added as an accessory
+      if (hobAcc) {
+        const hw0 = Math.min(w * .84, 60); const hx = u + (w - hw0) / 2; const hd = Math.min(d * .7, 52); const hz = (d - hd) / 2 + 2; const yy = ytop + ct;
+        if (hobAcc === 'hob_gas') { put(hx, hx + hw0, hz, hz + hd, yy, yy + .5, '#c9ced6', 'acc'); for (const [dx, dz] of [[.27, .3], [.73, .3], [.27, .7], [.73, .7]]) { const r = Math.min(hw0, hd) * .13; put(hx + hw0 * dx - r, hx + hw0 * dx + r, hz + hd * dz - r, hz + hd * dz + r, yy + .5, yy + 1.4, '#23272e', 'acc'); } for (let q = 0; q < 4; q++) put(hx + hw0 * (.14 + q * .24), hx + hw0 * (.14 + q * .24) + 2.4, hz + hd - 0.2, hz + hd + 1.4, yy + .5, yy + 2.6, '#23272e', 'acc'); }
+        else if (hobAcc === 'hob_elec') { put(hx, hx + hw0, hz, hz + hd, yy, yy + .6, '#1d2026', 'acc'); for (const [dx, dz] of [[.27, .3], [.73, .3], [.27, .7], [.73, .7]]) { const r = Math.min(hw0, hd) * .14; put(hx + hw0 * dx - r, hx + hw0 * dx + r, hz + hd * dz - r, hz + hd * dz + r, yy + .6, yy + 1, '#8a2f2f', 'acc'); } }
+        else { put(hx, hx + hw0, hz, hz + hd, yy, yy + .6, '#14171c', 'acc'); for (const [dx, dz] of [[.27, .3], [.73, .3], [.27, .7], [.73, .7]]) { const r = Math.min(hw0, hd) * .16; put(hx + hw0 * dx - r, hx + hw0 * dx + r, hz + hd * dz - r, hz + hd * dz + r, yy + .6, yy + .75, '#3b82c4', 'acc'); } }
+      }
       if (t.hob) { put(u + w * .08, u + w * .92, d * .15, d * .85, ytop + ct, ytop + ct + .6, '#1d2026', 'acc'); for (const [dx, dy] of [[.3, .3], [.7, .3], [.3, .68], [.7, .68]]) { const r = Math.min(w, d) * .11; put(u + w * dx - r, u + w * dx + r, d * dy - r, d * dy + r, ytop + ct + .6, ytop + ct + 1.2, '#4a5058', 'acc'); } }
       // every accessory has a picture; inside ones show when the door or drawer is opened
       const AL = '#ffe066'; const BIN = '#4b5563'; const WIRE = '#c3c9d1'; const cw = w - 2 * T; const bot = y0 + T; const room = h - 2 * T;

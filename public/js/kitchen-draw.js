@@ -112,6 +112,7 @@ export function planSVG(spec, model, { maxW = 760 } = {}) {
       let cum = 0; while (ci < runCabs.length && (CAB_TYPES[runCabs[ci].type] || {}).counter && cum < p.len - 2 * (+c.side || 0) - 0.01) { const cab = runCabs[ci]; const t = CAB_TYPES[cab.type]; const w = (+cab.w || 0) * k; const bx = padL + starts[ci] * k;
         if (t.sink) out += `<rect x="${bx + w * .12}" y="${yb + (+cab.d || 0) * k * .2}" width="${w * .76}" height="${(+cab.d || 0) * k * .55}" rx="5" fill="#fff" stroke="${INK}" stroke-width="1.2"/><text x="${bx + w / 2}" y="${yb + (+cab.d || 0) * k * .5}" font-size="9" text-anchor="middle" fill="${INK}">sink</text>`;
         if (t.hob) { const r = Math.min(w, (+cab.d || 0) * k) * .12; for (const [dx, dy] of [[.3, .3], [.7, .3], [.3, .65], [.7, .65]]) out += `<circle cx="${bx + w * dx}" cy="${yb + (+cab.d || 0) * k * dy}" r="${r}" fill="#fff" stroke="${INK}"/>`; }
+        if (!t.hob && (cab.acc || []).some((a) => ['hob_gas', 'hob_elec', 'hob_ind'].includes(a))) { const r = Math.min(w, (+cab.d || 0) * k) * .1; for (const [dx, dy] of [[.3, .3], [.7, .3], [.3, .65], [.7, .65]]) out += `<circle cx="${bx + w * dx}" cy="${yb + (+cab.d || 0) * k * dy}" r="${r}" fill="#fff" stroke="${INK}"/>`; }
         cum += +cab.w || 0; ci++; }
     }
     out += `<text x="${x + 6}" y="${yb + 12}" font-size="10" fill="currentColor">${run.cabinets.reduce((a, q) => a + (+q.w || 0), 0)} cm</text>`;

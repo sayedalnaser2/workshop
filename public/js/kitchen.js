@@ -22,7 +22,9 @@ export const SLOT_KINDS = { door: 'Door', glass: 'Glass door', drawer: 'Drawer',
 /** Opening directions for doors. auto = French doors in pairs, a single door hinged on the left. */
 export const DIRS = { auto: 'Automatic', left: 'Hinged left', right: 'Hinged right', up: 'Lifts up', down: 'Folds down', slide: 'Sliding', shutter: 'Roller shutter (rolls up)' };
 /** Accessories that can be added to a cabinet. visual = drawn in the 3D view. */
-export const ACCESSORIES = { tap: ['Tap / mixer', true], bin: ['Pull-out waste bin', true], cutlery: ['Cutlery tray', true], pullout: ['Pull-out basket', true], lights: ['LED light strip', true], rail: ['Rail with hooks', true], spice: ['Spice rack', true], lazy: ['Lazy-susan carousel', true], soft: ['Soft-close set', true] };
+export const ACCESSORIES = { tap: ['Tap / mixer', true], bin: ['Pull-out waste bin', true], cutlery: ['Cutlery tray', true], pullout: ['Pull-out basket', true], lights: ['LED light strip', true], rail: ['Rail with hooks', true], spice: ['Spice rack', true], lazy: ['Lazy-susan carousel', true], soft: ['Soft-close set', true], hob_gas: ['Gas hob (built-in)', true], hob_elec: ['Electric hob (built-in)', true], hob_ind: ['Induction hob (built-in)', true] };
+/** The built-in hobs you can add to a cabinet under the countertop: each one needs a hob cut-out in the stone. */
+export const HOB_ACCESSORIES = ['hob_gas', 'hob_elec', 'hob_ind'];
 /** Which door places of a cabinet are left open (no door), counted from the left: a Set of indices. Only for 2 doors or more, and never all of them. */
 export function openDoorsOf(cab) {
   const n = Math.max(0, Math.round(+cab.doors || 0)); if (n < 2 || !Array.isArray(cab.open_doors)) return new Set();
@@ -520,6 +522,7 @@ export function counterTops(runs, c, style = DEFAULT_STYLE) {
       cur.len += +cab.w || 0; cur.depth = Math.max(cur.depth, +cab.d || 0);
       if (type.corner) cur.leg = (cur.leg || 0) + Math.max(0, (+cab.w || 0) - (+cab.d || 0)); // the return leg of an L-shaped corner
       if (type.sink) sinks += type.sink; if (type.hob) hobs += type.hob; if (type.corner) corners++;
+      hobs += (cab.acc || []).filter((a) => HOB_ACCESSORIES.includes(a)).length; // a hob added as an accessory also needs its cut-out
     }
     close();
   });

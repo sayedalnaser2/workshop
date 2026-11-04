@@ -663,3 +663,12 @@ test('sheet cutting: the leftover is kept as the biggest possible single piece',
   for (const sh of r.sheets) { assert.ok(sh.free.length >= 1); for (let i = 1; i < sh.free.length; i++) assert.ok(area(sh.free[i - 1]) >= area(sh.free[i]) - 1e-6); }
   const last = r.sheets.at(-1); assert.ok(area(last.free[0]) > 0.5 * (244 * 122 - last.items.reduce((a, i) => a + i.w * i.h, 0))); // more than half of what is left on the last sheet is one board
 });
+
+test('hobs as accessories: priced per type and each one adds a hob cut-out in the countertop', async () => {
+  const { kitchenModel, priceKitchen, ACCESSORIES, HOB_ACCESSORIES } = await import('../public/js/kitchen.js');
+  assert.deepEqual(HOB_ACCESSORIES.sort(), ['hob_elec', 'hob_gas', 'hob_ind']); for (const k of HOB_ACCESSORIES) assert.ok(ACCESSORIES[k]);
+  const m = kitchenModel({ style: { kind: 'wood' }, counter: {}, runs: [{ cabinets: [{ type: 'base', w: 80, h: 72, d: 56, doors: 2, acc: ['hob_gas'] }, { type: 'base', w: 60, h: 72, d: 56, doors: 1 }, { type: 'hob', w: 60, h: 72, d: 56, doors: 1 }] }] });
+  assert.equal(m.tops.hobs, 2); assert.equal(m.accessories.hob_gas, 1); // the hob cabinet type and the accessory both count
+  const lines = priceKitchen(m, { general: { acc_hob_gas: 120, cutout_hob: 5 } }).lines;
+  assert.equal(lines.find((l) => l.label === 'Gas hob (built-in)').total, 120); assert.equal(lines.find((l) => l.label === 'Hob cut-outs').qty, 2);
+});
