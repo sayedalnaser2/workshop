@@ -3,6 +3,7 @@ import { S } from '../app.js';
 import { api, $, $$, esc, money, qty as fq, num, today, dmy, toast, guard, confirmBox, modal, formHTML, readForm, dataTable, badge, datalist } from '../ui.js';
 import { colourOptions, resolveCustomer } from '../ui.js';
 import { profileScene, PROFILE_COLOURS } from '../kitchen-profiles.js';
+import { buildPdf, dataUrlBytes, layoutPictures } from '../pdf.js';
 import { shelfCount, hasSkirt, layoutSlots, slotsFromCab, addSlot, slotHeights, CAB_TYPES, DEFAULT_STYLE, DEFAULT_COUNTER, APPLIANCES, SLOT_KINDS, DIRS, ACCESSORIES, slotsOf, kitchenModel, priceKitchen, cutKey, CUT_MODES, cutTypeName, CUT_KINDS, hasTopSheet, openDoorsOf, hasHiddenHandle, mergeCabinets, splitCabinet, mergeSaving, matRole, matCustom, matLabel, sheetTypesFor, DOOR_KINDS, fmtThick, innerOptions, JOINTS } from '../kitchen.js';
 import { elevationSVG, planSVG, sheetSVG } from '../kitchen-draw.js';
 import { docHeader, docFooter, L, AR, wordsBlock, termsBlock } from '../doc.js';
@@ -258,7 +259,7 @@ async function editor(el, id, tab) {
     const canEdit = !worker; let edit = canEdit && view3d.edit === true; let ptab = 'cab';
     pane.innerHTML = `<div class="k3stage" id="stage"><canvas id="c3"></canvas>
       <div class="k3tl"><div class="k3bar">${canEdit ? `<button class="btn sm" id="editBtn" title="Switch editing on to drag cabinets into position and add new ones">✎ Edit</button>` : ''}<span class="muted" id="k3hint"></span></div><div class="k3bar" id="k3add" hidden></div></div>
-      <div class="k3tr"><div class="k3bar">${canEdit ? '<button class="btn sm" id="undoBtn" title="Go back one step (Ctrl+Z)">↶ Back</button><button class="btn sm" id="redoBtn" title="Redo (Ctrl+Y)">↷</button>' : ''}<button class="btn sm" data-oc="1">Open all</button><button class="btn sm" data-oc="0">Close all</button><button class="btn sm" data-p="front">Front</button><button class="btn sm" data-p="corner">Corner</button><button class="btn sm" data-p="top">From above</button><button class="btn sm" data-z="1.5" title="Zoom in">＋</button><button class="btn sm" data-z="0.67" title="Zoom out">－</button><button class="btn sm" data-zreset title="Back to the whole kitchen">Reset</button><button class="btn sm" id="fs" title="Full screen, for showing the customer">⛶</button></div></div>
+      <div class="k3tr"><div class="k3bar">${canEdit ? '<button class="btn sm" id="undoBtn" title="Go back one step (Ctrl+Z)">↶ Back</button><button class="btn sm" id="redoBtn" title="Redo (Ctrl+Y)">↷</button>' : ''}<button class="btn sm" data-oc="1">Open all</button><button class="btn sm" data-oc="0">Close all</button><button class="btn sm" data-p="front">Front</button><button class="btn sm" data-p="corner">Corner</button><button class="btn sm" data-p="top">From above</button><button class="btn sm" data-z="1.5" title="Zoom in">＋</button><button class="btn sm" data-z="0.67" title="Zoom out">－</button><button class="btn sm" data-zreset title="Back to the whole kitchen">Reset</button><button class="btn sm" id="pdf3d" title="Save several pictures of the kitchen from different sides as one PDF">📄 PDF</button><button class="btn sm" id="fs" title="Full screen, for showing the customer">⛶</button></div></div>
       <div class="k3panel" id="k3p" hidden></div></div>`;
     const stage = $('#stage', pane); const cv = $('#c3', pane); const key = (r) => `${r.ri}|${r.ci}`;
     const tgt = (view3d.open ||= {}); const cur = (view3d.cur ||= {}); let raf = 0;
@@ -433,6 +434,25 @@ async function editor(el, id, tab) {
     $$('[data-z]', pane).forEach((b2) => (b2.onclick = () => zoomBy(Number(b2.dataset.z))));
     $('[data-zreset]', pane).onclick = () => { v.zoom = 1; v.panX = 0; v.panY = 0; go(); };
     $$('[data-oc]', pane).forEach((b) => (b.onclick = () => { spec.runs.forEach((run, ri) => run.cabinets.forEach((_, ci) => { for (const k2 of Object.keys(tgt)) if (k2.startsWith(`${ri}|${ci}|`)) delete tgt[k2]; tgt[`${ri}|${ci}`] = Number(b.dataset.oc); })); animate(); panel(); }));
+    /** The kitchen from several sides, one picture each, saved as one PDF. */
+    const exportPdf = () => {
+      const VIEWS = [['front', 'Front', 0, 0.08], ['left34', 'Left corner', -0.7, 0.35], ['right34', 'Right corner', 0.7, 0.35], ['top', 'From above', 0, 1.5], ['leftside', 'Left side', -1.35, 0.12], ['rightside', 'Right side', 1.35, 0.12], ['open', 'Corner, all doors and drawers open', -0.55, 0.35, true], ['now', 'The view on the screen', null, null]];
+      const w = document.createElement('div');
+      w.innerHTML = `<p style="margin-top:0" class="muted">Choose the pictures to put in the PDF. Each one is the whole kitchen seen from that side.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px">${VIEWS.map(([key, label], i) => `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-view="${key}" ${i < 4 || key === 'open' ? 'checked' : ''}> ${label}</label>`).join('')}</div>
+        <div style="margin-top:12px"><b>Layout</b> <label style="margin-left:10px"><input type="radio" name="pp" value="1" checked> One picture per page (landscape)</label> <label style="margin-left:10px"><input type="radio" name="pp" value="2"> Two per page (portrait)</label></div>`;
+      modal({ title: 'Export the 3D view as a PDF', body: w, buttons: [{ label: 'Cancel' }, { label: 'Download PDF', kind: 'primary', onClick: () => {
+        const chosen = VIEWS.filter(([key]) => $(`[data-view="${key}"]`, w).checked); if (!chosen.length) { toast('Tick at least one picture', 'err'); return false; }
+        const pics = chosen.map(([, label, yaw, pitch, open]) => {
+          const c = document.createElement('canvas'); c.width = 1600; c.height = 1000; const op = {}; if (open) spec.runs.forEach((r, ri) => (r.cabinets || []).forEach((_, ci) => { op[`${ri}|${ci}`] = 1; }));
+          draw3D(c, scene(spec, op), yaw === null ? { yaw: v.yaw, pitch: v.pitch, zoom: v.zoom || 1 } : { yaw, pitch, zoom: 1 });
+          return { image: dataUrlBytes(c.toDataURL('image/jpeg', 0.9)), iw: c.width, ih: c.height, caption: label };
+        });
+        const perPage = $('[name=pp]:checked', w).value === '2' ? 2 : 1; const header = `${k.name}${k.client ? ' - ' + k.client : ''} - 3D views`;
+        const bytes = buildPdf(layoutPictures(pics, { header, perPage }), { title: header }); const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })); link.download = `${String(k.name || 'kitchen').replace(/[^\w\-]+/g, '_')}-3D.pdf`; document.body.appendChild(link); link.click(); link.parentNode.removeChild(link); toast(`PDF saved with ${pics.length} picture${pics.length > 1 ? 's' : ''}`);
+      } }] });
+    };
+    $('#pdf3d', pane)?.addEventListener('click', exportPdf);
     $$('[data-p]', pane).forEach((b) => (b.onclick = () => { Object.assign(v, { front: { yaw: 0, pitch: 0.08 }, corner: { yaw: -0.55, pitch: 0.45 }, top: { yaw: 0, pitch: 1.5 } }[b.dataset.p]); go(); }));
     const updUndo = () => { const u = $('#undoBtn', pane); const r = $('#redoBtn', pane); if (u) u.disabled = !hist.undo.length; if (r) r.disabled = !hist.redo.length; };
     const stepTo = (dir) => { if (!stepBack(dir)) return; if (view3d.sel && !spec.runs[view3d.sel.ri]?.cabinets[view3d.sel.ci]) view3d.sel = null; refresh3(); updUndo(); toast(dir < 0 ? 'Went back one step' : 'Redone', 'ok'); };

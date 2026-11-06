@@ -688,3 +688,17 @@ test('the 3D scene builds with hobs, hob sizes, door sizes and offsets on a cabi
   const boxes = scene(spec, {}); assert.ok(boxes.length > 30); assert.ok(boxes.every((b) => b.corners.flat().every(Number.isFinite)));
   assert.ok(elevationSVG(spec, {}).includes('<svg'));
 });
+
+test('PDF export of the 3D views: valid file with one page per picture, or two per page', async () => {
+  const { buildPdf, layoutPictures, dataUrlBytes } = await import('../public/js/pdf.js');
+  const jpeg = dataUrlBytes('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=');
+  const pics = ['Front', 'Left (corner)', 'Top', 'Back', 'Open'].map((caption) => ({ image: jpeg, iw: 1600, ih: 1000, caption }));
+  const one = layoutPictures(pics, { header: 'Villa (Ali) - 3D views', perPage: 1 }); const two = layoutPictures(pics, { header: 'x', perPage: 2 });
+  assert.equal(one.length, 5); assert.equal(two.length, 3); assert.deepEqual([one[0].w, one[0].h], [842, 595]); assert.deepEqual([two[0].w, two[0].h], [595, 842]);
+  const img = one[0].items.find((i) => i.image); assert.ok(img.x >= 36 && img.x + img.width <= 842 - 36 && img.y >= 36 && img.height > 0); // inside the margins
+  const bytes = buildPdf(one, { title: 'Villa (Ali)' }); const text = Buffer.from(bytes).toString('latin1');
+  assert.ok(text.startsWith('%PDF-1.4')); assert.ok(text.trimEnd().endsWith('%%EOF')); assert.ok(text.includes('/Count 5')); assert.equal((text.match(/\/Subtype \/Image/g) || []).length, 5);
+  const xref = Number(text.match(/startxref\n(\d+)/)[1]); assert.ok(text.slice(xref).startsWith('xref')); // every object starts where the table says
+  const offs = [...text.slice(xref).matchAll(/(\d{10}) 00000 n/g)].map((m) => Number(m[1])); offs.forEach((o, i) => assert.ok(text.slice(o).startsWith(`${i + 1} 0 obj`), `object ${i + 1}`));
+  assert.ok(text.includes('(Villa \\(Ali\\))')); // brackets in names are escaped
+});
