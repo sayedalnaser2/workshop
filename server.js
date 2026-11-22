@@ -1,5 +1,6 @@
 import http from 'node:http';
-import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, unlink, mkdir, readdir, stat } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -295,6 +296,8 @@ function checkCredit(c, selfId = 0) {
 
 const FILE_TYPES = { 'image/jpeg': 'inline', 'image/png': 'inline', 'image/webp': 'inline', 'image/gif': 'inline', 'application/pdf': 'inline' };
 const filesDir = () => path.join(process.env.DATA_DIR || path.resolve('data'), 'files');
+const sharedDir = () => path.join(process.env.DATA_DIR || path.resolve('data'), 'shared');
+const SHARE_DAYS = 90; // a shared PDF link works for 90 days
 
 // ------------------------------------------------------------------ router
 async function api(req, res, url) {
@@ -529,6 +532,15 @@ async function api(req, res, url) {
     const b = db.prepare("UPDATE payments SET account=? WHERE account IS NULL OR account=''").run(account).changes;
     return send(res, 200, { receipts: Number(a), payments: Number(b) });
   }
+  // a quotation / invoice PDF made in the browser, kept under an unguessable link so it can be sent to the customer in a chat
+  if (p[0] === 'share-doc' && m === 'POST') {
+    needAny('quotes', 'orders');
+    const name = (url.searchParams.get('name') || 'document').replace(/[^\w.\- ]+/g, '_').slice(0, 80) || 'document';
+    const buf = await readBody(req, 20e6); if (buf.length < 100 || buf.subarray(0, 4).toString('latin1') !== '%PDF') return send(res, 400, { error: 'That is not a PDF' });
+    const token = randomBytes(24).toString('base64url'); const dir = sharedDir(); await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, `${token}.pdf`), buf); await writeFile(path.join(dir, `${token}.json`), JSON.stringify({ name, by: user.username, at: new Date().toISOString() }));
+    return send(res, 200, { token, path: `/s/${token}` });
+  }
   // employee documents: raw upload / download, stored under DATA_DIR/files
   if (p[0] === 'employee-docs' && p[2] === 'file') {
     (m === 'GET' ? needAny : needEdit)('employees');
@@ -698,11 +710,17 @@ const server = http.createServer(async (req, res) => {
       const buf = own || await readFile(path.join(PUBLIC, 'img/logo.png'));
       return await send(res, 200, buf, { 'Content-Type': own ? lg.mime : 'image/png', 'Cache-Control': 'no-cache', ETag: `"logo-${own ? lg.v : 'default'}"` });
     }
+    const mShare = url.pathname.match(/^\/s\/([\w-]{32})$/); // public: whoever holds the link can read that one PDF
+    if (mShare) {
+      const buf = await readFile(path.join(sharedDir(), `${mShare[1]}.pdf`)).catch(() => null); if (!buf) return await send(res, 404, { error: 'This link has expired or does not exist' });
+      const meta = JSON.parse(await readFile(path.join(sharedDir(), `${mShare[1]}.json`), 'utf8').catch(() => '{}')); const nm = String(meta.name || 'document').replace(/[^\w.\- ]+/g, '_');
+      return await send(res, 200, buf, { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${nm}.pdf"`, 'Cache-Control': 'private, max-age=3600', 'X-Robots-Tag': 'noindex' });
+    }
     const host = String(req.headers.host || '').toLowerCase(); const onClientHost = /^client\./.test(host); // client.<your domain> shows the customer page only
     if (url.pathname.startsWith('/api/portal/')) return await portalApi(req, res, url, { send, readJson, filesDir });
     if (onClientHost && url.pathname.startsWith('/api/')) return await send(res, 404, { error: 'Not found' });
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
-    const isAsset = /^\/(assets|js|css|img)\//.test(url.pathname) || url.pathname === '/favicon.ico';
+    const isAsset = /^\/(assets|js|css|img|vendor)\//.test(url.pathname) || url.pathname === '/favicon.ico';
     if (onClientHost && !isAsset || url.pathname === '/client' || url.pathname === '/client/') return await serveStatic(req, res, '/client.html');
     return await serveStatic(req, res, decodeURIComponent(url.pathname));
   } catch (e) {
@@ -715,6 +733,7 @@ server.listen(PORT, () => console.log(`Workshop running on http://localhost:${PO
 
 // a consistent copy of the database every day (kept for 14 days), and tidy-up on shutdown
 const purge = () => purgeOldPhotos(Number(getSetting('photo_retention_months')) || 0, filesDir()).then((n) => n && console.log(`Removed ${n} old photo(s)`)).catch((e) => console.error('Photo clean-up failed:', e.message));
-const backup = () => { purge(); return runBackup().then((n) => n && console.log(`Backup saved: ${n}`)).catch((e) => console.error('Backup failed:', e.message)); };
+const purgeShared = async () => { try { const dir = sharedDir(); for (const f of await readdir(dir)) { const fp = path.join(dir, f); if (Date.now() - (await stat(fp)).mtimeMs > SHARE_DAYS * 864e5) await unlink(fp).catch(() => {}); } } catch {} };
+const backup = () => { purge(); purgeShared(); return runBackup().then((n) => n && console.log(`Backup saved: ${n}`)).catch((e) => console.error('Backup failed:', e.message)); };
 setTimeout(backup, 5000).unref(); setInterval(backup, 6 * 3600e3).unref();
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { db.exec('PRAGMA optimize'); } catch {} server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 3000).unref(); });

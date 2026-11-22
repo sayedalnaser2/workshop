@@ -702,3 +702,20 @@ test('PDF export of the 3D views: valid file with one page per picture, or two p
   const offs = [...text.slice(xref).matchAll(/(\d{10}) 00000 n/g)].map((m) => Number(m[1])); offs.forEach((o, i) => assert.ok(text.slice(o).startsWith(`${i + 1} 0 obj`), `object ${i + 1}`));
   assert.ok(text.includes('(Villa \\(Ali\\))')); // brackets in names are escaped
 });
+
+test('sending a quotation / invoice PDF to a customer: private link, public read, signed-in upload only', async () => {
+  const { spawn } = await import('node:child_process'); const { mkdtempSync, rmSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const path = await import('node:path');
+  const port = 5800 + Math.floor(Math.random() * 300); const base = `http://127.0.0.1:${port}`; const dir = mkdtempSync(path.join(tmpdir(), 'workshop-share-'));
+  const proc = spawn(process.execPath, ['--no-warnings', 'server.js'], { env: { ...process.env, PORT: String(port), DATA_DIR: dir, WORKSHOP_DEV: '1' }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 60; i++) { try { if ((await fetch(base + '/healthz')).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
+    const r0 = await fetch(base + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: 'boss', password: 'secret1' }) }); const ck = r0.headers.get('set-cookie').split(';')[0];
+    const pdf = Buffer.from('%PDF-1.4\n' + 'x'.repeat(200) + '\n%%EOF\n');
+    const up = (body, headers = {}) => fetch(base + '/api/share-doc?name=Quotation%20123', { method: 'POST', headers: { 'Content-Type': 'application/pdf', ...headers }, body });
+    assert.equal((await up(pdf)).status, 401); // nobody signed in
+    assert.equal((await up(Buffer.from('<html>' + 'x'.repeat(200)), { Cookie: ck })).status, 400); // not a PDF
+    const ok = await up(pdf, { Cookie: ck }); assert.equal(ok.status, 200); const j = await ok.json(); assert.match(j.path, /^\/s\/[\w-]{32}$/);
+    const got = await fetch(base + j.path); assert.equal(got.status, 200); assert.equal(got.headers.get('content-type'), 'application/pdf'); assert.match(got.headers.get('content-disposition'), /Quotation 123\.pdf/); assert.deepEqual(Buffer.from(await got.arrayBuffer()), pdf); // the customer needs no login
+    assert.equal((await fetch(base + '/s/' + 'a'.repeat(32))).status, 404);
+  } finally { proc.kill(); rmSync(dir, { recursive: true, force: true }); }
+});

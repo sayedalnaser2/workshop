@@ -10,6 +10,7 @@ import { orderVat } from '../vat.js';
 import { printView, docHeader, L, AR, wordsBlock, termsBlock } from '../doc.js';
 import { attachmentsPanel } from '../attachments.js';
 import { openEventDialog } from './calendar.js';
+import { sendToCustomer } from '../share-doc.js';
 
 export async function render(el, [id, sub]) {
   if (id && sub === 'invoice') return invoicePrint(el, Number(id));
@@ -106,7 +107,8 @@ async function invoicePrint(el, id) {
     ${(() => { const lines = [c.bank, ...(S.bank_accounts || []).filter((x) => x.print && x.active !== 0).map((x) => [x.name, x.bank, x.number].filter(Boolean).join(' — '))].filter(Boolean); return lines.length ? `<p style="margin-top:10px"><b>${L('bank', 'Bank details')}:</b><br>${lines.map(esc).join('<br>')}</p>` : ''; })()}
     <div class="sign"><div>${L('prepared', 'Prepared')}</div><div>${L('custSign', 'Customer')}</div></div>
     ${termsBlock(S.settings.invoice_notes?.length ? S.settings.invoice_notes : [], [])}`;
-  printView(el, { back: `#/orders/${id}`, html });
+  printView(el, { back: `#/orders/${id}`, html, extraButtons: `<button class="btn" id="sendWa" title="Makes the PDF and opens the customer's WhatsApp chat with it ready to send">💬 Send to customer</button>` });
+  $('#sendWa', el)?.addEventListener('click', guard(() => sendToCustomer({ docEl: $('.doc', el), name: `Invoice ${o.inv}`, kind: 'invoice', client: o.client, mobile: o.mobile || q?.mobile, company: c.name })));
 }
 
 /** The customer's page for this order: a code to send, and what the customer may see (progress is always shown; photos and kitchens only when you tick them). */

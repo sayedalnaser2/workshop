@@ -8,6 +8,7 @@ import { quotePieces, allocateLeftovers, accessoriesFor } from '../stock.js';
 import { openPoDialog } from '../po-dialog.js';
 import { dot } from './stock.js';
 import { drawModel, HAND_KINDS, SWING_KINDS } from '../drawings.js';
+import { sendToCustomer } from '../share-doc.js';
 import { modal, formHTML, readForm, gpsRow, wireGps, mapLink, parseGps, colourOptions, resolveCustomer } from '../ui.js';
 import { glazingNote } from '../glazing.js';
 
@@ -356,5 +357,6 @@ async function printQuote(el, id) {
     ${wordsBlock(T.grand)}
     <div class="sign"><div>${L('prepared', 'Prepared')} ${esc(q.prepared_by || '')}</div><div>${L('custSign', 'Cust. Sign')}</div></div>
     ${termsBlock()}${drawings}`;
-  printView(el, { back: `#/quotes/${id}`, html, extraButtons: `<a class="btn" href="#/cutting/${id}">Cutting list</a>` });
+  printView(el, { back: `#/quotes/${id}`, html, extraButtons: `<a class="btn" href="#/cutting/${id}">Cutting list</a><button class="btn" id="sendWa" title="Makes the PDF and opens the customer's WhatsApp chat with it ready to send">💬 Send to customer</button>` });
+  $('#sendWa', el)?.addEventListener('click', guard(() => sendToCustomer({ docEl: $('.doc', el), name: `Quotation ${q.number}`, kind: 'quotation', client: q.client, mobile: q.mobile, company: (S.settings.company || {}).name })));
 }
